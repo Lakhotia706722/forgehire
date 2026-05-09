@@ -1,0 +1,131 @@
+// Module 8: Security, Compliance & Monitoring Schema
+
+enum ConsentType {
+  marketing_email
+  profile_recommendations
+  webcam_proctoring
+  public_activity
+}
+
+enum DeletionStatus {
+  pending
+  completed
+  cancelled
+}
+
+model UserConsent {
+  id            String      @id @default(uuid()) @db.Uuid
+  userId        String      @db.Uuid
+  
+  consentType   ConsentType
+  granted       Boolean
+  
+  ipAddress     String
+  userAgent     String
+  
+  timestamp     DateTime    @default(now()) @db.Timestamptz(3)
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([consentType])
+  @@map("user_consents")
+}
+
+model AccountDeletionRequest {
+  id            String         @id @default(uuid()) @db.Uuid
+  userId        String         @db.Uuid
+  
+  reason        String?        @db.Text
+  
+  requestedAt   DateTime       @default(now()) @db.Timestamptz(3)
+  scheduledFor  DateTime       @db.Timestamptz(3)
+  processedAt   DateTime?      @db.Timestamptz(3)
+  
+  status        DeletionStatus @default(pending)
+  
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([scheduledFor])
+  @@map("account_deletion_requests")
+}
+
+model PrivacyPolicyAcceptance {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  
+  version       String
+  
+  ipAddress     String
+  userAgent     String
+  
+  acceptedAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([version])
+  @@map("privacy_policy_acceptances")
+}
+
+model SecurityLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  
+  event         String   // failed_login, suspicious_activity, admin_action, etc.
+  userId        String?  @db.Uuid
+  
+  ip            String
+  userAgent     String?
+  
+  details       Json?
+  
+  timestamp     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([event])
+  @@index([userId])
+  @@index([timestamp])
+  @@map("security_logs")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  
+  action        String   // create, update, delete
+  entity        String   // user, task, contract, payment, etc.
+  entityId      String   @db.Uuid
+  
+  userId        String?  @db.Uuid
+  
+  before        Json?    // State before change
+  after         Json?    // State after change
+  
+  ip            String
+  userAgent     String?
+  
+  timestamp     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([entity])
+  @@index([entityId])
+  @@index([userId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+model HealthCheck {
+  id            String   @id @default(uuid()) @db.Uuid
+  
+  service       String   // api, database, redis, s3, etc.
+  status        String   // healthy, degraded, down
+  
+  responseTime  Int?     // in milliseconds
+  errorMessage  String?  @db.Text
+  
+  timestamp     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([service])
+  @@index([status])
+  @@index([timestamp])
+  @@map("health_checks")
+}

@@ -1,0 +1,255 @@
+// Add these models to the main schema.prisma file
+
+enum TaskType {
+  bounty
+  direct
+  contest
+}
+
+enum TaskStatus {
+  draft
+  pending_escrow
+  open
+  in_progress
+  in_review
+  completed
+  cancelled
+}
+
+enum TaskDifficulty {
+  easy
+  medium
+  hard
+  expert
+}
+
+enum PaymentType {
+  fixed
+  hourly
+  milestone
+}
+
+enum SubmissionStatus {
+  pending
+  under_review
+  accepted
+  rejected
+  winner
+}
+
+model Task {
+  id                String         @id @default(uuid()) @db.Uuid
+  companyProfileId  String         @db.Uuid
+  userId            String         @db.Uuid
+  
+  // Basic info
+  title             String
+  type              TaskType
+  category          String[]       // Multi-select categories
+  problemStatement  String         @db.Text
+  currentState      String?        @db.Text
+  expectedOutcome   String         @db.Text
+  deliverables      Json           // JSONB array of deliverable items
+  techRequirements  String[]       // Array of tech/skills
+  
+  // Timeline & Reward
+  timeline          Int            // Days
+  deadline          DateTime?      @db.Timestamptz(3)
+  rewardAmount      Decimal        @db.Decimal(12, 2)
+  paymentType       PaymentType
+  currency          String         @default("INR")
+  
+  // Selection & Requirements
+  selectionCriteria Json           // JSONB criteria
+  minNeuronScore    Int            @default(0)
+  ndaRequired       Boolean        @default(false)
+  difficulty        TaskDifficulty
+  
+  // Status & Escrow
+  status            TaskStatus     @default(draft)
+  escrowDeposited   Boolean        @default(false)
+  escrowId          String?        // Razorpay escrow ID
+  escrowAmount      Decimal?       @db.Decimal(12, 2)
+  
+  // AI Enrichment
+  aiEnriched        Boolean        @default(false)
+  estimatedTimeline Int?           // AI suggested timeline
+  suggestedReward   Json?          // {min, max, currency}
+  vagueDeliverables String[]       // Flagged vague items
+  recommendedType   TaskType?
+  autoTaggedSkills  String[]
+  postingQuality    Int?           // 1-10 rating
+  aiSuggestions     Json?          // Additional AI insights
+  
+  // Contest specific
+  isContest         Boolean        @default(false)
+  contestRanks      Json?          // [{rank: 1, percentage: 50}, {rank: 2, percentage: 30}, ...]
+  maxWinners        Int?
+  
+  // Metadata
+  viewCount         Int            @default(0)
+  participantCount  Int            @default(0)
+  submissionCount   Int            @default(0)
+  
+  publishedAt       DateTime?      @db.Timestamptz(3)
+  completedAt       DateTime?      @db.Timestamptz(3)
+  createdAt         DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @db.Timestamptz(3)
+
+  companyProfile    CompanyProfile @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  participations    TaskParticipation[]
+  submissions       TaskSubmission[]
+  questions         TaskQuestion[]
+  ndaSignatures     TaskNDASignature[]
+
+  @@index([companyProfileId])
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([difficulty])
+  @@index([minNeuronScore])
+  @@index([publishedAt])
+  @@index([deadline])
+  @@map("tasks")
+}
+
+model TaskParticipation {
+  id                String   @id @default(uuid()) @db.Uuid
+  taskId            String   @db.Uuid
+  engineerProfileId String   @db.Uuid
+  userId            String   @db.Uuid
+  
+  // Participation details
+  approach          String   @db.Text
+  estimatedTime     Int?     // Days
+  proposedRate      Decimal? @db.Decimal(10, 2)
+  
+  // Status
+  approved          Boolean  @default(false)
+  rejected          Boolean  @default(false)
+  rejectionReason   String?  @db.Text
+  
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  task              Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  engineerProfile   EngineerProfile  @relation(fields: [engineerProfileId], references: [id], onDelete: Cascade)
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, engineerProfileId])
+  @@index([taskId])
+  @@index([engineerProfileId])
+  @@map("task_participations")
+}
+
+model TaskSubmission {
+  id                String           @id @default(uuid()) @db.Uuid
+  taskId            String           @db.Uuid
+  engineerProfileId String           @db.Uuid
+  userId            String           @db.Uuid
+  
+  // Submission content
+  description       String           @db.Text
+  demoUrl           String?
+  githubUrl         String?
+  codeUrl           String?
+  screenshots       String[]         // S3 URLs
+  videoUrl          String?
+  performanceMetrics Json?           // JSONB metrics
+  architectureDiagram String?        // S3 URL
+  
+  // Evaluation
+  status            SubmissionStatus @default(pending)
+  score             Int?             // 0-100
+  feedback          String?          @db.Text
+  criteriaScores    Json?            // Scores per criterion
+  
+  // Winner info
+  isWinner          Boolean          @default(false)
+  rank              Int?             // For contests
+  payoutAmount      Decimal?         @db.Decimal(12, 2)
+  payoutStatus      String?          // pending, processing, completed, failed
+  payoutId          String?          // Razorpay payout ID
+  paidAt            DateTime?        @db.Timestamptz(3)
+  
+  submittedAt       DateTime         @default(now()) @db.Timestamptz(3)
+  reviewedAt        DateTime?        @db.Timestamptz(3)
+  createdAt         DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
+
+  task              Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  engineerProfile   EngineerProfile  @relation(fields: [engineerProfileId], references: [id], onDelete: Cascade)
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([engineerProfileId])
+  @@index([status])
+  @@index([isWinner])
+  @@map("task_submissions")
+}
+
+model TaskQuestion {
+  id                String   @id @default(uuid()) @db.Uuid
+  taskId            String   @db.Uuid
+  userId            String   @db.Uuid
+  
+  question          String   @db.Text
+  answer            String?  @db.Text
+  answeredBy        String?  @db.Uuid // User ID of answerer
+  answeredAt        DateTime? @db.Timestamptz(3)
+  
+  isPublic          Boolean  @default(true)
+  
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  task              Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId])
+  @@map("task_questions")
+}
+
+model TaskNDASignature {
+  id                String   @id @default(uuid()) @db.Uuid
+  taskId            String   @db.Uuid
+  engineerProfileId String   @db.Uuid
+  userId            String   @db.Uuid
+  
+  ndaPdfUrl         String   // S3 URL of generated NDA
+  signedPdfUrl      String?  // S3 URL of signed NDA
+  signature         String?  // Digital signature data
+  ipAddress         String
+  
+  signed            Boolean  @default(false)
+  signedAt          DateTime? @db.Timestamptz(3)
+  
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  task              Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  engineerProfile   EngineerProfile  @relation(fields: [engineerProfileId], references: [id], onDelete: Cascade)
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, engineerProfileId])
+  @@index([taskId])
+  @@index([engineerProfileId])
+  @@map("task_nda_signatures")
+}
+
+// Add these relations to existing models:
+// CompanyProfile:
+//   tasks Task[]
+// EngineerProfile:
+//   taskParticipations TaskParticipation[]
+//   taskSubmissions TaskSubmission[]
+//   taskNdaSignatures TaskNDASignature[]
+// User:
+//   tasks Task[]
+//   taskParticipations TaskParticipation[]
+//   taskSubmissions TaskSubmission[]
+//   taskQuestions TaskQuestion[]
+//   taskNdaSignatures TaskNDASignature[]

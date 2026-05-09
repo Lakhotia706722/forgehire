@@ -1,0 +1,59 @@
+// Add these models to the main schema.prisma file after the existing models
+
+model EngineerProject {
+  id                String   @id @default(uuid()) @db.Uuid
+  engineerProfileId String   @db.Uuid
+  title             String
+  description       String   @db.Text
+  problemSolved     String   @db.Text
+  techStack         Json     // Array of technologies
+  demoUrl           String?
+  githubUrl         String?
+  screenshots       String[] // Array of S3 URLs
+  performanceMetrics Json?   // Custom metrics object
+  aiModelUsed       String?
+  architectureType  String?
+  featured          Boolean  @default(false)
+  displayOrder      Int      @default(0)
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  engineerProfile EngineerProfile @relation(fields: [engineerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([engineerProfileId])
+  @@index([featured])
+  @@map("engineer_projects")
+}
+
+model EngineerExperience {
+  id                String   @id @default(uuid()) @db.Uuid
+  engineerProfileId String   @db.Uuid
+  title             String
+  company           String
+  location          String?
+  startDate         DateTime @db.Timestamptz(3)
+  endDate           DateTime? @db.Timestamptz(3)
+  current           Boolean  @default(false)
+  description       String   @db.Text
+  achievements      String[] // Array of achievement strings
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  engineerProfile EngineerProfile @relation(fields: [engineerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([engineerProfileId])
+  @@map("engineer_experiences")
+}
+
+model BuildInPublicActivity {
+  id                String   @id @default(uuid()) @db.Uuid
+  engineerProfileId String   @db.Uuid
+  content           String   @db.Text
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  engineerProfile EngineerProfile @relation(fields: [engineerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([engineerProfileId])
+  @@index([createdAt])
+  @@map("build_in_public_activities")
+}

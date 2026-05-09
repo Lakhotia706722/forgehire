@@ -1,0 +1,166 @@
+// Add these models to the main schema.prisma file
+
+enum AssessmentStatus {
+  pending
+  in_progress
+  paused
+  completed
+  submitted
+  evaluated
+  rejected
+}
+
+enum AssessmentTier {
+  elite
+  professional
+  verified
+  conditional
+  rejected
+}
+
+enum ProctoringEventType {
+  tab_switch
+  window_blur
+  paste_attempt
+  inactivity_warning
+  inactivity_pause
+  fullscreen_exit
+  keystroke_anomaly
+  session_start
+  session_end
+}
+
+model Assessment {
+  id                String           @id @default(uuid()) @db.Uuid
+  engineerProfileId String           @db.Uuid
+  userId            String           @db.Uuid
+  
+  // Assessment content
+  questions         Json             // MCQ questions
+  codingTasks       Json             // Coding challenges
+  caseScenario      Json             // Case study
+  
+  // Session management
+  status            AssessmentStatus @default(pending)
+  sessionToken      String           @unique
+  startedAt         DateTime?        @db.Timestamptz(3)
+  submittedAt       DateTime?        @db.Timestamptz(3)
+  evaluatedAt       DateTime?        @db.Timestamptz(3)
+  
+  // Proctoring
+  proctoringEvents  Json             // Array of proctoring events
+  tabSwitchCount    Int              @default(0)
+  windowBlurCount   Int              @default(0)
+  pasteAttempts     Int              @default(0)
+  ipAddress         String?
+  deviceFingerprint String?
+  
+  // Responses
+  mcqResponses      Json?            // User's MCQ answers
+  codingSubmissions Json?            // Code submissions
+  caseResponse      String?          @db.Text
+  
+  // Evaluation
+  mcqScore          Int?
+  codingScore       Int?
+  caseScore         Int?
+  totalScore        Int?
+  
+  // Dimension scores (0-100)
+  modelKnowledge    Int?
+  engineeringDepth  Int?
+  systemDesign      Int?
+  codingQuality     Int?
+  practicalApp      Int?
+  communication     Int?
+  
+  // Results
+  tier              AssessmentTier?
+  reportUrl         String?
+  reportGenerated   Boolean          @default(false)
+  skillGapAnalysis  Json?
+  improvementRoadmap Json?
+  
+  // Flags
+  plagiarismDetected Boolean         @default(false)
+  proctoringViolation Boolean        @default(false)
+  
+  createdAt         DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
+
+  engineerProfile   EngineerProfile  @relation(fields: [engineerProfileId], references: [id], onDelete: Cascade)
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([engineerProfileId])
+  @@index([userId])
+  @@index([status])
+  @@index([tier])
+  @@index([sessionToken])
+  @@map("assessments")
+}
+
+model NeuronScoreHistory {
+  id                String   @id @default(uuid()) @db.Uuid
+  engineerProfileId String   @db.Uuid
+  
+  // Score details
+  previousScore     Int
+  newScore          Int
+  scoreDelta        Int
+  
+  // Dimension breakdown
+  assessmentScore   Int      // 0-250 (25%)
+  clientRatings     Int      // 0-250 (25%)
+  portfolioDepth    Int      // 0-200 (20%)
+  workDelivery      Int      // 0-150 (15%)
+  marketplace       Int      // 0-100 (10%)
+  community         Int      // 0-50 (5%)
+  
+  // Metadata
+  reason            String
+  dimension         String?
+  triggeredBy       String?  // user_id or 'system'
+  
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  engineerProfile   EngineerProfile @relation(fields: [engineerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([engineerProfileId])
+  @@index([createdAt])
+  @@map("neuron_score_history")
+}
+
+model MiniGateTest {
+  id                String   @id @default(uuid()) @db.Uuid
+  engineerProfileId String   @db.Uuid
+  
+  // Test content
+  domain            String
+  questions         Json     // 15-min domain-specific questions
+  
+  // Session
+  sessionToken      String   @unique
+  startedAt         DateTime? @db.Timestamptz(3)
+  submittedAt       DateTime? @db.Timestamptz(3)
+  
+  // Results
+  responses         Json?
+  score             Int?
+  passed            Boolean  @default(false)
+  
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  engineerProfile   EngineerProfile @relation(fields: [engineerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([engineerProfileId])
+  @@map("mini_gate_tests")
+}
+
+// Add these relations to existing models:
+// EngineerProfile:
+//   assessments Assessment[]
+//   neuronScoreHistory NeuronScoreHistory[]
+//   miniGateTests MiniGateTest[]
+// User:
+//   assessments Assessment[]

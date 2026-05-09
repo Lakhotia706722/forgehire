@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#080B14" rx="28.8"/>
+  <rect width="144" height="144" fill="#00D4FF" opacity="0.08" rx="28.8"/>
+  <!-- Hexagon -->
+  <polygon
+    points="107.92,51.26 107.92,92.74 72.00,113.47 36.08,92.74 36.08,51.26 72.00,30.53"
+    fill="none"
+    stroke="#00D4FF"
+    stroke-width="5.76"
+    stroke-linejoin="round"
+  />
+  <!-- Center dot -->
+  <circle cx="72" cy="72" r="10.368" fill="#00D4FF"/>
+</svg>

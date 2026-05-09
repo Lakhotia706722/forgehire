@@ -1,0 +1,476 @@
+// Module 7: Payments, Escrow & GST Schema
+
+enum EscrowPaymentType {
+  escrow_deposit
+  milestone_release
+  payout
+  subscription
+  platform_fee
+  refund
+}
+
+enum EscrowPaymentStatus {
+  pending
+  processing
+  completed
+  failed
+  refunded
+}
+
+enum PayoutMethod {
+  upi
+  neft
+  imps
+}
+
+enum ContractDisputeStatus {
+  pending
+  under_review
+  resolved
+  escalated
+}
+
+enum KYCStatus {
+  not_started
+  pending
+  verified
+  rejected
+}
+
+enum SubscriptionTier {
+  engineer_basic
+  engineer_pro
+  engineer_premium
+  company_starter
+  company_growth
+  company_enterprise
+}
+
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  userId            String        @db.Uuid
+  
+  type              EscrowPaymentType
+  status            EscrowPaymentStatus @default(pending)
+  
+  amount            Decimal       @db.Decimal(12, 2)
+  currency          String        @default("INR")
+  
+  platformFee       Decimal?      @db.Decimal(12, 2)
+  gstAmount         Decimal?      @db.Decimal(12, 2)
+  netAmount         Decimal?      @db.Decimal(12, 2)
+  
+  // Razorpay details
+  razorpayOrderId   String?       @unique
+  razorpayPaymentId String?       @unique
+  razorpaySignature String?
+  
+  // Reference IDs
+  contractId        String?       @db.Uuid
+  taskId            String?       @db.Uuid
+  milestoneId       String?       @db.Uuid
+  productId         String?       @db.Uuid
+  purchaseId        String?       @db.Uuid
+  
+  // Metadata
+  description       String?       @db.Text
+  metadata          Json?
+  
+  // Idempotency
+  idempotencyKey    String?       @unique
+  
+  // Timestamps
+  processedAt       DateTime?     @db.Timestamptz(3)
+  completedAt       DateTime?     @db.Timestamptz(3)
+  failedAt          DateTime?     @db.Timestamptz(3)
+  failureReason     String?       @db.Text
+  
+  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(3)
+  
+  // Soft delete for 7-year retention
+  deletedAt         DateTime?     @db.Timestamptz(3)
+
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  invoice           Invoice?
+  escrowRelease     EscrowRelease?
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([contractId])
+  @@index([taskId])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("payments")
+}
+
+model EscrowAccount {
+  id                String   @id @default(uuid()) @db.Uuid
+  contractId        String?  @unique @db.Uuid
+  taskId            String?  @unique @db.Uuid
+  
+  totalAmount       Decimal  @db.Decimal(12, 2)
+  lockedAmount      Decimal  @db.Decimal(12, 2)
+  releasedAmount    Decimal  @default(0) @db.Decimal(12, 2)
+  refundedAmount    Decimal  @default(0) @db.Decimal(12, 2)
+  
+  currency          String   @default("INR")
+  
+  funded            Boolean  @default(false)
+  fundedAt          DateTime? @db.Timestamptz(3)
+  
+  razorpayAccountId String?
+  
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  releases          EscrowRelease[]
+
+  @@index([contractId])
+  @@index([taskId])
+  @@index([funded])
+  @@map("escrow_accounts")
+}
+
+model EscrowRelease {
+  id                String   @id @default(uuid()) @db.Uuid
+  escrowAccountId   String   @db.Uuid
+  paymentId         String   @unique @db.Uuid
+  
+  amount            Decimal  @db.Decimal(12, 2)
+  recipientUserId   String   @db.Uuid
+  
+  // Release trigger
+  triggeredBy       String   // approval, auto_approve, dispute_resolution
+  approvedBy        String?  @db.Uuid
+  
+  // Auto-approve tracking
+  autoApproveAt     DateTime? @db.Timestamptz(3)
+  autoApproved      Boolean  @default(false)
+  
+  // Processing
+  status            String   @default("pending") // pending, processing, completed, failed
+  processedAt       DateTime? @db.Timestamptz(3)
+  completedAt       DateTime? @db.Timestamptz(3)
+  
+  // Idempotency
+  idempotencyKey    String   @unique
+  
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  escrowAccount     EscrowAccount @relation(fields: [escrowAccountId], references: [id], onDelete: Cascade)
+  payment           Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([escrowAccountId])
+  @@index([status])
+  @@index([autoApproveAt])
+  @@map("escrow_releases")
+}
+
+model Payout {
+  id                String       @id @default(uuid()) @db.Uuid
+  userId            String       @db.Uuid
+  engineerProfileId String       @db.Uuid
+  
+  amount            Decimal      @db.Decimal(12, 2)
+  currency          String       @default("INR")
+  
+  method            PayoutMethod
+  
+  // Bank details
+  upiId             String?
+  accountNumber     String?
+  ifscCode          String?
+  accountHolderName String?
+  
+  // Razorpay payout
+  razorpayPayoutId  String?      @unique
+  razorpayFundAccountId String?
+  
+  status            String       @default("pending") // pending, processing, completed, failed, reversed
+  
+  // KYC check
+  kycRequired       Boolean      @default(false)
+  kycVerified       Boolean      @default(false)
+  
+  // Processing
+  requestedAt       DateTime     @default(now()) @db.Timestamptz(3)
+  processedAt       DateTime?    @db.Timestamptz(3)
+  completedAt       DateTime?    @db.Timestamptz(3)
+  failedAt          DateTime?    @db.Timestamptz(3)
+  failureReason     String?      @db.Text
+  
+  // UTR for NEFT/IMPS
+  utr               String?
+  
+  createdAt         DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @db.Timestamptz(3)
+
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([engineerProfileId])
+  @@index([status])
+  @@index([requestedAt])
+  @@map("payouts")
+}
+
+model Wallet {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @unique @db.Uuid
+  
+  balance           Decimal  @default(0) @db.Decimal(12, 2)
+  currency          String   @default("INR")
+  
+  // Lifetime stats
+  totalEarned       Decimal  @default(0) @db.Decimal(12, 2)
+  totalWithdrawn    Decimal  @default(0) @db.Decimal(12, 2)
+  
+  // Monthly withdrawal tracking
+  currentMonthWithdrawn Decimal @default(0) @db.Decimal(12, 2)
+  lastWithdrawalMonth   String? // YYYY-MM
+  
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  transactions      WalletTransaction[]
+
+  @@index([userId])
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id                String   @id @default(uuid()) @db.Uuid
+  walletId          String   @db.Uuid
+  
+  type              String   // credit, debit
+  amount            Decimal  @db.Decimal(12, 2)
+  
+  balanceBefore     Decimal  @db.Decimal(12, 2)
+  balanceAfter      Decimal  @db.Decimal(12, 2)
+  
+  description       String   @db.Text
+  
+  // Reference
+  paymentId         String?  @db.Uuid
+  payoutId          String?  @db.Uuid
+  
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  wallet            Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([createdAt])
+  @@map("wallet_transactions")
+}
+
+model KYCVerification {
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @db.Uuid
+  engineerProfileId String    @db.Uuid
+  
+  status            KYCStatus @default(not_started)
+  
+  // Documents
+  aadhaarNumber     String?
+  aadhaarVerified   Boolean   @default(false)
+  aadhaarDocUrl     String?
+  
+  panNumber         String?
+  panVerified       Boolean   @default(false)
+  panDocUrl         String?
+  
+  // Digio verification
+  digioRequestId    String?
+  digioStatus       String?
+  
+  // Verification details
+  verifiedAt        DateTime? @db.Timestamptz(3)
+  verifiedBy        String?   @db.Uuid
+  
+  rejectedAt        DateTime? @db.Timestamptz(3)
+  rejectionReason   String?   @db.Text
+  
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId])
+  @@index([engineerProfileId])
+  @@index([status])
+  @@map("kyc_verifications")
+}
+
+model PlatformSubscription {
+  id                String           @id @default(uuid()) @db.Uuid
+  userId            String           @db.Uuid
+  
+  tier              SubscriptionTier
+  
+  // Pricing
+  amount            Decimal          @db.Decimal(10, 2)
+  currency          String           @default("INR")
+  billingCycle      String           // monthly, quarterly, annual
+  
+  // Razorpay subscription
+  razorpaySubscriptionId String?     @unique
+  razorpayPlanId    String?
+  
+  status            String           @default("active") // active, past_due, cancelled, expired
+  
+  // Billing
+  currentPeriodStart DateTime        @db.Timestamptz(3)
+  currentPeriodEnd   DateTime        @db.Timestamptz(3)
+  nextBillingDate    DateTime?       @db.Timestamptz(3)
+  
+  // Cancellation
+  cancelledAt       DateTime?        @db.Timestamptz(3)
+  cancellationReason String?         @db.Text
+  cancelAtPeriodEnd Boolean          @default(false)
+  
+  createdAt         DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
+
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([nextBillingDate])
+  @@map("platform_subscriptions")
+}
+
+model Invoice {
+  id                String   @id @default(uuid()) @db.Uuid
+  paymentId         String   @unique @db.Uuid
+  
+  invoiceNumber     String   @unique
+  
+  // Parties
+  fromName          String
+  fromAddress       String?  @db.Text
+  fromGstin         String?
+  
+  toName            String
+  toAddress         String?  @db.Text
+  toGstin           String?
+  
+  // Amounts
+  subtotal          Decimal  @db.Decimal(12, 2)
+  gstRate           Decimal  @db.Decimal(5, 2)
+  gstAmount         Decimal  @db.Decimal(12, 2)
+  total             Decimal  @db.Decimal(12, 2)
+  
+  currency          String   @default("INR")
+  
+  // Line items
+  lineItems         Json     // Array of items
+  
+  // Invoice details
+  invoiceDate       DateTime @db.Timestamptz(3)
+  dueDate           DateTime? @db.Timestamptz(3)
+  
+  // PDF
+  pdfUrl            String?
+  
+  // ClearTax integration
+  clearTaxId        String?
+  clearTaxStatus    String?
+  
+  // Email
+  emailSent         Boolean  @default(false)
+  emailSentAt       DateTime? @db.Timestamptz(3)
+  
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+  
+  // Soft delete for 7-year retention
+  deletedAt         DateTime? @db.Timestamptz(3)
+
+  payment           Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceNumber])
+  @@index([invoiceDate])
+  @@index([deletedAt])
+  @@map("invoices")
+}
+
+model ContractDispute {
+  id                String        @id @default(uuid()) @db.Uuid
+  contractId        String        @db.Uuid
+  
+  raisedBy          String        @db.Uuid // User ID
+  againstUserId     String        @db.Uuid
+  
+  reason            String        @db.Text
+  description       String        @db.Text
+  
+  // Evidence
+  evidence          Json?         // Array of evidence items
+  
+  status            ContractDisputeStatus @default(pending)
+  
+  // AI audit
+  aiAuditSummary    String?       @db.Text
+  aiRecommendation  Json?         // Recommended split, reasoning
+  
+  // Resolution
+  resolvedBy        String?       @db.Uuid
+  resolution        String?       @db.Text
+  
+  // Partial release
+  engineerAmount    Decimal?      @db.Decimal(12, 2)
+  companyRefund     Decimal?      @db.Decimal(12, 2)
+  
+  // Timestamps
+  raisedAt          DateTime      @default(now()) @db.Timestamptz(3)
+  reviewStartedAt   DateTime?     @db.Timestamptz(3)
+  resolvedAt        DateTime?     @db.Timestamptz(3)
+  
+  // Deadlines
+  reviewDeadline    DateTime      @db.Timestamptz(3)
+  
+  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([contractId])
+  @@index([status])
+  @@index([raisedBy])
+  @@map("contract_disputes")
+}
+
+model WebhookEvent {
+  id                String   @id @default(uuid()) @db.Uuid
+  
+  provider          String   // razorpay, cleartax, digio
+  eventType         String
+  
+  payload           Json
+  signature         String?
+  
+  verified          Boolean  @default(false)
+  processed         Boolean  @default(false)
+  
+  // Idempotency
+  idempotencyKey    String   @unique
+  
+  processedAt       DateTime? @db.Timestamptz(3)
+  failedAt          DateTime? @db.Timestamptz(3)
+  failureReason     String?  @db.Text
+  
+  retryCount        Int      @default(0)
+  
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([provider])
+  @@index([eventType])
+  @@index([processed])
+  @@index([createdAt])
+  @@map("webhook_events")
+}

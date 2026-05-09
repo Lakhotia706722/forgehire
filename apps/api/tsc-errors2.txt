@@ -1,0 +1,338 @@
+﻿
+> @neuronhire/api@1.0.0 typecheck
+> tsc --noEmit
+
+src/__tests__/integration/payment-flow.test.ts(64,9): error TS2322: Type '{ contractId: any; title: string; amount: number; status: "pending"; }' is not assignable to type '(Without<MilestonePaymentCreateInput, MilestonePaymentUncheckedCreateInput> & MilestonePaymentUncheckedCreateInput) | (Without<...> & MilestonePaymentCreateInput)'.
+  Type '{ contractId: any; title: string; amount: number; status: "pending"; }' is not assignable to type 'Without<MilestonePaymentUncheckedCreateInput, MilestonePaymentCreateInput> & MilestonePaymentCreateInput'.
+    Type '{ contractId: any; title: string; amount: number; status: "pending"; }' is missing the following properties from type 'MilestonePaymentCreateInput': milestoneNumber, description, contract
+src/__tests__/integration/payment-flow.test.ts(159,9): error TS2322: Type '{ contractId: any; title: string; amount: number; status: "approved"; }' is not assignable to type '(Without<MilestonePaymentCreateInput, MilestonePaymentUncheckedCreateInput> & MilestonePaymentUncheckedCreateInput) | (Without<...> & MilestonePaymentCreateInput)'.
+  Type '{ contractId: any; title: string; amount: number; status: "approved"; }' is not assignable to type 'Without<MilestonePaymentUncheckedCreateInput, MilestonePaymentCreateInput> & MilestonePaymentCreateInput'.
+    Type '{ contractId: any; title: string; amount: number; status: "approved"; }' is missing the following properties from type 'MilestonePaymentCreateInput': milestoneNumber, description, contract
+src/__tests__/integration/payment-flow.test.ts(305,9): error TS2322: Type '{ contractId: any; title: string; amount: number; status: "submitted"; submittedAt: Date; }' is not assignable to type '(Without<MilestonePaymentCreateInput, MilestonePaymentUncheckedCreateInput> & MilestonePaymentUncheckedCreateInput) | (Without<...> & MilestonePaymentCreateInput)'.
+  Type '{ contractId: any; title: string; amount: number; status: "submitted"; submittedAt: Date; }' is not assignable to type 'Without<MilestonePaymentUncheckedCreateInput, MilestonePaymentCreateInput> & MilestonePaymentCreateInput'.
+    Type '{ contractId: any; title: string; amount: number; status: "submitted"; submittedAt: Date; }' is missing the following properties from type 'MilestonePaymentCreateInput': milestoneNumber, description, contract
+src/__tests__/integration/payment-flow.test.ts(317,21): error TS2339: Property 'release' does not exist on type '{ release: { status: string; id: string; createdAt: Date; updatedAt: Date; amount: Decimal; paymentId: string; completedAt: Date | null; idempotencyKey: string; ... 6 more ...; escrowAccountId: string; }; payment: { ...; }; } | { ...; }'.
+  Property 'release' does not exist on type '{ skipped: boolean; }'.
+src/__tests__/integration/profile-flow.test.ts(90,43): error TS2345: Argument of type '{ skillName: string; proficiencyLevel: "expert"; }' is not assignable to parameter of type '{ skillName: string; proficiencyLevel: "beginner" | "intermediate" | "advanced" | "expert"; projectCount: number; verified: boolean; yearsOfExperience?: number | null | undefined; }'.
+  Type '{ skillName: string; proficiencyLevel: "expert"; }' is missing the following properties from type '{ skillName: string; proficiencyLevel: "beginner" | "intermediate" | "advanced" | "expert"; projectCount: number; verified: boolean; yearsOfExperience?: number | null | undefined; }': projectCount, verified
+src/__tests__/integration/profile-flow.test.ts(106,45): error TS2345: Argument of type '{ title: string; description: string; problemSolved: string; techStack: string[]; }' is not assignable to parameter of type '{ description: string; title: string; problemSolved: string; techStack: string[]; featured: boolean; githubUrl?: string | null | undefined; demoUrl?: string | null | undefined; screenshots?: string[] | undefined; performanceMetrics?: Record<...> | ... 1 more ... | undefined; aiModelUsed?: string | ... 1 more ... | u...'.
+  Property 'featured' is missing in type '{ title: string; description: string; problemSolved: string; techStack: string[]; }' but required in type '{ description: string; title: string; problemSolved: string; techStack: string[]; featured: boolean; githubUrl?: string | null | undefined; demoUrl?: string | null | undefined; screenshots?: string[] | undefined; performanceMetrics?: Record<...> | ... 1 more ... | undefined; aiModelUsed?: string | ... 1 more ... | u...'.
+src/__tests__/services/task.test.ts(42,37): error TS2339: Property 'companyProfile' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/__tests__/services/task.test.ts(110,37): error TS2339: Property 'companyProfile' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/__tests__/services/task.test.ts(153,61): error TS2339: Property 'engineerProfile' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/__tests__/services/task.test.ts(183,37): error TS2339: Property 'companyProfile' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/__tests__/services/task.test.ts(255,37): error TS2339: Property 'companyProfile' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/__tests__/setup-tests.ts(28,21): error TS2769: No overload matches this call.
+  Overload 1 of 8, '(options: RedisOptions): Redis', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'RedisOptions'.
+      Type 'undefined' is not assignable to type 'RedisOptions'.
+        Type 'undefined' is not assignable to type 'CommonRedisOptions'.
+  Overload 2 of 8, '(port: number): Redis', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+  Overload 3 of 8, '(path: string): Redis', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/__tests__/setup-tests.ts(66,7): error TS2353: Object literal may only specify known properties, and 'name' does not exist in type '(Without<UserCreateInput, UserUncheckedCreateInput> & UserUncheckedCreateInput) | (Without<...> & UserCreateInput)'.
+src/__tests__/setup-tests.ts(77,7): error TS2353: Object literal may only specify known properties, and 'title' does not exist in type 'Without<EngineerProfileCreateInput, EngineerProfileUncheckedCreateInput> & EngineerProfileUncheckedCreateInput'.
+src/__tests__/setup-tests.ts(104,7): error TS2353: Object literal may only specify known properties, and 'description' does not exist in type 'Without<TaskCreateInput, TaskUncheckedCreateInput> & TaskUncheckedCreateInput'.
+src/__tests__/setup-tests.ts(120,7): error TS2783: 'companyUserId' is specified more than once, so this usage will be overwritten.
+src/__tests__/setup-tests.ts(121,7): error TS2783: 'engineerUserId' is specified more than once, so this usage will be overwritten.
+src/__tests__/setup-tests.ts(122,7): error TS2353: Object literal may only specify known properties, and 'type' does not exist in type 'Without<ContractCreateInput, ContractUncheckedCreateInput> & ContractUncheckedCreateInput'.
+src/routes/product.routes.ts(77,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(105,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(182,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(211,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(266,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(292,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(349,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(459,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(485,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(543,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(612,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(747,66): error TS2345: Argument of type 'unknown' is not assignable to parameter of type '{ rating?: number | undefined; sortBy?: "rating" | "recent" | "helpful" | undefined; cursor?: string | undefined; limit?: number | undefined; } | undefined'.
+src/routes/product.routes.ts(793,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(821,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; Querystring: any; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; Querystring: any; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; Querystring: any; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/product.routes.ts(825,52): error TS2698: Spread types may only be created from object types.
+src/routes/product.routes.ts(898,5): error TS2345: Argument of type '(request: FastifyRequest<{ Querystring: { limit?: number; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Querystring: { limit?: number | undefined; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Querystring: { limit?: number | undefined; }; }'.
+        Types of property 'Querystring' are incompatible.
+          Type 'unknown' is not assignable to type '{ limit?: number | undefined; }'.
+src/routes/task.routes.ts(55,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/task.routes.ts(81,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/task.routes.ts(108,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/task.routes.ts(202,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/task.routes.ts(230,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/task.routes.ts(258,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; submissionId: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; submissionId: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; submissionId: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; submissionId: string; }'.
+src/routes/task.routes.ts(293,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/task.routes.ts(321,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/task.routes.ts(349,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/task.routes.ts(377,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; questionId: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; questionId: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; questionId: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; questionId: string; }'.
+src/routes/task.routes.ts(408,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/routes/task.routes.ts(435,5): error TS2345: Argument of type '(request: FastifyRequest<{ Params: { id: string; }; }>, reply: FastifyReply) => Promise<never>' is not assignable to parameter of type 'RouteHandlerMethod<RawServerDefault, IncomingMessage, ServerResponse<IncomingMessage>, RouteGenericInterface, unknown, FastifySchema, FastifyTypeProviderDefault, FastifyBaseLogger>'.
+  Types of parameters 'request' and 'request' are incompatible.
+    Type 'FastifyRequest<RouteGenericInterface, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>' is not assignable to type 'FastifyRequest<{ Params: { id: string; }; }, RawServerDefault, IncomingMessage, FastifySchema, FastifyTypeProviderDefault, unknown, FastifyBaseLogger, ResolveFastifyRequestType<...>>'.
+      Type 'RouteGenericInterface' is not assignable to type '{ Params: { id: string; }; }'.
+        Types of property 'Params' are incompatible.
+          Type 'unknown' is not assignable to type '{ id: string; }'.
+src/services/auth.service.ts(155,29): error TS2769: No overload matches this call.
+  Overload 1 of 5, '(payload: string | object | Buffer<ArrayBufferLike>, secretOrPrivateKey: null, options?: (SignOptions & { algorithm: "none"; }) | undefined): string', gave the following error.
+    Argument of type 'string' is not assignable to parameter of type 'null'.
+  Overload 2 of 5, '(payload: string | object | Buffer<ArrayBufferLike>, secretOrPrivateKey: Buffer<ArrayBufferLike> | Secret | JsonWebKeyInput | PrivateKeyInput, options?: SignOptions | undefined): string', gave the following error.
+    Type 'string' is not assignable to type 'number | StringValue | undefined'.
+  Overload 3 of 5, '(payload: string | object | Buffer<ArrayBufferLike>, secretOrPrivateKey: Buffer<ArrayBufferLike> | Secret | JsonWebKeyInput | PrivateKeyInput, callback: SignCallback): void', gave the following error.
+    Object literal may only specify known properties, and 'expiresIn' does not exist in type 'SignCallback'.
+src/services/auth.service.ts(160,30): error TS2769: No overload matches this call.
+  Overload 1 of 5, '(payload: string | object | Buffer<ArrayBufferLike>, secretOrPrivateKey: null, options?: (SignOptions & { algorithm: "none"; }) | undefined): string', gave the following error.
+    Argument of type 'string' is not assignable to parameter of type 'null'.
+  Overload 2 of 5, '(payload: string | object | Buffer<ArrayBufferLike>, secretOrPrivateKey: Buffer<ArrayBufferLike> | Secret | JsonWebKeyInput | PrivateKeyInput, options?: SignOptions | undefined): string', gave the following error.
+    Type 'string' is not assignable to type 'number | StringValue | undefined'.
+  Overload 3 of 5, '(payload: string | object | Buffer<ArrayBufferLike>, secretOrPrivateKey: Buffer<ArrayBufferLike> | Secret | JsonWebKeyInput | PrivateKeyInput, callback: SignCallback): void', gave the following error.
+    Object literal may only specify known properties, and 'expiresIn' does not exist in type 'SignCallback'.
+src/services/build-in-public.service.ts(33,52): error TS2345: Argument of type 'BuildInPublicActivity' is not assignable to parameter of type 'OptionalId<Document>'.
+  Type 'BuildInPublicActivity' is not assignable to type '{ _id?: ObjectId | undefined; }'.
+    Types of property '_id' are incompatible.
+      Type 'string' is not assignable to type 'ObjectId'.
+src/services/build-in-public.service.ts(56,12): error TS2352: Conversion of type 'WithId<Document>[]' to type 'BuildInPublicActivity[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type 'WithId<Document>' is missing the following properties from type 'BuildInPublicActivity': engineerProfileId, userId, content, createdAt
+src/services/build-in-public.service.ts(76,12): error TS2352: Conversion of type 'WithId<Document>[]' to type 'BuildInPublicActivity[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type 'WithId<Document>' is missing the following properties from type 'BuildInPublicActivity': engineerProfileId, userId, content, createdAt
+src/services/build-in-public.service.ts(86,7): error TS2322: Type 'string' is not assignable to type 'Condition<ObjectId> | undefined'.
+src/services/bundle.service.ts(193,9): error TS2353: Object literal may only specify known properties, and 'engineerProfile' does not exist in type 'BundleInclude<DefaultArgs>'.
+src/services/bundle.service.ts(259,9): error TS2353: Object literal may only specify known properties, and 'engineerProfile' does not exist in type 'BundleInclude<DefaultArgs>'.
+src/services/contract-dispute.service.ts(34,9): error TS2353: Object literal may only specify known properties, and 'milestones' does not exist in type 'ContractInclude<DefaultArgs>'.
+src/services/contract-dispute.service.ts(49,27): error TS18047: 'contract.milestones' is possibly 'null'.
+src/services/contract-dispute.service.ts(50,8): error TS2339: Property 'filter' does not exist on type 'string | number | boolean | JsonObject | JsonArray'.
+  Property 'filter' does not exist on type 'string'.
+src/services/contract-dispute.service.ts(50,15): error TS7006: Parameter 'm' implicitly has an 'any' type.
+src/services/contract-dispute.service.ts(51,14): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/services/contract-dispute.service.ts(51,17): error TS7006: Parameter 'b' implicitly has an 'any' type.
+src/services/contract-dispute.service.ts(96,9): error TS2322: Type '"disputed"' is not assignable to type 'ContractStatus | EnumContractStatusFieldUpdateOperationsInput | undefined'.
+src/services/contract-dispute.service.ts(143,7): error TS2322: Type '{ contract: { include: { milestones: true; messages: { orderBy: { createdAt: string; }; take: number; }; }; }; }' is not assignable to type 'never'.
+src/services/contract-dispute.service.ts(313,7): error TS2322: Type '{ contract: true; }' is not assignable to type 'never'.
+src/services/contract-dispute.service.ts(365,43): error TS2339: Property 'engineerUserId' does not exist on type 'never'.
+src/services/contract-dispute.service.ts(375,43): error TS2339: Property 'companyUserId' does not exist on type 'never'.
+src/services/contract-dispute.service.ts(417,7): error TS2322: Type '{ contract: { include: { milestones: true; }; }; }' is not assignable to type 'never'.
+src/services/contract-dispute.service.ts(459,7): error TS2322: Type '{ contract: { select: { type: true; totalAmount: true; status: true; }; }; }' is not assignable to type 'never'.
+src/services/contract-dispute.service.ts(482,7): error TS2322: Type '{ contract: { select: { type: true; totalAmount: true; status: true; }; }; }' is not assignable to type 'never'.
+src/services/dispute.service.ts(56,9): error TS2322: Type 'Record<string, any> | null | undefined' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput | undefined'.
+  Type 'null' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput | undefined'.
+src/services/dpdp-compliance.service.ts(25,30): error TS2339: Property 'userConsent' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(41,40): error TS2339: Property 'userConsent' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(48,37): error TS7006: Parameter 'c' implicitly has an 'any' type.
+src/services/dpdp-compliance.service.ts(49,45): error TS7006: Parameter 'c' implicitly has an 'any' type.
+src/services/dpdp-compliance.service.ts(50,39): error TS7006: Parameter 'c' implicitly has an 'any' type.
+src/services/dpdp-compliance.service.ts(51,37): error TS7006: Parameter 'c' implicitly has an 'any' type.
+src/services/dpdp-compliance.service.ts(96,47): error TS2339: Property 'accountDeletionRequest' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(113,39): error TS2339: Property 'accountDeletionRequest' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(138,11): error TS2353: Object literal may only specify known properties, and 'name' does not exist in type '(Without<UserUpdateInput, UserUncheckedUpdateInput> & UserUncheckedUpdateInput) | (Without<...> & UserUpdateInput)'.
+src/services/dpdp-compliance.service.ts(151,11): error TS2353: Object literal may only specify known properties, and 'website' does not exist in type '(Without<EngineerProfileUpdateManyMutationInput, EngineerProfileUncheckedUpdateManyInput> & EngineerProfileUncheckedUpdateManyInput) | (Without<...> & EngineerProfileUpdateManyMutationInput)'.
+src/services/dpdp-compliance.service.ts(166,11): error TS2353: Object literal may only specify known properties, and 'logo' does not exist in type '(Without<CompanyProfileUpdateManyMutationInput, CompanyProfileUncheckedUpdateManyInput> & CompanyProfileUncheckedUpdateManyInput) | (Without<...> & CompanyProfileUpdateManyMutationInput)'.
+src/services/dpdp-compliance.service.ts(171,16): error TS2339: Property 'assessmentSubmission' does not exist on type 'Omit<PrismaClient<PrismaClientOptions, never, DefaultArgs>, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">'.
+src/services/dpdp-compliance.service.ts(190,11): error TS2353: Object literal may only specify known properties, and 'attachments' does not exist in type '(Without<ProjectChatMessageUpdateManyMutationInput, ProjectChatMessageUncheckedUpdateManyInput> & ProjectChatMessageUncheckedUpdateManyInput) | (Without<...> & ProjectChatMessageUpdateManyMutationInput)'.
+src/services/dpdp-compliance.service.ts(198,16): error TS2339: Property 'accountDeletionRequest' does not exist on type 'Omit<PrismaClient<PrismaClientOptions, never, DefaultArgs>, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">'.
+src/services/dpdp-compliance.service.ts(214,39): error TS2339: Property 'accountDeletionRequest' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(226,23): error TS2339: Property 'accountDeletionRequest' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(244,9): error TS2353: Object literal may only specify known properties, and 'assessmentSubmissions' does not exist in type 'UserInclude<DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(262,37): error TS2339: Property 'assessmentSubmissions' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(263,7): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/services/dpdp-compliance.service.ts(268,21): error TS2339: Property 'assessmentSubmissions' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(287,42): error TS2339: Property 'assessmentSubmission' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(309,27): error TS2339: Property 'assessmentSubmission' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(361,9): error TS2353: Object literal may only specify known properties, and 'assessmentSubmissions' does not exist in type 'UserInclude<DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(378,20): error TS2339: Property 'name' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(382,21): error TS2339: Property 'engineerProfile' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(382,45): error TS2339: Property 'companyProfile' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(383,25): error TS2339: Property 'assessmentSubmissions' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(383,51): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/services/dpdp-compliance.service.ts(388,19): error TS2339: Property 'tasks' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(388,29): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/services/dpdp-compliance.service.ts(394,23): error TS2339: Property 'contracts' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(394,37): error TS7006: Parameter 'c' implicitly has an 'any' type.
+src/services/dpdp-compliance.service.ts(400,22): error TS2339: Property 'payments' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(400,35): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/services/dpdp-compliance.service.ts(407,20): error TS2339: Property 'wallet' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(408,23): error TS2339: Property 'wallet' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(409,27): error TS2339: Property 'wallet' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(410,30): error TS2339: Property 'wallet' does not exist on type '{ id: string; createdAt: Date; clerkId: string; email: string; role: UserRole; isEmailVerified: boolean; updatedAt: Date; }'.
+src/services/dpdp-compliance.service.ts(423,42): error TS2339: Property 'privacyPolicyAcceptance' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(442,30): error TS2339: Property 'privacyPolicyAcceptance' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/dpdp-compliance.service.ts(469,47): error TS2339: Property 'accountDeletionRequest' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/engineer-profile.service.ts(210,7): error TS2322: Type '{ description: string; title: string; problemSolved: string; techStack: string[]; featured: boolean; githubUrl?: string | null | undefined; demoUrl?: string | null | undefined; screenshots?: string[] | undefined; ... 4 more ...; engineerProfileId: string; }' is not assignable to type '(Without<EngineerProjectCreateInput, EngineerProjectUncheckedCreateInput> & EngineerProjectUncheckedCreateInput) | (Without<...> & EngineerProjectCreateInput)'.
+  Type '{ description: string; title: string; problemSolved: string; techStack: string[]; featured: boolean; githubUrl?: string | null | undefined; demoUrl?: string | null | undefined; screenshots?: string[] | undefined; ... 4 more ...; engineerProfileId: string; }' is not assignable to type 'Without<EngineerProjectCreateInput, EngineerProjectUncheckedCreateInput> & EngineerProjectUncheckedCreateInput'.
+    Type '{ description: string; title: string; problemSolved: string; techStack: string[]; featured: boolean; githubUrl?: string | null | undefined; demoUrl?: string | null | undefined; screenshots?: string[] | undefined; ... 4 more ...; engineerProfileId: string; }' is not assignable to type 'EngineerProjectUncheckedCreateInput'.
+      Types of property 'performanceMetrics' are incompatible.
+        Type 'Record<string, any> | null | undefined' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput | undefined'.
+          Type 'null' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput | undefined'.
+src/services/engineer-profile.service.ts(235,7): error TS2322: Type 'Partial<{ description: string; title: string; problemSolved: string; techStack: string[]; featured: boolean; githubUrl?: string | null | undefined; demoUrl?: string | null | undefined; screenshots?: string[] | undefined; performanceMetrics?: Record<...> | ... 1 more ... | undefined; aiModelUsed?: string | ... 1 more...' is not assignable to type '(Without<EngineerProjectUpdateInput, EngineerProjectUncheckedUpdateInput> & EngineerProjectUncheckedUpdateInput) | (Without<...> & EngineerProjectUpdateInput)'.
+  Type 'Partial<{ description: string; title: string; problemSolved: string; techStack: string[]; featured: boolean; githubUrl?: string | null | undefined; demoUrl?: string | null | undefined; screenshots?: string[] | undefined; performanceMetrics?: Record<...> | ... 1 more ... | undefined; aiModelUsed?: string | ... 1 more...' is not assignable to type 'Without<EngineerProjectUncheckedUpdateInput, EngineerProjectUpdateInput> & EngineerProjectUpdateInput'.
+    Type 'Partial<{ description: string; title: string; problemSolved: string; techStack: string[]; featured: boolean; githubUrl?: string | null | undefined; demoUrl?: string | null | undefined; screenshots?: string[] | undefined; performanceMetrics?: Record<...> | ... 1 more ... | undefined; aiModelUsed?: string | ... 1 more...' is not assignable to type 'EngineerProjectUpdateInput'.
+      Types of property 'performanceMetrics' are incompatible.
+        Type 'Record<string, any> | null | undefined' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput | undefined'.
+          Type 'null' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput | undefined'.
+src/services/marketplace-payout.service.ts(135,11): error TS2783: 'success' is specified more than once, so this usage will be overwritten.
+src/services/payout.service.ts(191,28): error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+src/services/product.service.ts(118,7): error TS2322: Type '{ updatedAt: Date; description?: string | undefined; techStack?: string[] | undefined; demoUrl?: string | undefined; screenshots?: string[] | undefined; performanceMetrics?: Record<string, any> | null | undefined; ... 14 more ...; supportDuration?: string | null | undefined; }' is not assignable to type '(Without<ProductUpdateInput, ProductUncheckedUpdateInput> & ProductUncheckedUpdateInput) | (Without<...> & ProductUpdateInput)'.
+  Type '{ updatedAt: Date; description?: string | undefined; techStack?: string[] | undefined; demoUrl?: string | undefined; screenshots?: string[] | undefined; performanceMetrics?: Record<string, any> | null | undefined; ... 14 more ...; supportDuration?: string | null | undefined; }' is not assignable to type 'Without<ProductUncheckedUpdateInput, ProductUpdateInput> & ProductUpdateInput'.
+    Type '{ updatedAt: Date; description?: string | undefined; techStack?: string[] | undefined; demoUrl?: string | undefined; screenshots?: string[] | undefined; performanceMetrics?: Record<string, any> | null | undefined; ... 14 more ...; supportDuration?: string | null | undefined; }' is not assignable to type 'ProductUpdateInput'.
+      Types of property 'performanceMetrics' are incompatible.
+        Type 'Record<string, any> | null | undefined' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput | undefined'.
+          Type 'null' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput | undefined'.
+src/services/product.service.ts(216,7): error TS2322: Type '{ currentVersion: string; versionHistory: any[]; status: "pending_moderation"; updatedAt: Date; description?: string | undefined; techStack?: string[] | undefined; demoUrl?: string | undefined; ... 16 more ...; supportDuration?: string | null | undefined; }' is not assignable to type '(Without<ProductUpdateInput, ProductUncheckedUpdateInput> & ProductUncheckedUpdateInput) | (Without<...> & ProductUpdateInput)'.
+  Type '{ currentVersion: string; versionHistory: any[]; status: "pending_moderation"; updatedAt: Date; description?: string | undefined; techStack?: string[] | undefined; demoUrl?: string | undefined; ... 16 more ...; supportDuration?: string | null | undefined; }' is not assignable to type 'Without<ProductUncheckedUpdateInput, ProductUpdateInput> & ProductUpdateInput'.
+    Type '{ currentVersion: string; versionHistory: any[]; status: "pending_moderation"; updatedAt: Date; description?: string | undefined; techStack?: string[] | undefined; demoUrl?: string | undefined; ... 16 more ...; supportDuration?: string | null | undefined; }' is not assignable to type 'ProductUpdateInput'.
+      Types of property 'performanceMetrics' are incompatible.
+        Type 'Record<string, any> | null | undefined' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput | undefined'.
+          Type 'null' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput | undefined'.
+src/services/referral.service.ts(14,9): error TS7023: 'generateReferralLink' implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions.
+src/services/subscription.service.ts(321,11): error TS2783: 'success' is specified more than once, so this usage will be overwritten.
+node.exe : npm error Lifecycle 
+script `typecheck` failed with 
+error:
+At line:1 char:1
++ & "C:\Program 
+Files\nodejs/node.exe" "C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~
+    + CategoryInfo          : NotS 
+   pecified: (npm error Lifec...l  
+  ed with error::String) [], Rem   
+ oteException
+    + FullyQualifiedErrorId : Nati 
+   veCommandError
+ 
+npm error code 2
+npm error path 
+C:\Users\Asus\Forge\apps\api
+npm error workspace 
+@neuronhire/api@1.0.0
+npm error location 
+C:\Users\Asus\Forge\apps\api
+npm error command failed
+npm error command 
+C:\WINDOWS\system32\cmd.exe /d /s 
+/c tsc --noEmit
