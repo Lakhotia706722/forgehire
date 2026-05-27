@@ -1,173 +1,153 @@
 import { ImageResponse } from 'next/og';
-import { MOCK_ENGINEER } from '@/lib/mock-data';
+import { initialsFromName } from '@/lib/avatar-tone';
 
 export const runtime = 'edge';
 
-const TIER_COLORS: Record<string, string> = {
-  Elite:        '#F59E0B',
-  Professional: '#00D4FF',
-  Verified:     '#7B5EA7',
-  Conditional:  '#4A5568',
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
+
+type OgTier = 'Elite' | 'Professional' | 'Verified' | 'Conditional';
+
+const TIER_TW: Record<
+  OgTier,
+  { glow: string; border: string; badge: string; score: string }
+> = {
+  Elite: {
+    glow: 'bg-[radial-gradient(circle,rgba(245,158,11,0.08)_0%,transparent_70%)]',
+    border: 'border-accent-amber',
+    badge: 'bg-accent-amber/20 border-accent-amber/40 text-accent-amber',
+    score: 'text-accent-amber',
+  },
+  Professional: {
+    glow: 'bg-[radial-gradient(circle,rgba(0,212,255,0.08)_0%,transparent_70%)]',
+    border: 'border-accent-cyan',
+    badge: 'bg-accent-cyan/20 border-accent-cyan/40 text-accent-cyan',
+    score: 'text-accent-cyan',
+  },
+  Verified: {
+    glow: 'bg-[radial-gradient(circle,rgba(123,94,167,0.08)_0%,transparent_70%)]',
+    border: 'border-accent-violet',
+    badge: 'bg-accent-violet/20 border-accent-violet/40 text-accent-violet',
+    score: 'text-accent-violet',
+  },
+  Conditional: {
+    glow: 'bg-[radial-gradient(circle,rgba(74,85,104,0.12)_0%,transparent_70%)]',
+    border: 'border-text-muted',
+    badge: 'bg-text-muted/20 border-text-muted/40 text-text-muted',
+    score: 'text-text-muted',
+  },
 };
 
+function mapTier(tier: string): OgTier {
+  const t = tier?.toLowerCase() ?? '';
+  if (t.includes('elite')) return 'Elite';
+  if (t.includes('professional') || t.includes('pro')) return 'Professional';
+  if (t.includes('verified')) return 'Verified';
+  return 'Conditional';
+}
+
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  // In production: fetch from DB/API
-  const engineer = { ...MOCK_ENGINEER, id: params.id };
-  const tierColor = TIER_COLORS[engineer.tier] ?? '#00D4FF';
+  let engineer = {
+    id: params.id,
+    name: 'AI Engineer',
+    headline: 'NeuronHire Engineer Profile',
+    tier: 'Verified' as OgTier,
+    neuronScore: 0,
+    reviewCount: 0,
+    projectCount: 0,
+    hourlyRateINR: 0,
+    avatarInitials: 'AI',
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/api/engineer/profiles/${params.id}`, {
+      next: { revalidate: 300 },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const data = json?.data ?? json;
+      const name = String(data.fullName ?? engineer.name);
+      engineer = {
+        id: params.id,
+        name,
+        headline: String(data.headline ?? engineer.headline),
+        tier: mapTier(String(data.neuronTier ?? '')),
+        neuronScore: Number(data.neuronScore ?? 0),
+        reviewCount: Number(data.reviewCount ?? 0),
+        projectCount: Array.isArray(data.projects) ? data.projects.length : 0,
+        hourlyRateINR: Number(data.hourlyRate ?? 0),
+        avatarInitials: initialsFromName(name),
+      };
+    }
+  } catch {
+    // Use fallback engineer object for OG image
+  }
+
+  const tierTw = TIER_TW[engineer.tier];
 
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: '1200px',
-          height: '630px',
-          display: 'flex',
-          flexDirection: 'column',
-          background: '#080B14',
-          fontFamily: 'sans-serif',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Background gradient blobs */}
+      <div tw="flex flex-col relative overflow-hidden bg-bg-base w-full h-full font-sans">
         <div
-          style={{
-            position: 'absolute',
-            top: '-100px',
-            left: '-100px',
-            width: '500px',
-            height: '500px',
-            borderRadius: '50%',
-            background: `radial-gradient(circle, ${tierColor}15 0%, transparent 70%)`,
-          }}
+          tw={`absolute rounded-full w-[500px] h-[500px] -top-[100px] -left-[100px] ${tierTw.glow}`}
         />
-        <div
-          style={{
-            position: 'absolute',
-            bottom: '-80px',
-            right: '-80px',
-            width: '400px',
-            height: '400px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(123,94,167,0.12) 0%, transparent 70%)',
-          }}
-        />
-
-        {/* Content */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '60px 80px',
-            flex: 1,
-            position: 'relative',
-            zIndex: 1,
-          }}
-        >
-          {/* Logo */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '48px' }}>
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                background: '#00D4FF',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <div style={{ width: '14px', height: '14px', background: '#080B14', borderRadius: '2px' }} />
+        <div tw="flex flex-col flex-1 relative z-10 py-[60px] px-[80px]">
+          <div tw="flex items-center gap-[10px] mb-12">
+            <div tw="flex items-center justify-center w-8 h-8 rounded-lg bg-accent-cyan">
+              <div tw="w-[14px] h-[14px] rounded-sm bg-bg-base" />
             </div>
-            <span style={{ color: '#F0F4FF', fontSize: '20px', fontWeight: 700 }}>NeuronHire</span>
+            <span tw="text-text-primary text-xl font-bold">NeuronHire</span>
           </div>
 
-          {/* Main content */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '48px', flex: 1 }}>
-            {/* Avatar */}
+          <div tw="flex items-center gap-12 flex-1">
             <div
-              style={{
-                width: '120px',
-                height: '120px',
-                borderRadius: '50%',
-                background: engineer.avatarColor,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '40px',
-                fontWeight: 700,
-                color: '#080B14',
-                border: `4px solid ${tierColor}`,
-                flexShrink: 0,
-              }}
+              tw={`flex items-center justify-center w-[120px] h-[120px] rounded-full bg-accent-cyan shrink-0 text-[40px] font-bold text-bg-base border-4 ${tierTw.border}`}
             >
               {engineer.avatarInitials}
             </div>
 
-            {/* Info */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <span style={{ color: '#F0F4FF', fontSize: '42px', fontWeight: 800 }}>
-                  {engineer.name}
-                </span>
+            <div tw="flex flex-col gap-3 flex-1">
+              <div tw="flex items-center gap-4">
+                <span tw="text-text-primary text-[42px] font-extrabold">{engineer.name}</span>
                 <span
-                  style={{
-                    background: `${tierColor}20`,
-                    border: `1px solid ${tierColor}40`,
-                    color: tierColor,
-                    padding: '4px 12px',
-                    borderRadius: '20px',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                  }}
+                  tw={`px-3 py-1 rounded-full text-sm font-semibold border ${tierTw.badge}`}
                 >
                   {engineer.tier}
                 </span>
               </div>
-              <span style={{ color: '#8892A4', fontSize: '20px' }}>{engineer.headline}</span>
+              <span tw="text-text-secondary text-xl">{engineer.headline}</span>
 
-              {/* Stats row */}
-              <div style={{ display: 'flex', gap: '32px', marginTop: '8px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span style={{ color: tierColor, fontSize: '28px', fontWeight: 700, fontFamily: 'monospace' }}>
+              <div tw="flex gap-8 mt-2">
+                <div tw="flex flex-col gap-0.5">
+                  <span tw={`text-[28px] font-bold font-mono ${tierTw.score}`}>
                     {engineer.neuronScore}
                   </span>
-                  <span style={{ color: '#4A5568', fontSize: '12px' }}>NeuronScore</span>
+                  <span tw="text-text-muted text-xs">NeuronScore</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span style={{ color: '#F0F4FF', fontSize: '28px', fontWeight: 700, fontFamily: 'monospace' }}>
+                <div tw="flex flex-col gap-0.5">
+                  <span tw="text-text-primary text-[28px] font-bold font-mono">
                     {engineer.reviewCount}
                   </span>
-                  <span style={{ color: '#4A5568', fontSize: '12px' }}>Reviews</span>
+                  <span tw="text-text-muted text-xs">Reviews</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span style={{ color: '#F0F4FF', fontSize: '28px', fontWeight: 700, fontFamily: 'monospace' }}>
+                <div tw="flex flex-col gap-0.5">
+                  <span tw="text-text-primary text-[28px] font-bold font-mono">
                     {engineer.projectCount}
                   </span>
-                  <span style={{ color: '#4A5568', fontSize: '12px' }}>Projects</span>
+                  <span tw="text-text-muted text-xs">Projects</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span style={{ color: '#00D4FF', fontSize: '28px', fontWeight: 700, fontFamily: 'monospace' }}>
+                <div tw="flex flex-col gap-0.5">
+                  <span tw="text-accent-cyan text-[28px] font-bold font-mono">
                     ₹{engineer.hourlyRateINR.toLocaleString('en-IN')}/hr
                   </span>
-                  <span style={{ color: '#4A5568', fontSize: '12px' }}>Hourly Rate</span>
+                  <span tw="text-text-muted text-xs">Hourly Rate</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Bottom bar */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingTop: '24px',
-              borderTop: '1px solid rgba(255,255,255,0.06)',
-            }}
-          >
-            <span style={{ color: '#4A5568', fontSize: '14px' }}>neuronhire.com/engineer/{params.id}</span>
-            <span style={{ color: '#4A5568', fontSize: '14px' }}>India&apos;s AI Talent Marketplace</span>
+          <div tw="flex items-center justify-between pt-6 border-t border-white/10">
+            <span tw="text-text-muted text-sm">neuronhire.com/engineer/{params.id}</span>
+            <span tw="text-text-muted text-sm">India&apos;s AI Talent Marketplace</span>
           </div>
         </div>
       </div>
@@ -175,6 +155,6 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     {
       width: 1200,
       height: 630,
-    }
+    },
   );
 }

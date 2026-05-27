@@ -1,50 +1,57 @@
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import type { Experience } from '@/lib/mock-data';
 
 interface TabExperienceProps {
   experiences: Experience[];
 }
 
+function experienceToneClass(accentColor: string): string {
+  let hash = 0;
+  for (let i = 0; i < accentColor.length; i++) {
+    hash = accentColor.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return `experience-tone-${Math.abs(hash) % 4}`;
+}
+
 export function TabExperience({ experiences }: TabExperienceProps) {
   return (
-    <div className="relative space-y-0" role="list" aria-label="Work experience">
-      {/* Vertical timeline line */}
+    <div className="relative">
       <div
         className="absolute left-[11px] top-3 bottom-3 w-px bg-[rgba(255,255,255,0.06)]"
         aria-hidden="true"
       />
 
-      {experiences.map((exp, i) => (
-        <ExperienceEntry key={exp.id} exp={exp} isLast={i === experiences.length - 1} />
-      ))}
+      <ul className="relative m-0 list-none space-y-0 p-0" aria-label="Work experience">
+        {experiences.map((exp) => (
+          <ExperienceEntry
+            key={exp.id}
+            exp={exp}
+            toneClass={experienceToneClass(exp.accentColor)}
+          />
+        ))}
+      </ul>
     </div>
   );
 }
 
-function ExperienceEntry({ exp, isLast }: { exp: Experience; isLast: boolean }) {
+function ExperienceEntry({ exp, toneClass }: { exp: Experience; toneClass: string }) {
   return (
-    <div className="relative flex gap-6 pb-8" role="listitem">
-      {/* Timeline dot */}
-      <div className="relative z-10 shrink-0 mt-1">
+    <li className={cn('relative flex gap-6 pb-8', toneClass)}>
+      <div className="relative z-10 mt-1 shrink-0">
         <div
-          className="w-6 h-6 rounded-full border-2 flex items-center justify-center"
-          style={{ borderColor: exp.accentColor, background: `${exp.accentColor}20` }}
+          className="experience-dot flex h-6 w-6 items-center justify-center rounded-full border-2"
           aria-hidden="true"
         >
-          <div className="w-2 h-2 rounded-full" style={{ background: exp.accentColor }} />
+          <div className="experience-dot-inner h-2 w-2 rounded-full" />
         </div>
       </div>
 
-      {/* Content */}
-      <div
-        className="flex-1 bg-bg-surface border rounded-xl p-5 hover:border-[rgba(255,255,255,0.1)] transition-colors"
-        style={{ borderColor: `${exp.accentColor}20` }}
-      >
-        {/* Header */}
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+      <div className="experience-card flex-1 rounded-xl border bg-bg-surface p-5 transition-colors hover:border-[rgba(255,255,255,0.1)]">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <h3 className="font-display font-semibold text-text-primary text-sm">{exp.company}</h3>
+            <div className="mb-0.5 flex items-center gap-2">
+              <h3 className="font-display text-sm font-semibold text-text-primary">{exp.company}</h3>
               {exp.verified && (
                 <span title="Verified company" aria-label="Verified company">
                   <svg width="14" height="14" viewBox="0 0 20 20" fill="#00D4FF" aria-hidden="true">
@@ -53,37 +60,28 @@ function ExperienceEntry({ exp, isLast }: { exp: Experience; isLast: boolean }) 
                 </span>
               )}
             </div>
-            <p className="text-text-secondary text-sm">{exp.role}</p>
+            <p className="text-sm text-text-secondary">{exp.role}</p>
           </div>
           <div className="text-right">
             <p className="font-mono text-xs text-text-muted">
               {exp.startDate} — {exp.current ? 'Present' : exp.endDate}
             </p>
             {exp.current && (
-              <Badge variant="green" className="text-[10px] mt-1">Current</Badge>
+              <Badge variant="green" className="mt-1 text-[10px]">Current</Badge>
             )}
           </div>
         </div>
 
-        <p className="text-text-secondary text-sm leading-relaxed mb-3">{exp.description}</p>
+        <p className="mb-3 text-sm leading-relaxed text-text-secondary">{exp.description}</p>
 
-        {/* Impact pills */}
         <div className="flex flex-wrap gap-2">
           {exp.impact.map((item) => (
-            <span
-              key={item}
-              className="text-xs font-mono px-2.5 py-1 rounded-full"
-              style={{
-                background: `${exp.accentColor}12`,
-                color: exp.accentColor,
-                border: `1px solid ${exp.accentColor}30`,
-              }}
-            >
+            <span key={item} className="experience-pill rounded-full px-2.5 py-1 font-mono text-xs">
               {item}
             </span>
           ))}
         </div>
       </div>
-    </div>
+    </li>
   );
 }

@@ -1,10 +1,10 @@
-import { PrismaClient } from '@prisma/client';
-import { RazorpayEscrowService } from './razorpay-escrow.service';
+import { PrismaClient } from "@prisma/client";
+import { RazorpayEscrowService } from "./razorpay-escrow.service";
 
 export class HourlyBillingService {
   private prisma: PrismaClient;
   private escrowService: RazorpayEscrowService;
-  private platformFeePercentage = 0.10; // 10% platform fee
+  private platformFeePercentage = 0.1; // 10% platform fee
 
   constructor() {
     this.prisma = new PrismaClient();
@@ -22,19 +22,19 @@ export class HourlyBillingService {
     description: string;
   }) {
     const contract = await this.prisma.contract.findUnique({
-      where: { id: data.contractId }
+      where: { id: data.contractId },
     });
 
     if (!contract) {
-      throw new Error('Contract not found');
+      throw new Error("Contract not found");
     }
 
-    if (contract.hiringMode !== 'hourly_contract') {
-      throw new Error('Contract is not an hourly contract');
+    if (contract.hiringMode !== "hourly_contract") {
+      throw new Error("Contract is not an hourly contract");
     }
 
-    if (contract.status !== 'active') {
-      throw new Error('Contract is not active');
+    if (contract.status !== "active") {
+      throw new Error("Contract is not active");
     }
 
     // Check if entry already exists for this date
@@ -42,12 +42,12 @@ export class HourlyBillingService {
       where: {
         contractId: data.contractId,
         engineerProfileId: data.engineerProfileId,
-        date: data.date
-      }
+        date: data.date,
+      },
     });
 
     if (existing) {
-      throw new Error('Time entry already exists for this date');
+      throw new Error("Time entry already exists for this date");
     }
 
     return await this.prisma.timeEntry.create({
@@ -56,8 +56,8 @@ export class HourlyBillingService {
         engineerProfileId: data.engineerProfileId,
         date: data.date,
         hoursLogged: data.hoursLogged,
-        description: data.description
-      }
+        description: data.description,
+      },
     });
   }
 
@@ -67,23 +67,25 @@ export class HourlyBillingService {
   async approveTimeEntry(timeEntryId: string, approvedBy: string) {
     const timeEntry = await this.prisma.timeEntry.findUnique({
       where: { id: timeEntryId },
-      include: { contract: true }
+      include: { contract: true },
     });
 
     if (!timeEntry) {
-      throw new Error('Time entry not found');
+      throw new Error("Time entry not found");
     }
 
     if (timeEntry.contract.companyUserId !== approvedBy) {
-      throw new Error('Only company can approve time entries');
+      throw new Error("Only company can approve time entries");
     }
 
     if (timeEntry.approved) {
-      throw new Error('Time entry already approved');
+      throw new Error("Time entry already approved");
     }
 
     // Calculate billing amount
-    const hourlyRate = parseFloat(timeEntry.contract.hourlyRate?.toString() || '0');
+    const hourlyRate = parseFloat(
+      timeEntry.contract.hourlyRate?.toString() || "0",
+    );
     const hours = parseFloat(timeEntry.hoursLogged.toString());
     const grossAmount = hourlyRate * hours;
     const platformFee = grossAmount * this.platformFeePercentage;
@@ -95,8 +97,8 @@ export class HourlyBillingService {
         approved: true,
         approvedAt: new Date(),
         approvedBy,
-        billingAmount
-      }
+        billingAmount,
+      },
     });
   }
 
@@ -107,18 +109,18 @@ export class HourlyBillingService {
     // Get all active hourly contracts
     const contracts = await this.prisma.contract.findMany({
       where: {
-        hiringMode: 'hourly_contract',
-        status: 'active'
+        hiringMode: "hourly_contract",
+        status: "active",
       },
       include: {
         engineerProfile: true,
         timeEntries: {
           where: {
             approved: true,
-            billed: false
-          }
-        }
-      }
+            billed: false,
+          },
+        },
+      },
     });
 
     const results = [];
@@ -130,19 +132,21 @@ export class HourlyBillingService {
 
       // Calculate total billing
       const totalBilling = contract.timeEntries.reduce((sum, entry) => {
-        return sum + parseFloat(entry.billingAmount?.toString() || '0');
+        return sum + parseFloat(entry.billingAmount?.toString() || "0");
       }, 0);
 
       // Check wallet balance
-      const walletBalance = parseFloat(contract.walletBalance?.toString() || '0');
+      const walletBalance = parseFloat(
+        contract.walletBalance?.toString() || "0",
+      );
 
       if (walletBalance < totalBilling) {
         // Insufficient funds - notify company
         results.push({
           contractId: contract.id,
-          status: 'insufficient_funds',
+          status: "insufficient_funds",
           required: totalBilling,
-          available: walletBalance
+          available: walletBalance,
         });
         continue;
       }
@@ -150,46 +154,46 @@ export class HourlyBillingService {
       // Process payout
       try {
         if (!contract.engineerProfile.upiId) {
-          throw new Error('Engineer UPI ID not configured');
+          throw new Error("Engineer UPI ID not configured");
         }
 
         const payout = await this.escrowService.releaseEscrow(
           contract.id,
           contract.engineerProfile.upiId,
           totalBilling,
-          contract.currency
+          contract.currency,
         );
 
         // Mark time entries as billed
         await this.prisma.timeEntry.updateMany({
           where: {
-            id: { in: contract.timeEntries.map(e => e.id) }
+            id: { in: contract.timeEntries.map((e) => e.id) },
           },
           data: {
             billed: true,
-            billedAt: new Date()
-          }
+            billedAt: new Date(),
+          },
         });
 
         // Update wallet balance
         await this.prisma.contract.update({
           where: { id: contract.id },
           data: {
-            walletBalance: walletBalance - totalBilling
-          }
+            walletBalance: walletBalance - totalBilling,
+          },
         });
 
         results.push({
           contractId: contract.id,
-          status: 'success',
+          status: "success",
           amount: totalBilling,
-          payoutId: payout.payoutId
+          payoutId: payout.payoutId,
         });
       } catch (error: any) {
         results.push({
           contractId: contract.id,
-          status: 'error',
-          error: error.message
+          status: "error",
+          error: error.message,
         });
       }
     }
@@ -202,37 +206,42 @@ export class HourlyBillingService {
    */
   async fundWallet(contractId: string, amount: number, _paymentDetails: any) {
     const contract = await this.prisma.contract.findUnique({
-      where: { id: contractId }
+      where: { id: contractId },
     });
 
     if (!contract) {
-      throw new Error('Contract not found');
+      throw new Error("Contract not found");
     }
 
-    if (contract.hiringMode !== 'hourly_contract') {
-      throw new Error('Contract is not an hourly contract');
+    if (contract.hiringMode !== "hourly_contract") {
+      throw new Error("Contract is not an hourly contract");
     }
 
-    const currentBalance = parseFloat(contract.walletBalance?.toString() || '0');
+    const currentBalance = parseFloat(
+      contract.walletBalance?.toString() || "0",
+    );
     const newBalance = currentBalance + amount;
 
     return await this.prisma.contract.update({
       where: { id: contractId },
       data: {
-        walletBalance: newBalance
-      }
+        walletBalance: newBalance,
+      },
     });
   }
 
   /**
    * Get time entries for contract
    */
-  async getTimeEntries(contractId: string, filters?: {
-    approved?: boolean;
-    billed?: boolean;
-    startDate?: Date;
-    endDate?: Date;
-  }) {
+  async getTimeEntries(
+    contractId: string,
+    filters?: {
+      approved?: boolean;
+      billed?: boolean;
+      startDate?: Date;
+      endDate?: Date;
+    },
+  ) {
     const where: any = { contractId };
 
     if (filters?.approved !== undefined) {
@@ -258,11 +267,11 @@ export class HourlyBillingService {
       include: {
         engineerProfile: {
           select: {
-            fullName: true
-          }
-        }
+            fullName: true,
+          },
+        },
       },
-      orderBy: { date: 'desc' }
+      orderBy: { date: "desc" },
     });
   }
 

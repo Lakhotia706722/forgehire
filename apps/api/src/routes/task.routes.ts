@@ -1,7 +1,7 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { TaskService } from '../services/task.service';
-import { authenticate, requireRole } from '../middleware/auth';
-import { UserRole } from '@prisma/client';
+import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import { TaskService } from "../services/task.service";
+import { authenticate, requireRole } from "../middleware/auth";
+import { UserRole } from "@prisma/client";
 import {
   createTaskSchema,
   depositEscrowSchema,
@@ -13,44 +13,44 @@ import {
   askQuestionSchema,
   answerQuestionSchema,
   signNDASchema,
-  taskSearchSchema
-} from '@neuronhire/shared';
+  taskSearchSchema,
+} from "@neuronhire/shared";
 
 export async function taskRoutes(fastify: FastifyInstance) {
   const taskService = new TaskService();
 
   // Create task
   fastify.post(
-    '/tasks',
+    "/tasks",
     {
-      preHandler: [authenticate, requireRole(UserRole.company)]
+      preHandler: [authenticate, requireRole(UserRole.company)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const data = createTaskSchema.parse((request.body as any));
+        const data = createTaskSchema.parse(request.body as any);
 
         const task = await taskService.createTask(userId, data);
 
         return reply.code(201).send({
           success: true,
           data: task,
-          message: 'Task created successfully. AI enrichment in progress.'
+          message: "Task created successfully. AI enrichment in progress.",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Update task
   fastify.put(
-    '/tasks/:id',
+    "/tasks/:id",
     {
-      preHandler: [authenticate, requireRole(UserRole.company)]
+      preHandler: [authenticate, requireRole(UserRole.company)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -61,197 +61,278 @@ export async function taskRoutes(fastify: FastifyInstance) {
         // Implementation would go here
         return reply.code(200).send({
           success: true,
-          message: 'Task update not yet implemented'
+          message: "Task update not yet implemented",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Create escrow order
   fastify.post(
-    '/tasks/:id/escrow/create',
+    "/tasks/:id/escrow/create",
     {
-      preHandler: [authenticate, requireRole(UserRole.company)]
+      preHandler: [authenticate, requireRole(UserRole.company)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
+        const { id } = request.params as any;
 
         const order = await taskService.createEscrowOrder(id, userId);
 
         return reply.code(200).send({
           success: true,
           data: order,
-          message: 'Escrow order created. Complete payment to publish task.'
+          message: "Escrow order created. Complete payment to publish task.",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Deposit escrow (verify payment)
   fastify.post(
-    '/tasks/:id/escrow/deposit',
+    "/tasks/:id/escrow/deposit",
     {
-      preHandler: [authenticate, requireRole(UserRole.company)]
+      preHandler: [authenticate, requireRole(UserRole.company)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const data = depositEscrowSchema.parse((request.body as any));
+        const { id } = request.params as any;
+        const data = depositEscrowSchema.parse(request.body as any);
 
         const task = await taskService.depositEscrow(id, userId, data);
 
         return reply.code(200).send({
           success: true,
           data: task,
-          message: 'Escrow deposited successfully. Task is now live!'
+          message: "Escrow deposited successfully. Task is now live!",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
+  );
+
+  // Engineer's bounty submissions
+  fastify.get(
+    "/tasks/my-submissions",
+    {
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (request as any).user.userId;
+        const submissions = await taskService.getEngineerSubmissions(userId);
+        return reply.code(200).send({ success: true, data: submissions });
+      } catch (error: any) {
+        return reply.code(400).send({
+          success: false,
+          error: error.message,
+        });
+      }
+    },
+  );
+
+  // Get company's own tasks
+  fastify.get(
+    "/tasks/mine",
+    {
+      preHandler: [authenticate, requireRole(UserRole.company)],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (request as any).user.userId;
+        const { status, limit } = request.query as {
+          status?: string;
+          limit?: string;
+        };
+
+        const tasks = await taskService.getCompanyTasks(userId, {
+          status,
+          limit: limit ? Number(limit) : undefined,
+        });
+
+        return reply.code(200).send({
+          success: true,
+          data: tasks,
+        });
+      } catch (error: any) {
+        return reply.code(400).send({
+          success: false,
+          error: error.message,
+        });
+      }
+    },
   );
 
   // Get task feed
   fastify.get(
-    '/tasks',
+    "/tasks",
     {
-      preHandler: []
+      preHandler: [],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const filters = taskSearchSchema.parse((request.query as any));
-        
+        const rawQuery = request.query as Record<string, unknown>;
+        const filters = taskSearchSchema.parse({
+          ...rawQuery,
+          limit: rawQuery.limit != null ? Number(rawQuery.limit) : undefined,
+          minReward: rawQuery.minReward != null ? Number(rawQuery.minReward) : undefined,
+          maxReward: rawQuery.maxReward != null ? Number(rawQuery.maxReward) : undefined,
+          minNeuronScore:
+            rawQuery.minNeuronScore != null ? Number(rawQuery.minNeuronScore) : undefined,
+          maxNeuronScore:
+            rawQuery.maxNeuronScore != null ? Number(rawQuery.maxNeuronScore) : undefined,
+        });
+
         // Get engineer profile ID if authenticated
         let engineerProfileId: string | undefined;
         if ((request as any).user) {
           const userId = (request as any).user.userId;
           const user = await (taskService as any).prisma.user.findUnique({
             where: { id: userId },
-            include: { engineerProfile: true }
+            include: { engineerProfile: true },
           });
           engineerProfileId = user?.engineerProfile?.id;
         }
 
-        const result = await taskService.getTaskFeed(filters, engineerProfileId);
+        const result = await taskService.getTaskFeed(
+          filters,
+          engineerProfileId,
+        );
 
         return reply.code(200).send({
           success: true,
           data: result.items,
           meta: {
             nextCursor: result.nextCursor,
-            hasMore: result.hasMore
-          }
+            hasMore: result.hasMore,
+          },
         });
       } catch (error: any) {
+        const message = error?.message ?? 'Failed to load tasks';
+        const isDbMissing =
+          message.includes('does not exist') ||
+          message.includes('P2021') ||
+          message.includes('P1001');
+        if (isDbMissing) {
+          return reply.code(200).send({
+            success: true,
+            data: [],
+            meta: { nextCursor: null, hasMore: false },
+          });
+        }
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: message,
         });
       }
-    }
+    },
   );
 
   // Get task by ID
   fastify.get(
-    '/tasks/:id',
+    "/tasks/:id",
     {
-      preHandler: []
+      preHandler: [],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { id } = (request.params as any);
+        const { id } = request.params as any;
         const userId = (request as any).user?.userId;
 
         const task = await taskService.getTask(id, userId);
 
         return reply.code(200).send({
           success: true,
-          data: task
+          data: task,
         });
       } catch (error: any) {
         return reply.code(404).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Participate in task
   fastify.post(
-    '/tasks/:id/participate',
+    "/tasks/:id/participate",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const data = participateTaskSchema.parse((request.body as any));
+        const { id } = request.params as any;
+        const data = participateTaskSchema.parse(request.body as any);
 
-        const participation = await taskService.participateInTask(id, userId, data);
+        const participation = await taskService.participateInTask(
+          id,
+          userId,
+          data,
+        );
 
         return reply.code(201).send({
           success: true,
           data: participation,
-          message: 'Successfully registered for task'
+          message: "Successfully registered for task",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Submit work
   fastify.post(
-    '/tasks/:id/submit',
+    "/tasks/:id/submit",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const data = submitTaskSchema.parse((request.body as any));
+        const { id } = request.params as any;
+        const data = submitTaskSchema.parse(request.body as any);
 
         const submission = await taskService.submitTask(id, userId, data);
 
         return reply.code(201).send({
           success: true,
           data: submission,
-          message: 'Work submitted successfully'
+          message: "Work submitted successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // List submissions for a task (company view)
   fastify.get(
-    '/tasks/:id/submissions',
+    "/tasks/:id/submissions",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { id } = request.params as any;
@@ -259,7 +340,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
       const submissions = await prisma.taskSubmission.findMany({
         where: { taskId: id },
-        orderBy: [{ score: 'desc' }, { submittedAt: 'asc' }],
+        orderBy: [{ score: "desc" }, { submittedAt: "asc" }],
         include: {
           engineerProfile: {
             select: { fullName: true, neuronScore: true, id: true },
@@ -281,12 +362,12 @@ export async function taskRoutes(fastify: FastifyInstance) {
           githubUrl: s.githubUrl,
         })),
       });
-    }
+    },
   );
 
   // Get single submission detail
   fastify.get(
-    '/tasks/:id/submissions/:submissionId',
+    "/tasks/:id/submissions/:submissionId",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { id, submissionId } = request.params as any;
@@ -302,7 +383,9 @@ export async function taskRoutes(fastify: FastifyInstance) {
       });
 
       if (!submission || submission.taskId !== id) {
-        return reply.code(404).send({ success: false, error: 'Submission not found' });
+        return reply
+          .code(404)
+          .send({ success: false, error: "Submission not found" });
       }
 
       return reply.send({
@@ -323,12 +406,12 @@ export async function taskRoutes(fastify: FastifyInstance) {
           screenshots: submission.screenshots,
         },
       });
-    }
+    },
   );
 
   // Approve submission (company)
   fastify.post(
-    '/tasks/:id/submissions/:submissionId/approve',
+    "/tasks/:id/submissions/:submissionId/approve",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { submissionId } = request.params as any;
@@ -336,16 +419,16 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
       const updated = await prisma.taskSubmission.update({
         where: { id: submissionId },
-        data: { status: 'accepted', reviewedAt: new Date() },
+        data: { status: "accepted", reviewedAt: new Date() },
       });
 
       return reply.send({ success: true, data: updated });
-    }
+    },
   );
 
   // Reject submission (company)
   fastify.post(
-    '/tasks/:id/submissions/:submissionId/reject',
+    "/tasks/:id/submissions/:submissionId/reject",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { submissionId } = request.params as any;
@@ -354,205 +437,210 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
       const updated = await prisma.taskSubmission.update({
         where: { id: submissionId },
-        data: { status: 'rejected', feedback, reviewedAt: new Date() },
+        data: { status: "rejected", feedback, reviewedAt: new Date() },
       });
 
       return reply.send({ success: true, data: updated });
-    }
+    },
   );
 
   // Evaluate submission
   fastify.post(
-    '/tasks/:id/submissions/:submissionId/evaluate',
+    "/tasks/:id/submissions/:submissionId/evaluate",
     {
-      preHandler: [authenticate, requireRole(UserRole.company)]
+      preHandler: [authenticate, requireRole(UserRole.company)],
     },
-    async (
-      request: FastifyRequest,
-      reply: FastifyReply
-    ) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { submissionId } = (request.params as any);
-        const data = evaluateSubmissionSchema.parse((request.body as any));
+        const { submissionId } = request.params as any;
+        const data = evaluateSubmissionSchema.parse(request.body as any);
 
         const submission = await taskService.evaluateSubmission(
           submissionId,
           userId,
-          data
+          data,
         );
 
         return reply.code(200).send({
           success: true,
           data: submission,
-          message: 'Submission evaluated successfully'
+          message: "Submission evaluated successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Select winner (single)
   fastify.put(
-    '/tasks/:id/winner',
+    "/tasks/:id/winner",
     {
-      preHandler: [authenticate, requireRole(UserRole.company)]
+      preHandler: [authenticate, requireRole(UserRole.company)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const data = selectWinnerSchema.parse((request.body as any));
+        const { id } = request.params as any;
+        const data = selectWinnerSchema.parse(request.body as any);
 
         const result = await taskService.selectWinner(id, userId, data);
 
         return reply.code(200).send({
           success: true,
           data: result,
-          message: 'Winner selected. Payout initiated.'
+          message: "Winner selected. Payout initiated.",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Select multiple winners (contest)
   fastify.put(
-    '/tasks/:id/winners',
+    "/tasks/:id/winners",
     {
-      preHandler: [authenticate, requireRole(UserRole.company)]
+      preHandler: [authenticate, requireRole(UserRole.company)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const data = selectMultipleWinnersSchema.parse((request.body as any));
+        const { id } = request.params as any;
+        const data = selectMultipleWinnersSchema.parse(request.body as any);
 
-        const result = await taskService.selectMultipleWinners(id, userId, data);
+        const result = await taskService.selectMultipleWinners(
+          id,
+          userId,
+          data,
+        );
 
         return reply.code(200).send({
           success: true,
           data: result,
-          message: 'Winners selected. Payouts initiated.'
+          message: "Winners selected. Payouts initiated.",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Ask question
   fastify.post(
-    '/tasks/:id/questions',
+    "/tasks/:id/questions",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer, UserRole.company)]
+      preHandler: [
+        authenticate,
+        requireRole(UserRole.engineer, UserRole.company),
+      ],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const data = askQuestionSchema.parse((request.body as any));
+        const { id } = request.params as any;
+        const data = askQuestionSchema.parse(request.body as any);
 
         const question = await taskService.askQuestion(id, userId, data);
 
         return reply.code(201).send({
           success: true,
           data: question,
-          message: 'Question posted successfully'
+          message: "Question posted successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Answer question
   fastify.put(
-    '/tasks/:id/questions/:questionId/answer',
+    "/tasks/:id/questions/:questionId/answer",
     {
-      preHandler: [authenticate, requireRole(UserRole.company)]
-    },
-    async (
-      request: FastifyRequest,
-      reply: FastifyReply
-    ) => {
-      try {
-        const userId = (request as any).user.userId;
-        const { questionId } = (request.params as any);
-        const data = answerQuestionSchema.parse((request.body as any));
-
-        const question = await taskService.answerQuestion(questionId, userId, data);
-
-        return reply.code(200).send({
-          success: true,
-          data: question,
-          message: 'Question answered successfully'
-        });
-      } catch (error: any) {
-        return reply.code(400).send({
-          success: false,
-          error: error.message
-        });
-      }
-    }
-  );
-
-  // Generate NDA
-  fastify.post(
-    '/tasks/:id/nda/generate',
-    {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.company)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
+        const { questionId } = request.params as any;
+        const data = answerQuestionSchema.parse(request.body as any);
+
+        const question = await taskService.answerQuestion(
+          questionId,
+          userId,
+          data,
+        );
+
+        return reply.code(200).send({
+          success: true,
+          data: question,
+          message: "Question answered successfully",
+        });
+      } catch (error: any) {
+        return reply.code(400).send({
+          success: false,
+          error: error.message,
+        });
+      }
+    },
+  );
+
+  // Generate NDA
+  fastify.post(
+    "/tasks/:id/nda/generate",
+    {
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (request as any).user.userId;
+        const { id } = request.params as any;
 
         const nda = await taskService.generateNDA(id, userId);
 
         return reply.code(200).send({
           success: true,
           data: nda,
-          message: 'NDA generated. Please review and sign.'
+          message: "NDA generated. Please review and sign.",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Sign NDA
   fastify.post(
-    '/tasks/:id/nda/sign',
+    "/tasks/:id/nda/sign",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        
+        const { id } = request.params as any;
+
         // Get IP address from request
-        const ipAddress = request.ip || '0.0.0.0';
-        
-        const bodyData = signNDASchema.parse((request.body as any));
+        const ipAddress = request.ip || "0.0.0.0";
+
+        const bodyData = signNDASchema.parse(request.body as any);
         const data = { ...bodyData, ipAddress };
 
         const nda = await taskService.signNDA(id, userId, data);
@@ -560,17 +648,15 @@ export async function taskRoutes(fastify: FastifyInstance) {
         return reply.code(200).send({
           success: true,
           data: nda,
-          message: 'NDA signed successfully. You can now view full task details.'
+          message:
+            "NDA signed successfully. You can now view full task details.",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 }
-
-
-

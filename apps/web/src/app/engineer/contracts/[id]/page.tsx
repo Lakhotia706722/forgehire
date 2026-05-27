@@ -1,11 +1,12 @@
 'use client';
-
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
 import { useContractDetail } from '@/lib/api-hooks';
+import { avatarToneClass, initialsFromName } from '@/lib/avatar-tone';
 
 const STATUS_BADGE: Record<string, { variant: 'cyan' | 'green' | 'amber' | 'red' | 'gray'; label: string }> = {
   draft:             { variant: 'gray',  label: 'Draft' },
@@ -24,12 +25,45 @@ const MILESTONE_STATUS_LABEL: Record<string, string> = {
   paid:        'Paid',
 };
 
-const MILESTONE_COLORS: Record<string, string> = {
-  pending:     '#8892A4',
-  in_progress: '#00D4FF',
-  submitted:   '#F59E0B',
-  approved:    '#7B5EA7',
-  paid:        '#10B981',
+const MILESTONE_UI: Record<
+  string,
+  { border: string; dotBorder: string; dotBg: string; amount: string; badge: string }
+> = {
+  pending: {
+    border: 'border-[rgba(136,146,164,0.2)]',
+    dotBorder: 'border-[#8892A4]',
+    dotBg: 'bg-[#8892A4]',
+    amount: 'text-text-muted',
+    badge: 'bg-[rgba(136,146,164,0.15)] text-text-muted',
+  },
+  in_progress: {
+    border: 'border-[rgba(0,212,255,0.2)]',
+    dotBorder: 'border-accent-cyan',
+    dotBg: 'bg-accent-cyan',
+    amount: 'text-accent-cyan',
+    badge: 'bg-[rgba(0,212,255,0.15)] text-accent-cyan',
+  },
+  submitted: {
+    border: 'border-[rgba(245,158,11,0.2)]',
+    dotBorder: 'border-accent-amber',
+    dotBg: 'bg-accent-amber',
+    amount: 'text-accent-amber',
+    badge: 'bg-[rgba(245,158,11,0.15)] text-accent-amber',
+  },
+  approved: {
+    border: 'border-[rgba(123,94,167,0.2)]',
+    dotBorder: 'border-accent-violet',
+    dotBg: 'bg-accent-violet',
+    amount: 'text-accent-violet',
+    badge: 'bg-[rgba(123,94,167,0.15)] text-accent-violet',
+  },
+  paid: {
+    border: 'border-[rgba(16,185,129,0.2)]',
+    dotBorder: 'border-accent-green',
+    dotBg: 'bg-accent-green',
+    amount: 'text-accent-green',
+    badge: 'bg-[rgba(16,185,129,0.15)] text-accent-green',
+  },
 };
 
 function formatCountdown72h(submittedAt: string): string {
@@ -39,16 +73,6 @@ function formatCountdown72h(submittedAt: string): string {
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
   return `${h}h ${m}m`;
-}
-
-const COLORS = ['#00D4FF', '#F59E0B', '#7B5EA7', '#10B981'];
-function colorFromName(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return COLORS[Math.abs(hash) % COLORS.length];
-}
-function initialsFromName(name: string): string {
-  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 }
 
 export default function ContractTrackerPage({ params }: { params: { id: string } }) {
@@ -109,8 +133,6 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
   const engineerTakeHome = totalEscrowed - platformFee;
 
   const statusConfig = STATUS_BADGE[contract.status] ?? { variant: 'gray' as const, label: contract.status };
-  const companyColor = colorFromName(contract.companyName);
-  const engineerColor = colorFromName(contract.engineerName);
 
   return (
     <div className="min-h-screen bg-bg-base">
@@ -131,7 +153,7 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
           {/* Parties */}
           <div className="flex items-center gap-6 mb-5">
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs" style={{ background: companyColor }} aria-hidden="true">
+              <div className={cn('w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs', avatarToneClass(contract.companyName))} aria-hidden="true">
                 {initialsFromName(contract.companyName)}
               </div>
               <div>
@@ -141,7 +163,7 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
             </div>
             <div className="flex-1 h-px bg-[rgba(255,255,255,0.06)]" aria-hidden="true" />
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs" style={{ background: engineerColor }} aria-hidden="true">
+              <div className={cn('w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs', avatarToneClass(contract.engineerName))} aria-hidden="true">
                 {initialsFromName(contract.engineerName)}
               </div>
               <div>
@@ -154,12 +176,12 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
           {/* Financial breakdown */}
           <div className="grid grid-cols-3 gap-4 text-center">
             {[
-              { label: 'Total Value',        value: `₹${totalEscrowed.toLocaleString('en-IN')}`,  color: '#F59E0B' },
-              { label: 'Platform Fee (10%)', value: `₹${platformFee.toLocaleString('en-IN')}`,    color: '#4A5568' },
-              { label: 'Engineer Take-home', value: `₹${engineerTakeHome.toLocaleString('en-IN')}`, color: '#10B981' },
+              { label: 'Total Value',        value: `₹${totalEscrowed.toLocaleString('en-IN')}`,  valueClass: 'text-accent-amber' },
+              { label: 'Platform Fee (10%)', value: `₹${platformFee.toLocaleString('en-IN')}`,    valueClass: 'text-text-muted' },
+              { label: 'Engineer Take-home', value: `₹${engineerTakeHome.toLocaleString('en-IN')}`, valueClass: 'text-accent-green' },
             ].map((item) => (
               <div key={item.label} className="bg-bg-elevated rounded-xl p-3">
-                <p className="font-mono font-bold text-lg" style={{ color: item.color }}>{item.value}</p>
+                <p className={cn('font-mono font-bold text-lg', item.valueClass)}>{item.value}</p>
                 <p className="text-xs text-text-muted mt-0.5">{item.label}</p>
               </div>
             ))}
@@ -169,17 +191,14 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
         {/* Escrow bar */}
         <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-5">
           <h2 className="font-display font-semibold text-text-primary mb-4">Escrow Status</h2>
-          <div className="h-3 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden mb-3">
-            <div
-              className="h-full bg-accent-green rounded-full transition-all duration-700"
-              style={{ width: `${releasedPct}%` }}
-              role="progressbar"
-              aria-valuenow={released}
-              aria-valuemin={0}
-              aria-valuemax={totalEscrowed}
-              aria-label={`₹${released.toLocaleString('en-IN')} released of ₹${totalEscrowed.toLocaleString('en-IN')}`}
-            />
-          </div>
+          <Progress
+            value={released}
+            max={totalEscrowed || 1}
+            color="green"
+            size="lg"
+            label={`₹${released.toLocaleString('en-IN')} released of ₹${totalEscrowed.toLocaleString('en-IN')}`}
+            className="mb-3"
+          />
           <div className="flex justify-between text-xs font-mono text-text-muted">
             <span className="text-accent-green">Released: ₹{released.toLocaleString('en-IN')}</span>
             <span>Remaining: ₹{remaining.toLocaleString('en-IN')}</span>
@@ -193,19 +212,19 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
             <div className="relative space-y-0">
               <div className="absolute left-[11px] top-3 bottom-3 w-px bg-[rgba(255,255,255,0.06)]" aria-hidden="true" />
               {contract.milestones.map((m) => {
-                const color = MILESTONE_COLORS[m.status] ?? '#8892A4';
+                const ui = MILESTONE_UI[m.status] ?? MILESTONE_UI.pending;
                 return (
                   <div key={m.id} className="relative flex gap-5 pb-8 last:pb-0">
                     <div className="relative z-10 shrink-0 mt-1">
-                      <div className="w-6 h-6 rounded-full border-2 flex items-center justify-center" style={{ borderColor: color, background: `${color}20` }}>
+                      <div className={cn('w-6 h-6 rounded-full border-2 flex items-center justify-center bg-bg-elevated', ui.dotBorder)}>
                         {m.status === 'paid' ? (
-                          <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true"><path d="M1 4L3.5 6.5L9 1" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          <svg width="10" height="8" viewBox="0 0 10 8" fill="none" className={ui.amount} aria-hidden="true"><path d="M1 4L3.5 6.5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         ) : (
-                          <div className="w-2 h-2 rounded-full" style={{ background: color }} />
+                          <div className={cn('w-2 h-2 rounded-full', ui.dotBg)} />
                         )}
                       </div>
                     </div>
-                    <div className="flex-1 bg-bg-elevated border rounded-xl p-4" style={{ borderColor: `${color}20` }}>
+                    <div className={cn('flex-1 bg-bg-elevated border rounded-xl p-4', ui.border)}>
                       <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
                         <div>
                           <p className="font-display font-semibold text-text-primary text-sm">{m.title}</p>
@@ -216,8 +235,8 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
                           )}
                         </div>
                         <div className="text-right">
-                          <p className="font-mono font-bold text-lg" style={{ color }}>₹{m.amount.toLocaleString('en-IN')}</p>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full" style={{ background: `${color}15`, color }}>
+                          <p className={cn('font-mono font-bold text-lg', ui.amount)}>₹{m.amount.toLocaleString('en-IN')}</p>
+                          <span className={cn('text-[10px] font-mono px-2 py-0.5 rounded-full', ui.badge)}>
                             {MILESTONE_STATUS_LABEL[m.status] ?? m.status}
                           </span>
                         </div>

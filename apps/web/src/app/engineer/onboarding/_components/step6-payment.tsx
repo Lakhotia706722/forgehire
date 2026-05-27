@@ -1,5 +1,4 @@
 'use client';
-
 import * as React from 'react';
 import { Input } from '@/components/ui/input';
 import type { OnboardingState } from '@/lib/onboarding-store';
@@ -55,7 +54,7 @@ export function Step6Payment({ state, onChange }: Step6Props) {
           type="button"
           onClick={() => setBankExpanded((e) => !e)}
           className="w-full flex items-center justify-between px-4 py-3.5 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
-          aria-expanded={bankExpanded}
+          aria-expanded={bankExpanded ? "true" : "false"}
         >
           <span>Bank Account (Optional)</span>
           <svg

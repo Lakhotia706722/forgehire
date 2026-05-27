@@ -2,6 +2,44 @@ import { authMiddleware, redirectToSignIn } from '@clerk/nextjs';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+const RESERVED_ENGINEER_SEGMENTS = new Set([
+  'dashboard',
+  'bounties',
+  'profile',
+  'wallet',
+  'messages',
+  'settings',
+  'marketplace',
+  'contracts',
+  'assessment',
+  'onboarding',
+]);
+
+const RESERVED_COMPANY_SEGMENTS = new Set([
+  'dashboard',
+  'tasks',
+  'contracts',
+  'browse',
+  'messages',
+  'settings',
+  'analytics',
+  'post-task',
+  'notifications',
+]);
+
+/** Public profile pages only (single segment id, not app sections). */
+function isPublicProfilePath(pathname: string): boolean {
+  const engineerMatch = pathname.match(/^\/engineer\/([^/]+)$/);
+  if (engineerMatch && !RESERVED_ENGINEER_SEGMENTS.has(engineerMatch[1])) {
+    return true;
+  }
+  const companyMatch = pathname.match(/^\/company\/([^/]+)$/);
+  if (companyMatch && !RESERVED_COMPANY_SEGMENTS.has(companyMatch[1])) {
+    return true;
+  }
+  return false;
+}
+
 export default authMiddleware({
   publicRoutes: [
     '/',
@@ -10,32 +48,40 @@ export default authMiddleware({
     '/login(.*)',
     '/signup(.*)',
     '/verify-otp(.*)',
+    '/forgot-password(.*)',
+    '/reset-password(.*)',
+    '/sso-callback(.*)',
     '/api/webhook(.*)',
-    '/engineer/(.*)',   // public profiles
-    '/marketplace/(.*)',
+    '/marketplace(.*)',
+    '/market-rates(.*)',
+    '/engineers(.*)',
+    '/bounties(.*)',
+    '/about(.*)',
+    '/terms(.*)',
+    '/privacy(.*)',
+    '/offline(.*)',
   ],
 
   afterAuth(auth, req: NextRequest) {
     const { userId, sessionClaims } = auth;
     const { pathname } = req.nextUrl;
+    const isPublic =
+      auth.isPublicRoute || isPublicProfilePath(pathname);
 
-    // Not signed in → redirect to login for protected routes
-    if (!userId && !auth.isPublicRoute) {
+    if (!userId && !isPublic) {
       return redirectToSignIn({ returnBackUrl: req.url });
     }
 
-    // Signed in → redirect away from auth pages
     if (userId && (pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/login') || pathname.startsWith('/signup'))) {
-      const role = (sessionClaims?.publicMetadata as any)?.role as string | undefined;
+      const role = (sessionClaims?.publicMetadata as { role?: string })?.role;
       const dest = role === 'company'
         ? '/company/dashboard'
         : '/engineer/dashboard';
       return NextResponse.redirect(new URL(dest, req.url));
     }
 
-    // Role-based route protection
     if (userId) {
-      const role = (sessionClaims?.publicMetadata as any)?.role as string | undefined;
+      const role = (sessionClaims?.publicMetadata as { role?: string })?.role;
 
       if (pathname.startsWith('/engineer') && role && role !== 'engineer') {
         return NextResponse.redirect(new URL('/company/dashboard', req.url));
@@ -45,7 +91,6 @@ export default authMiddleware({
         return NextResponse.redirect(new URL('/engineer/dashboard', req.url));
       }
 
-      // Admin route protection — only admin role can access /admin/*
       if (pathname.startsWith('/admin') && role !== 'admin') {
         const dest = role === 'company' ? '/company/dashboard' : '/engineer/dashboard';
         return NextResponse.redirect(new URL(dest, req.url));

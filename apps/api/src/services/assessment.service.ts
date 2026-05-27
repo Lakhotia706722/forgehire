@@ -1,11 +1,12 @@
-import { getPrismaClient } from '../config/database';
-import { getRedisClient } from '../config/redis';
-import { v4 as uuidv4 } from 'uuid';
-import { AssessmentGeneratorService } from './assessment-generator.service';
-import { CodeEvaluatorService } from './code-evaluator.service';
-import { ReportGeneratorService } from './report-generator.service';
-import { NeuronScoreService } from './neuron-score.service';
-import { Queue } from 'bullmq';
+import { getPrismaClient } from "../config/database";
+import { getRedisClient } from "../config/redis";
+import { v4 as uuidv4 } from "uuid";
+import { AssessmentGeneratorService } from "./assessment-generator.service";
+import { CodeEvaluatorService } from "./code-evaluator.service";
+import { ReportGeneratorService } from "./report-generator.service";
+import { NeuronScoreService } from "./neuron-score.service";
+import { Queue } from "bullmq";
+import { getBullMQConnection } from "../config/bullmq";
 
 export class AssessmentService {
   private prisma = getPrismaClient();
@@ -14,16 +15,13 @@ export class AssessmentService {
   private evaluator = new CodeEvaluatorService();
   private reportGenerator = new ReportGeneratorService();
   private neuronScoreService = new NeuronScoreService();
-  private assessmentQueue: Queue;
+  private assessmentQueue: Queue | null;
 
   constructor() {
-    // Initialize BullMQ queue
-    this.assessmentQueue = new Queue('assessment-processing', {
-      connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379')
-      }
-    });
+    const connection = getBullMQConnection();
+    this.assessmentQueue = connection
+      ? new Queue("assessment-processing", { connection })
+      : null;
   }
 
   /**
@@ -31,33 +29,35 @@ export class AssessmentService {
    */
   async generateAssessment(
     engineerProfileId: string,
-    userId: string
+    userId: string,
   ): Promise<any> {
     const profile = await this.prisma.engineerProfile.findUnique({
       where: { id: engineerProfileId },
-      include: { skills: true }
+      include: { skills: true },
     });
 
     if (!profile) {
-      throw new Error('Engineer profile not found');
+      throw new Error("Engineer profile not found");
     }
 
     // Check completeness (must be >= 70%)
     if (profile.completenessScore < 70) {
-      throw new Error('Profile must be at least 70% complete to take assessment');
+      throw new Error(
+        "Profile must be at least 70% complete to take assessment",
+      );
     }
 
     // Determine experience level
-    const experienceLevel = this.determineExperienceLevel(profile.yearsOfExperience || 0);
+    const experienceLevel = this.determineExperienceLevel(
+      profile.yearsOfExperience || 0,
+    );
 
     // Get skills
-    const skills = profile.skills.map(s => s.skillName);
+    const skills = profile.skills.map((s) => s.skillName);
 
     // Generate assessment content
-    const { questions, codingTasks, caseScenario } = await this.generator.generateAssessment(
-      skills,
-      experienceLevel
-    );
+    const { questions, codingTasks, caseScenario } =
+      await this.generator.generateAssessment(skills, experienceLevel);
 
     // Create session token
     const sessionToken = uuidv4();
@@ -75,12 +75,12 @@ export class AssessmentService {
         mcqQuestions: JSON.stringify(questions),
         codingTasks: JSON.stringify(codingTasks),
         caseScenario: JSON.stringify(caseScenario),
-        status: 'pending',
+        status: "pending",
         proctoringEvents: JSON.stringify([]),
         tabSwitches: 0,
         focusLosses: 0,
-        pasteAttempts: 0
-      }
+        pasteAttempts: 0,
+      },
     });
 
     // Store session in Redis (2.5 hours TTL)
@@ -91,8 +91,8 @@ export class AssessmentService {
         assessmentId: assessment.id,
         engineerProfileId,
         userId,
-        startedAt: null
-      })
+        startedAt: null,
+      }),
     );
 
     return {
@@ -100,7 +100,7 @@ export class AssessmentService {
       sessionToken,
       questions,
       codingTasks,
-      caseScenario
+      caseScenario,
     };
   }
 
@@ -110,28 +110,28 @@ export class AssessmentService {
   async startAssessment(
     sessionToken: string,
     ipAddress: string,
-    deviceFingerprint: string
+    deviceFingerprint: string,
   ): Promise<void> {
     const assessment = await this.prisma.assessment.findUnique({
-      where: { sessionToken }
+      where: { sessionToken },
     });
 
     if (!assessment) {
-      throw new Error('Assessment not found');
+      throw new Error("Assessment not found");
     }
 
-    if (assessment.status !== 'pending') {
-      throw new Error('Assessment already started');
+    if (assessment.status !== "pending") {
+      throw new Error("Assessment already started");
     }
 
     await this.prisma.assessment.update({
       where: { id: assessment.id },
       data: {
-        status: 'in_progress',
+        status: "in_progress",
         startedAt: new Date(),
         ipAddress,
-        deviceFingerprint
-      }
+        deviceFingerprint,
+      },
     });
   }
 
@@ -144,36 +144,40 @@ export class AssessmentService {
       mcqResponses: any;
       codingSubmissions: any;
       caseResponse: string;
-    }
+    },
   ): Promise<void> {
     const assessment = await this.prisma.assessment.findUnique({
-      where: { id: assessmentId }
+      where: { id: assessmentId },
     });
 
     if (!assessment) {
-      throw new Error('Assessment not found');
+      throw new Error("Assessment not found");
     }
 
-    if (assessment.status !== 'in_progress' && assessment.status !== 'paused') {
-      throw new Error('Assessment cannot be submitted in current state');
+    if (assessment.status !== "in_progress" && assessment.status !== "paused") {
+      throw new Error("Assessment cannot be submitted in current state");
     }
 
     // Update assessment with responses
     await this.prisma.assessment.update({
       where: { id: assessmentId },
       data: {
-        status: 'submitted',
+        status: "submitted",
         submittedAt: new Date(),
         mcqResponses: JSON.stringify(responses.mcqResponses),
         codingSubmissions: JSON.stringify(responses.codingSubmissions),
-        caseResponse: responses.caseResponse
-      }
+        caseResponse: responses.caseResponse,
+      },
     });
 
-    // Queue for async evaluation
-    await this.assessmentQueue.add('evaluate-assessment', {
-      assessmentId
-    });
+    // Queue for async evaluation (or run inline when BullMQ disabled)
+    if (this.assessmentQueue) {
+      await this.assessmentQueue.add("evaluate-assessment", {
+        assessmentId,
+      });
+    } else {
+      await this.evaluateAssessment(assessmentId);
+    }
   }
 
   /**
@@ -184,26 +188,31 @@ export class AssessmentService {
       where: { id: assessmentId },
       include: {
         engineerProfile: {
-          include: { skills: true, projects: true }
-        }
-      }
+          include: { skills: true, projects: true },
+        },
+      },
     });
 
     if (!assessment) {
-      throw new Error('Assessment not found');
+      throw new Error("Assessment not found");
     }
 
     // Parse data
     const questions = JSON.parse(assessment.mcqQuestions as string);
     const mcqResponses = JSON.parse(assessment.mcqResponses as string);
     const codingTasks = JSON.parse(assessment.codingTasks as string);
-    const codingSubmissions = JSON.parse(assessment.codingSubmissions as string);
+    const codingSubmissions = JSON.parse(
+      assessment.codingSubmissions as string,
+    );
 
     // Evaluate MCQ
     const mcqScore = this.evaluateMCQ(questions, mcqResponses);
 
     // Evaluate coding tasks
-    const codingResults = await this.evaluateCoding(codingTasks, codingSubmissions);
+    const codingResults = await this.evaluateCoding(
+      codingTasks,
+      codingSubmissions,
+    );
     const codingScore = codingResults.averageScore;
 
     // Evaluate case study (simplified - in production, use Claude API)
@@ -212,8 +221,8 @@ export class AssessmentService {
     // Calculate total score
     const totalScore = Math.round(
       mcqScore * 0.4 + // 40%
-      codingScore * 0.4 + // 40%
-      caseScore * 0.2 // 20%
+        codingScore * 0.4 + // 40%
+        caseScore * 0.2, // 20%
     );
 
     // Calculate dimension scores
@@ -222,7 +231,7 @@ export class AssessmentService {
       codingScore,
       caseScore,
       questions,
-      codingResults
+      codingResults,
     );
 
     // Determine tier
@@ -235,7 +244,7 @@ export class AssessmentService {
     await this.prisma.assessment.update({
       where: { id: assessmentId },
       data: {
-        status: 'evaluated',
+        status: "evaluated",
         evaluatedAt: new Date(),
         mcqScore,
         codingScore,
@@ -243,8 +252,8 @@ export class AssessmentService {
         overallScore: totalScore,
         ...dimensionScores,
         tier,
-        plagiarismFlagged: plagiarismDetected
-      }
+        plagiarismFlagged: plagiarismDetected,
+      },
     });
 
     // Generate report
@@ -256,8 +265,8 @@ export class AssessmentService {
       await this.neuronScoreService.recalculateScore(
         assessment.engineerProfileId,
         `Initial assessment completed: ${tier} tier`,
-        'assessment',
-        'system'
+        "assessment",
+        "system",
       );
     }
   }
@@ -270,9 +279,9 @@ export class AssessmentService {
       where: { id: assessmentId },
       include: {
         engineerProfile: {
-          include: { skills: true }
-        }
-      }
+          include: { skills: true },
+        },
+      },
     });
 
     if (!assessment) return;
@@ -280,13 +289,13 @@ export class AssessmentService {
     // Generate report using Claude API
     const report = await this.reportGenerator.generateReport(
       assessment,
-      assessment.engineerProfile
+      assessment.engineerProfile,
     );
 
     // Generate PDF
     const reportUrl = await this.reportGenerator.generatePDFReport(
       report,
-      assessment.engineerProfile
+      assessment.engineerProfile,
     );
 
     // Update assessment
@@ -296,8 +305,8 @@ export class AssessmentService {
         reportUrl,
         reportGenerated: true,
         skillGapAnalysis: JSON.stringify(report.skillGapAnalysis),
-        improvementRoadmap: JSON.stringify(report.improvementRoadmap)
-      }
+        improvementRoadmap: JSON.stringify(report.improvementRoadmap),
+      },
     });
   }
 
@@ -321,7 +330,7 @@ export class AssessmentService {
    */
   private async evaluateCoding(
     tasks: any[],
-    submissions: any[]
+    submissions: any[],
   ): Promise<{
     averageScore: number;
     plagiarismDetected: boolean;
@@ -343,13 +352,13 @@ export class AssessmentService {
       // Evaluate code
       const evaluation = await this.evaluator.evaluateCode(
         submission.code,
-        task.testCases
+        task.testCases,
       );
 
       // Check plagiarism
       const plagiarismCheck = await this.evaluator.checkPlagiarism(
         submission.code,
-        [] // TODO: Load known solutions from database
+        [], // TODO: Load known solutions from database
       );
 
       if (plagiarismCheck.isPlagiarized) {
@@ -364,14 +373,14 @@ export class AssessmentService {
         passed: evaluation.passed,
         correctness: evaluation.correctness,
         efficiency: evaluation.efficiency,
-        plagiarism: plagiarismCheck.isPlagiarized
+        plagiarism: plagiarismCheck.isPlagiarized,
       });
     }
 
     return {
       averageScore: Math.round(totalScore / tasks.length),
       plagiarismDetected,
-      results
+      results,
     };
   }
 
@@ -383,7 +392,7 @@ export class AssessmentService {
     codingScore: number,
     caseScore: number,
     questions: any[],
-    codingResults: any
+    codingResults: any,
   ): any {
     // Simplified dimension calculation
     // In production, analyze question categories and coding patterns
@@ -394,7 +403,7 @@ export class AssessmentService {
       systemDesign: Math.round(caseScore * 0.7 + mcqScore * 0.3),
       codingQuality: Math.round(codingResults.averageScore),
       practicalApp: Math.round(caseScore * 0.6 + codingScore * 0.4),
-      communication: Math.round(caseScore * 0.8 + mcqScore * 0.2)
+      communication: Math.round(caseScore * 0.8 + mcqScore * 0.2),
     };
   }
 
@@ -402,20 +411,20 @@ export class AssessmentService {
    * Determine tier from total score
    */
   private determineTierFromScore(score: number): string {
-    if (score >= 85) return 'elite';
-    if (score >= 70) return 'professional';
-    if (score >= 60) return 'verified';
-    if (score >= 40) return 'conditional';
-    return 'rejected';
+    if (score >= 85) return "elite";
+    if (score >= 70) return "professional";
+    if (score >= 60) return "verified";
+    if (score >= 40) return "conditional";
+    return "rejected";
   }
 
   /**
    * Determine experience level from years
    */
-  private determineExperienceLevel(years: number): 'junior' | 'mid' | 'senior' {
-    if (years < 2) return 'junior';
-    if (years < 5) return 'mid';
-    return 'senior';
+  private determineExperienceLevel(years: number): "junior" | "mid" | "senior" {
+    if (years < 2) return "junior";
+    if (years < 5) return "mid";
+    return "senior";
   }
 
   /**
@@ -428,10 +437,10 @@ export class AssessmentService {
         engineerProfile: {
           select: {
             fullName: true,
-            skills: true
-          }
-        }
-      }
+            skills: true,
+          },
+        },
+      },
     });
   }
 
@@ -440,7 +449,7 @@ export class AssessmentService {
    */
   async getAssessmentByToken(sessionToken: string): Promise<any> {
     return await this.prisma.assessment.findUnique({
-      where: { sessionToken }
+      where: { sessionToken },
     });
   }
 }

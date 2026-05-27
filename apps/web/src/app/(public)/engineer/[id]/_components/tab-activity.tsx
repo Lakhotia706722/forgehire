@@ -1,24 +1,41 @@
 import type { Activity } from '@/lib/mock-data';
+import { avatarToneClass } from '@/lib/avatar-tone';
+import { cn } from '@/lib/utils';
 
 interface TabActivityProps {
   activities: Activity[];
+  engineerName: string;
   engineerInitials: string;
-  avatarColor: string;
 }
 
-export function TabActivity({ activities, engineerInitials, avatarColor }: TabActivityProps) {
+const DELAY_CLASS = [
+  'scroll-reveal-delay-0',
+  'scroll-reveal-delay-0',
+  'scroll-reveal-delay-100',
+  'scroll-reveal-delay-100',
+  'scroll-reveal-delay-200',
+  'scroll-reveal-delay-200',
+  'scroll-reveal-delay-300',
+  'scroll-reveal-delay-300',
+] as const;
+
+export function TabActivity({ activities, engineerName, engineerInitials }: TabActivityProps) {
   return (
     <div className="space-y-4" role="feed" aria-label="Build in public activity">
       {activities.map((post, i) => (
         <article
           key={post.id}
-          className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-5 animate-fade-up"
-          style={{ animationDelay: `${i * 80}ms` }}
+          className={cn(
+            'bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-5 animate-fade-up',
+            DELAY_CLASS[Math.min(i, DELAY_CLASS.length - 1)],
+          )}
         >
           <div className="flex items-start gap-3">
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs shrink-0"
-              style={{ background: avatarColor }}
+              className={cn(
+                'w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs shrink-0',
+                avatarToneClass(engineerName),
+              )}
               aria-hidden="true"
             >
               {engineerInitials}
@@ -28,6 +45,7 @@ export function TabActivity({ activities, engineerInitials, avatarColor }: TabAc
               <div className="flex items-center gap-4 text-xs text-text-muted">
                 <span className="font-mono">{post.timestamp}</span>
                 <button
+                  type="button"
                   className="flex items-center gap-1 hover:text-accent-cyan transition-colors"
                   aria-label={`${post.likes} likes`}
                 >

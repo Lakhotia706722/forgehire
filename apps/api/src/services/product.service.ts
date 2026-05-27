@@ -1,14 +1,16 @@
-import { PrismaClient, ProductStatus, Prisma } from '@prisma/client';
-import { ProductModerationService } from './product-moderation.service';
+import { PrismaClient, ProductStatus, Prisma } from "@prisma/client";
+import { ProductModerationService } from "./product-moderation.service";
 import {
   CreateProductInput,
   UpdateProductInput,
   PublishProductInput,
-  ProductSearchInput
-} from '@neuronhire/shared';
+  ProductSearchInput,
+} from "@neuronhire/shared";
 
 // Helper: convert null JSON to Prisma.JsonNull
-const toJsonValue = (v: Record<string, unknown> | null | undefined): Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined => {
+const toJsonValue = (
+  v: Record<string, unknown> | null | undefined,
+): Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined => {
   if (v === null) return Prisma.JsonNull;
   if (v === undefined) return undefined;
   return v as Prisma.InputJsonValue;
@@ -29,15 +31,15 @@ export class ProductService {
   async createProduct(userId: string, data: CreateProductInput) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { engineerProfile: true }
+      include: { engineerProfile: true },
     });
 
     if (!user || !user.engineerProfile) {
-      throw new Error('Engineer profile not found');
+      throw new Error("Engineer profile not found");
     }
 
-    if (user.role !== 'engineer') {
-      throw new Error('Only engineers can create products');
+    if (user.role !== "engineer") {
+      throw new Error("Only engineers can create products");
     }
 
     // Generate slug from name
@@ -45,16 +47,18 @@ export class ProductService {
 
     // Check slug uniqueness
     const existing = await this.prisma.product.findUnique({
-      where: { slug }
+      where: { slug },
     });
 
     if (existing) {
-      throw new Error('Product with this name already exists. Please choose a different name.');
+      throw new Error(
+        "Product with this name already exists. Please choose a different name.",
+      );
     }
 
     // Validate screenshots minimum
     if (data.screenshots.length < 3) {
-      throw new Error('Minimum 3 screenshots required');
+      throw new Error("Minimum 3 screenshots required");
     }
 
     // Create product in draft status
@@ -84,8 +88,8 @@ export class ProductService {
         supportType: data.supportType,
         supportDuration: data.supportDuration,
         status: ProductStatus.draft,
-        currentVersion: '1.0.0'
-      }
+        currentVersion: "1.0.0",
+      },
     });
 
     return product;
@@ -94,21 +98,28 @@ export class ProductService {
   /**
    * Update product
    */
-  async updateProduct(productId: string, userId: string, data: UpdateProductInput) {
+  async updateProduct(
+    productId: string,
+    userId: string,
+    data: UpdateProductInput,
+  ) {
     const product = await this.prisma.product.findUnique({
-      where: { id: productId }
+      where: { id: productId },
     });
 
     if (!product) {
-      throw new Error('Product not found');
+      throw new Error("Product not found");
     }
 
     if (product.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     // If product is published, create new version
-    if (product.status === ProductStatus.published && this.isSignificantUpdate(data)) {
+    if (
+      product.status === ProductStatus.published &&
+      this.isSignificantUpdate(data)
+    ) {
       return await this.createNewVersion(productId, userId, data);
     }
 
@@ -117,11 +128,14 @@ export class ProductService {
       where: { id: productId },
       data: {
         ...data,
-        performanceMetrics: data.performanceMetrics !== undefined
-          ? (data.performanceMetrics ? data.performanceMetrics as Prisma.InputJsonValue : Prisma.JsonNull)
-          : undefined,
-        updatedAt: new Date()
-      }
+        performanceMetrics:
+          data.performanceMetrics !== undefined
+            ? data.performanceMetrics
+              ? (data.performanceMetrics as Prisma.InputJsonValue)
+              : Prisma.JsonNull
+            : undefined,
+        updatedAt: new Date(),
+      },
     });
 
     return updated;
@@ -130,21 +144,25 @@ export class ProductService {
   /**
    * Publish product (submit for moderation)
    */
-  async publishProduct(productId: string, userId: string, _data: PublishProductInput) {
+  async publishProduct(
+    productId: string,
+    userId: string,
+    _data: PublishProductInput,
+  ) {
     const product = await this.prisma.product.findUnique({
-      where: { id: productId }
+      where: { id: productId },
     });
 
     if (!product) {
-      throw new Error('Product not found');
+      throw new Error("Product not found");
     }
 
     if (product.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     if (product.status !== ProductStatus.draft) {
-      throw new Error('Only draft products can be published');
+      throw new Error("Only draft products can be published");
     }
 
     // Moderate content
@@ -152,7 +170,7 @@ export class ProductService {
       name: product.name,
       tagline: product.tagline,
       description: product.description,
-      tags: product.tags
+      tags: product.tags,
     });
 
     if (!moderation.approved) {
@@ -160,10 +178,10 @@ export class ProductService {
         where: { id: productId },
         data: {
           status: ProductStatus.suspended,
-          moderationStatus: 'rejected',
+          moderationStatus: "rejected",
           moderationNotes: moderation.notes,
-          moderatedAt: new Date()
-        }
+          moderatedAt: new Date(),
+        },
       });
 
       throw new Error(`Product rejected: ${moderation.notes}`);
@@ -174,11 +192,11 @@ export class ProductService {
       where: { id: productId },
       data: {
         status: ProductStatus.published,
-        moderationStatus: 'approved',
+        moderationStatus: "approved",
         moderationNotes: moderation.notes,
         moderatedAt: new Date(),
-        publishedAt: new Date()
-      }
+        publishedAt: new Date(),
+      },
     });
 
     return published;
@@ -187,17 +205,21 @@ export class ProductService {
   /**
    * Create new version of product
    */
-  async createNewVersion(productId: string, userId: string, data: UpdateProductInput) {
+  async createNewVersion(
+    productId: string,
+    userId: string,
+    data: UpdateProductInput,
+  ) {
     const product = await this.prisma.product.findUnique({
-      where: { id: productId }
+      where: { id: productId },
     });
 
     if (!product) {
-      throw new Error('Product not found');
+      throw new Error("Product not found");
     }
 
     if (product.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     // Parse current version
@@ -210,7 +232,7 @@ export class ProductService {
       version: currentVersion,
       publishedAt: product.publishedAt,
       changes: data,
-      availableUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+      availableUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
     });
 
     // Update product with new version
@@ -218,14 +240,17 @@ export class ProductService {
       where: { id: productId },
       data: {
         ...data,
-        performanceMetrics: data.performanceMetrics !== undefined
-          ? (data.performanceMetrics ? data.performanceMetrics as Prisma.InputJsonValue : Prisma.JsonNull)
-          : undefined,
+        performanceMetrics:
+          data.performanceMetrics !== undefined
+            ? data.performanceMetrics
+              ? (data.performanceMetrics as Prisma.InputJsonValue)
+              : Prisma.JsonNull
+            : undefined,
         currentVersion: newVersion,
         versionHistory,
         status: ProductStatus.pending_moderation,
-        updatedAt: new Date()
-      }
+        updatedAt: new Date(),
+      },
     });
 
     // Moderate new version
@@ -233,7 +258,7 @@ export class ProductService {
       name: data.name,
       tagline: data.tagline,
       description: data.description,
-      tags: data.tags
+      tags: data.tags,
     });
 
     if (!moderation.approved) {
@@ -241,10 +266,10 @@ export class ProductService {
         where: { id: productId },
         data: {
           status: ProductStatus.suspended,
-          moderationStatus: 'rejected',
+          moderationStatus: "rejected",
           moderationNotes: moderation.notes,
-          moderatedAt: new Date()
-        }
+          moderatedAt: new Date(),
+        },
       });
 
       throw new Error(`Version update rejected: ${moderation.notes}`);
@@ -255,10 +280,10 @@ export class ProductService {
       where: { id: productId },
       data: {
         status: ProductStatus.published,
-        moderationStatus: 'approved',
+        moderationStatus: "approved",
         moderationNotes: moderation.notes,
-        moderatedAt: new Date()
-      }
+        moderatedAt: new Date(),
+      },
     });
 
     // Notify buyers of update
@@ -272,7 +297,7 @@ export class ProductService {
    */
   async getProductFeed(filters: ProductSearchInput) {
     const where: any = {
-      status: ProductStatus.published
+      status: ProductStatus.published,
     };
 
     if (filters.category) {
@@ -294,7 +319,7 @@ export class ProductService {
     }
 
     if (filters.aiModel) {
-      where.aiModelUsed = { contains: filters.aiModel, mode: 'insensitive' };
+      where.aiModelUsed = { contains: filters.aiModel, mode: "insensitive" };
     }
 
     if (filters.industry) {
@@ -312,10 +337,10 @@ export class ProductService {
 
     if (filters.query) {
       where.OR = [
-        { name: { contains: filters.query, mode: 'insensitive' } },
-        { tagline: { contains: filters.query, mode: 'insensitive' } },
-        { description: { contains: filters.query, mode: 'insensitive' } },
-        { tags: { has: filters.query } }
+        { name: { contains: filters.query, mode: "insensitive" } },
+        { tagline: { contains: filters.query, mode: "insensitive" } },
+        { description: { contains: filters.query, mode: "insensitive" } },
+        { tags: { has: filters.query } },
       ];
     }
 
@@ -327,23 +352,23 @@ export class ProductService {
       skip: filters.cursor ? 1 : 0,
       cursor: cursorCondition,
       orderBy: {
-        [filters.sortBy]: filters.sortOrder
+        [filters.sortBy]: filters.sortOrder,
       },
       include: {
         engineerProfile: {
           select: {
             fullName: true,
             neuronScore: true,
-            neuronTier: true
-          }
+            neuronTier: true,
+          },
         },
         _count: {
           select: {
             purchases: true,
-            reviews: true
-          }
-        }
-      }
+            reviews: true,
+          },
+        },
+      },
     });
 
     const hasMore = products.length > filters.limit;
@@ -353,7 +378,7 @@ export class ProductService {
     return {
       items,
       nextCursor,
-      hasMore
+      hasMore,
     };
   }
 
@@ -363,7 +388,7 @@ export class ProductService {
   async getProduct(identifier: string, _userId?: string) {
     const product = await this.prisma.product.findFirst({
       where: {
-        OR: [{ id: identifier }, { slug: identifier }]
+        OR: [{ id: identifier }, { slug: identifier }],
       },
       include: {
         engineerProfile: {
@@ -371,37 +396,37 @@ export class ProductService {
             fullName: true,
             neuronScore: true,
             neuronTier: true,
-            portfolioUrl: true
-          }
+            portfolioUrl: true,
+          },
         },
         reviews: {
           take: 10,
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
           include: {
             product: {
               select: {
-                name: true
-              }
-            }
-          }
+                name: true,
+              },
+            },
+          },
         },
         _count: {
           select: {
             purchases: true,
-            reviews: true
-          }
-        }
-      }
+            reviews: true,
+          },
+        },
+      },
     });
 
     if (!product) {
-      throw new Error('Product not found');
+      throw new Error("Product not found");
     }
 
     // Increment view count
     await this.prisma.product.update({
       where: { id: product.id },
-      data: { viewCount: { increment: 1 } }
+      data: { viewCount: { increment: 1 } },
     });
 
     // Track analytics
@@ -416,17 +441,50 @@ export class ProductService {
   async getEngineerProducts(engineerProfileId: string, limit = 100) {
     return await this.prisma.product.findMany({
       where: { engineerProfileId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: limit,
       include: {
         _count: {
           select: {
             purchases: true,
-            reviews: true
-          }
-        }
-      }
+            reviews: true,
+          },
+        },
+      },
     });
+  }
+
+  async getEngineerProfileByUserId(userId: string) {
+    return this.prisma.engineerProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+  }
+
+  /** Sum completed purchase payouts per product id */
+  async getRevenueByProductIds(
+    productIds: string[],
+  ): Promise<Record<string, number>> {
+    if (productIds.length === 0) return {};
+
+    const rows = await this.prisma.purchase.groupBy({
+      by: ["productId"],
+      where: {
+        productId: { in: productIds },
+        status: "completed",
+      },
+      _sum: {
+        engineerPayout: true,
+        priceINR: true,
+      },
+    });
+
+    const map: Record<string, number> = {};
+    for (const row of rows) {
+      const payout = row._sum.engineerPayout ?? row._sum.priceINR;
+      map[row.productId] = payout != null ? Number(payout) : 0;
+    }
+    return map;
   }
 
   // Helper methods
@@ -434,8 +492,8 @@ export class ProductService {
   private generateSlug(name: string): string {
     return name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
       .substring(0, 100);
   }
 
@@ -451,8 +509,11 @@ export class ProductService {
     );
   }
 
-  private incrementVersion(currentVersion: string, data: UpdateProductInput): string {
-    const [major, minor, patch] = currentVersion.split('.').map(Number);
+  private incrementVersion(
+    currentVersion: string,
+    data: UpdateProductInput,
+  ): string {
+    const [major, minor, patch] = currentVersion.split(".").map(Number);
 
     // Major version: breaking changes (price increase > 20%, major feature changes)
     if (data.priceINR || data.priceUSD || data.features) {
@@ -473,20 +534,22 @@ export class ProductService {
     const purchases = await this.prisma.purchase.findMany({
       where: {
         productId,
-        status: 'completed',
-        licenseActive: true
+        status: "completed",
+        licenseActive: true,
       },
       include: {
         buyer: {
           select: {
-            email: true
-          }
-        }
-      }
+            email: true,
+          },
+        },
+      },
     });
 
     // TODO: Send email notifications to buyers
-    console.log(`Notifying ${purchases.length} buyers of version ${newVersion}`);
+    console.log(
+      `Notifying ${purchases.length} buyers of version ${newVersion}`,
+    );
   }
 
   private async trackView(productId: string) {
@@ -497,17 +560,17 @@ export class ProductService {
       where: {
         productId_date: {
           productId,
-          date: today
-        }
+          date: today,
+        },
       },
       create: {
         productId,
         date: today,
-        views: 1
+        views: 1,
       },
       update: {
-        views: { increment: 1 }
-      }
+        views: { increment: 1 },
+      },
     });
   }
 }

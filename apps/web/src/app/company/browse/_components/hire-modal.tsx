@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { AriaRadio, AriaCheckbox } from '@/components/ui/aria-tab-button';
 import type { HiringMode } from '@/lib/hiring-data';
 
 interface HireModalProps {
@@ -104,11 +105,9 @@ export function HireModal({ open, onClose, engineerName, engineerHourlyRate }: H
           <p className="text-sm text-text-secondary">How do you want to engage with {engineerName}?</p>
           <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Hiring mode">
             {HIRING_MODES.map((hm) => (
-              <button
+              <AriaRadio
                 key={hm.mode}
-                type="button"
-                role="radio"
-                aria-checked={mode === hm.mode}
+                checked={mode === hm.mode}
                 onClick={() => setMode(hm.mode)}
                 className={cn(
                   'text-left p-4 rounded-xl border-2 transition-all duration-150 hover:-translate-y-0.5',
@@ -121,7 +120,7 @@ export function HireModal({ open, onClose, engineerName, engineerHourlyRate }: H
                 <p className="text-sm font-semibold text-text-primary">{hm.label}</p>
                 <p className="text-xs text-text-muted mt-0.5">{hm.desc}</p>
                 <p className="text-[10px] text-accent-cyan mt-1.5 font-mono">{hm.pricing}</p>
-              </button>
+              </AriaRadio>
             ))}
           </div>
           <div className="flex justify-end">
@@ -239,21 +238,28 @@ export function HireModal({ open, onClose, engineerName, engineerHourlyRate }: H
             <label className="block text-sm font-medium text-text-secondary mb-2">IP Ownership</label>
             <div className="flex gap-2" role="radiogroup" aria-label="IP ownership">
               {(['company', 'engineer', 'shared'] as const).map((opt) => (
-                <button key={opt} type="button" role="radio" aria-checked={ipOwnership === opt}
+                <AriaRadio
+                  key={opt}
+                  checked={ipOwnership === opt}
                   onClick={() => setIpOwnership(opt)}
-                  className={cn('flex-1 py-2 rounded-lg text-xs font-medium transition-all capitalize', ipOwnership === opt ? 'bg-accent-cyan text-bg-base' : 'border border-[rgba(255,255,255,0.08)] text-text-muted hover:text-text-secondary')}>
+                  className={cn('flex-1 py-2 rounded-lg text-xs font-medium transition-all capitalize', ipOwnership === opt ? 'bg-accent-cyan text-bg-base' : 'border border-[rgba(255,255,255,0.08)] text-text-muted hover:text-text-secondary')}
+                >
                   {opt}
-                </button>
+                </AriaRadio>
               ))}
             </div>
           </div>
 
           {/* NDA */}
           <label className="flex items-center gap-3 cursor-pointer">
-            <div className={cn('w-5 h-5 rounded border-2 flex items-center justify-center transition-all', ndaChecked ? 'bg-accent-cyan border-accent-cyan' : 'border-[rgba(255,255,255,0.2)]')}
-              onClick={() => setNdaChecked((c) => !c)} role="checkbox" aria-checked={ndaChecked} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setNdaChecked((c) => !c)}>
+            <AriaCheckbox
+              checked={ndaChecked}
+              onClick={() => setNdaChecked((c) => !c)}
+              onKeyDown={(e) => e.key === 'Enter' && setNdaChecked((c) => !c)}
+              className={cn('w-5 h-5 rounded border-2 flex items-center justify-center transition-all', ndaChecked ? 'bg-accent-cyan border-accent-cyan' : 'border-[rgba(255,255,255,0.2)]')}
+            >
               {ndaChecked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true"><path d="M1 4L3.5 6.5L9 1" stroke="#080B14" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-            </div>
+            </AriaCheckbox>
             <span className="text-sm text-text-secondary">Attach NDA (auto-generated template)</span>
           </label>
 
@@ -302,7 +308,16 @@ export function HireModal({ open, onClose, engineerName, engineerHourlyRate }: H
                   {companySigned ? (
                     <>
                       <div className="flex gap-1">
-                        {[0,1,2].map((i) => <div key={i} className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-bounce" style={{ animationDelay: `${i * 150}ms` }} aria-hidden="true" />)}
+                        {[0, 1, 2].map((i) => (
+                          <div
+                            key={i}
+                            className={cn(
+                              'w-1.5 h-1.5 rounded-full bg-accent-cyan animate-bounce',
+                              i === 0 ? 'bounce-delay-0' : i === 1 ? 'bounce-delay-150' : 'bounce-delay-300',
+                            )}
+                            aria-hidden="true"
+                          />
+                        ))}
                       </div>
                       <p className="text-xs text-text-muted">Waiting for {engineerName}…</p>
                     </>

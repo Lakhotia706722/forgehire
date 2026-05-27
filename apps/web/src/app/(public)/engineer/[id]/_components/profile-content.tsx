@@ -26,7 +26,7 @@ export function ProfileContent({ engineer: eng }: ProfileContentProps) {
         <div
           key={activeTab}
           className="animate-fade-up"
-          role="tabpanel"
+          role="region"
           id={`panel-${activeTab}`}
           aria-labelledby={`tab-${activeTab}`}
         >
@@ -39,7 +39,7 @@ export function ProfileContent({ engineer: eng }: ProfileContentProps) {
             <TabActivity
               activities={eng.activities}
               engineerInitials={eng.avatarInitials}
-              avatarColor={eng.avatarColor}
+              engineerName={eng.name}
             />
           )}
         </div>

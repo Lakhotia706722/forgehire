@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-import { CreateReviewInput } from '@neuronhire/shared';
+import { PrismaClient } from "@prisma/client";
+import { CreateReviewInput } from "@neuronhire/shared";
 
 export class ProductReviewService {
   private prisma: PrismaClient;
@@ -16,29 +16,29 @@ export class ProductReviewService {
     const purchase = await this.prisma.purchase.findUnique({
       where: { id: data.purchaseId },
       include: {
-        product: true
-      }
+        product: true,
+      },
     });
 
     if (!purchase) {
-      throw new Error('Purchase not found');
+      throw new Error("Purchase not found");
     }
 
     if (purchase.buyerId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
-    if (purchase.status !== 'completed') {
-      throw new Error('Can only review completed purchases');
+    if (purchase.status !== "completed") {
+      throw new Error("Can only review completed purchases");
     }
 
     // Check if review already exists
     const existing = await this.prisma.productReview.findUnique({
-      where: { purchaseId: data.purchaseId }
+      where: { purchaseId: data.purchaseId },
     });
 
     if (existing) {
-      throw new Error('Review already exists for this purchase');
+      throw new Error("Review already exists for this purchase");
     }
 
     // Create review
@@ -52,8 +52,8 @@ export class ProductReviewService {
         review: data.review,
         pros: data.pros || [],
         cons: data.cons || [],
-        verified: true
-      }
+        verified: true,
+      },
     });
 
     // Update product rating
@@ -67,7 +67,7 @@ export class ProductReviewService {
    */
   private async updateProductRating(productId: string) {
     const reviews = await this.prisma.productReview.findMany({
-      where: { productId }
+      where: { productId },
     });
 
     if (reviews.length === 0) {
@@ -81,20 +81,23 @@ export class ProductReviewService {
       where: { id: productId },
       data: {
         rating: averageRating,
-        reviewCount: reviews.length
-      }
+        reviewCount: reviews.length,
+      },
     });
   }
 
   /**
    * Get product reviews
    */
-  async getProductReviews(productId: string, filters?: {
-    rating?: number;
-    sortBy?: 'recent' | 'helpful' | 'rating';
-    cursor?: string;
-    limit?: number;
-  }) {
+  async getProductReviews(
+    productId: string,
+    filters?: {
+      rating?: number;
+      sortBy?: "recent" | "helpful" | "rating";
+      cursor?: string;
+      limit?: number;
+    },
+  ) {
     const where: any = { productId };
 
     if (filters?.rating) {
@@ -103,19 +106,21 @@ export class ProductReviewService {
 
     const orderBy: any = {};
     switch (filters?.sortBy) {
-      case 'helpful':
-        orderBy.helpfulCount = 'desc';
+      case "helpful":
+        orderBy.helpfulCount = "desc";
         break;
-      case 'rating':
-        orderBy.rating = 'desc';
+      case "rating":
+        orderBy.rating = "desc";
         break;
-      case 'recent':
+      case "recent":
       default:
-        orderBy.createdAt = 'desc';
+        orderBy.createdAt = "desc";
     }
 
     const limit = filters?.limit || 20;
-    const cursorCondition = filters?.cursor ? { id: filters.cursor } : undefined;
+    const cursorCondition = filters?.cursor
+      ? { id: filters.cursor }
+      : undefined;
 
     const reviews = await this.prisma.productReview.findMany({
       where,
@@ -126,10 +131,10 @@ export class ProductReviewService {
       include: {
         product: {
           select: {
-            name: true
-          }
-        }
-      }
+            name: true,
+          },
+        },
+      },
     });
 
     const hasMore = reviews.length > limit;
@@ -139,7 +144,7 @@ export class ProductReviewService {
     return {
       items,
       nextCursor,
-      hasMore
+      hasMore,
     };
   }
 
@@ -153,14 +158,14 @@ export class ProductReviewService {
         product: {
           select: {
             name: true,
-            thumbnailUrl: true
-          }
-        }
-      }
+            thumbnailUrl: true,
+          },
+        },
+      },
     });
 
     if (!review) {
-      throw new Error('Review not found');
+      throw new Error("Review not found");
     }
 
     return review;
@@ -171,11 +176,11 @@ export class ProductReviewService {
    */
   async markHelpful(reviewId: string, _userId: string) {
     const review = await this.prisma.productReview.findUnique({
-      where: { id: reviewId }
+      where: { id: reviewId },
     });
 
     if (!review) {
-      throw new Error('Review not found');
+      throw new Error("Review not found");
     }
 
     // TODO: Track which users marked as helpful to prevent duplicates
@@ -184,8 +189,8 @@ export class ProductReviewService {
     return await this.prisma.productReview.update({
       where: { id: reviewId },
       data: {
-        helpfulCount: { increment: 1 }
-      }
+        helpfulCount: { increment: 1 },
+      },
     });
   }
 
@@ -195,16 +200,16 @@ export class ProductReviewService {
   async getBuyerReviews(buyerId: string) {
     return await this.prisma.productReview.findMany({
       where: { buyerId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
         product: {
           select: {
             name: true,
             slug: true,
-            thumbnailUrl: true
-          }
-        }
-      }
+            thumbnailUrl: true,
+          },
+        },
+      },
     });
   }
 
@@ -213,7 +218,7 @@ export class ProductReviewService {
    */
   async getRatingSummary(productId: string) {
     const reviews = await this.prisma.productReview.findMany({
-      where: { productId }
+      where: { productId },
     });
 
     if (reviews.length === 0) {
@@ -225,8 +230,8 @@ export class ProductReviewService {
           4: 0,
           3: 0,
           2: 0,
-          1: 0
-        }
+          1: 0,
+        },
       };
     }
 
@@ -234,17 +239,17 @@ export class ProductReviewService {
     const averageRating = totalRating / reviews.length;
 
     const ratingDistribution = {
-      5: reviews.filter(r => r.rating === 5).length,
-      4: reviews.filter(r => r.rating === 4).length,
-      3: reviews.filter(r => r.rating === 3).length,
-      2: reviews.filter(r => r.rating === 2).length,
-      1: reviews.filter(r => r.rating === 1).length
+      5: reviews.filter((r) => r.rating === 5).length,
+      4: reviews.filter((r) => r.rating === 4).length,
+      3: reviews.filter((r) => r.rating === 3).length,
+      2: reviews.filter((r) => r.rating === 2).length,
+      1: reviews.filter((r) => r.rating === 1).length,
     };
 
     return {
       averageRating,
       totalReviews: reviews.length,
-      ratingDistribution
+      ratingDistribution,
     };
   }
 }

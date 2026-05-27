@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -153,7 +154,15 @@ export default function SubmissionDetailPage({ params }: { params: { id: string;
             <h2 className="font-display font-semibold text-text-primary text-lg mb-4">Screenshots</h2>
             <div className="grid grid-cols-2 gap-3">
               {submission.screenshots.map((url, i) => (
-                <img key={i} src={url} alt={`Screenshot ${i + 1}`} className="rounded-lg w-full object-cover" />
+                <Image
+                  key={i}
+                  src={url}
+                  alt={`Screenshot ${i + 1}`}
+                  width={640}
+                  height={360}
+                  unoptimized
+                  className="w-full rounded-lg object-cover"
+                />
               ))}
             </div>
           </div>

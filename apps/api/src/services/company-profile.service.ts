@@ -1,19 +1,19 @@
-import { getPrismaClient } from '../config/database';
-import { getTypesenseClient } from '../config/typesense';
-import { v4 as uuidv4 } from 'uuid';
-import { CompanyProfileInput, CompanyHiringInput } from '@neuronhire/shared';
-import axios from 'axios';
+import { getPrismaClient } from "../config/database";
+import { getTypesenseClient } from "../config/typesense";
+import { isTypesenseEnabled } from "../config/env";
+import { v4 as uuidv4 } from "uuid";
+import { CompanyProfileInput, CompanyHiringInput } from "@neuronhire/shared";
+import axios from "axios";
 
 export class CompanyProfileService {
   private prisma = getPrismaClient();
-  private typesense = getTypesenseClient();
 
   /**
    * Create or get company profile
    */
   async getOrCreateProfile(userId: string) {
     let profile = await this.prisma.companyProfile.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!profile) {
@@ -21,9 +21,9 @@ export class CompanyProfileService {
         data: {
           id: uuidv4(),
           userId,
-          companyName: '',
-          trustScore: 0
-        }
+          companyName: "",
+          trustScore: 0,
+        },
       });
     }
 
@@ -53,8 +53,8 @@ export class CompanyProfileService {
       data: {
         ...data,
         websiteVerified,
-        gstVerified
-      }
+        gstVerified,
+      },
     });
 
     await this.indexProfile(updated.id);
@@ -70,7 +70,7 @@ export class CompanyProfileService {
 
     const updated = await this.prisma.companyProfile.update({
       where: { id: profile.id },
-      data
+      data,
     });
 
     await this.indexProfile(updated.id);
@@ -84,11 +84,11 @@ export class CompanyProfileService {
    */
   async calculateTrustScore(profileId: string): Promise<number> {
     const profile = await this.prisma.companyProfile.findUnique({
-      where: { id: profileId }
+      where: { id: profileId },
     });
 
     if (!profile) {
-      throw new Error('Company profile not found');
+      throw new Error("Company profile not found");
     }
 
     let score = 0;
@@ -99,7 +99,7 @@ export class CompanyProfileService {
 
     // Account age (20 points max)
     const accountAgeMonths = Math.floor(
-      (Date.now() - profile.createdAt.getTime()) / (1000 * 60 * 60 * 24 * 30)
+      (Date.now() - profile.createdAt.getTime()) / (1000 * 60 * 60 * 24 * 30),
     );
     score += Math.min(accountAgeMonths * 2, 20);
 
@@ -122,7 +122,7 @@ export class CompanyProfileService {
     // Update the profile
     await this.prisma.companyProfile.update({
       where: { id: profileId },
-      data: { trustScore: score }
+      data: { trustScore: score },
     });
 
     await this.indexProfile(profileId);
@@ -133,14 +133,17 @@ export class CompanyProfileService {
   /**
    * Verify website ownership via DNS meta-tag check
    */
-  private async verifyWebsite(website: string, profileId: string): Promise<boolean> {
+  private async verifyWebsite(
+    website: string,
+    profileId: string,
+  ): Promise<boolean> {
     try {
       // Fetch the website HTML
       const response = await axios.get(website, {
         timeout: 5000,
         headers: {
-          'User-Agent': 'NeuronHire-Verification-Bot/1.0'
-        }
+          "User-Agent": "NeuronHire-Verification-Bot/1.0",
+        },
       });
 
       const html = response.data;
@@ -149,12 +152,12 @@ export class CompanyProfileService {
       // Expected format: <meta name="neuronhire-verification" content="profile-id">
       const metaTagRegex = new RegExp(
         `<meta\\s+name=["']neuronhire-verification["']\\s+content=["']${profileId}["']`,
-        'i'
+        "i",
       );
 
       return metaTagRegex.test(html);
     } catch (error) {
-      console.error('Website verification error:', error);
+      console.error("Website verification error:", error);
       return false;
     }
   }
@@ -164,7 +167,8 @@ export class CompanyProfileService {
    */
   private verifyGSTFormat(gstNumber: string): boolean {
     // GST format: 2 digits (state code) + 10 chars (PAN) + 1 char (entity number) + Z + 1 alphanumeric
-    const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    const gstRegex =
+      /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
     return gstRegex.test(gstNumber);
   }
 
@@ -172,9 +176,12 @@ export class CompanyProfileService {
    * Index profile in Typesense for search
    */
   private async indexProfile(profileId: string) {
+    if (!isTypesenseEnabled()) return;
+
     try {
+      const typesense = getTypesenseClient();
       const profile = await this.prisma.companyProfile.findUnique({
-        where: { id: profileId }
+        where: { id: profileId },
       });
 
       if (!profile) return;
@@ -183,19 +190,22 @@ export class CompanyProfileService {
         id: profile.id,
         userId: profile.userId,
         companyName: profile.companyName,
-        description: profile.description || '',
-        industry: profile.industry || '',
-        location: profile.location || '',
+        description: profile.description || "",
+        industry: profile.industry || "",
+        location: profile.location || "",
         trustScore: profile.trustScore,
         isHiring: profile.isHiring,
         hiringIntents: profile.hiringIntents,
         aiRequirements: profile.aiRequirements,
-        createdAt: Math.floor(profile.createdAt.getTime() / 1000)
+        createdAt: Math.floor(profile.createdAt.getTime() / 1000),
       };
 
-      await this.typesense.collections('company_profiles').documents().upsert(document);
+      await typesense
+        .collections("company_profiles")
+        .documents()
+        .upsert(document);
     } catch (error) {
-      console.error('Typesense indexing error:', error);
+      console.error("Typesense indexing error:", error);
     }
   }
 
@@ -204,7 +214,32 @@ export class CompanyProfileService {
    */
   async getFullProfile(userId: string) {
     return await this.prisma.companyProfile.findUnique({
-      where: { userId }
+      where: { userId },
     });
+  }
+
+  /**
+   * Public company profile by ID
+   */
+  async getPublicProfileById(profileId: string) {
+    const profile = await this.prisma.companyProfile.findUnique({
+      where: { id: profileId },
+      include: {
+        _count: {
+          select: {
+            tasks: true,
+            contracts: true,
+          },
+        },
+      },
+    });
+
+    if (!profile) return null;
+
+    return {
+      ...profile,
+      taskCount: profile._count.tasks,
+      contractCount: profile._count.contracts,
+    };
   }
 }

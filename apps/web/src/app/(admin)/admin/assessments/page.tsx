@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AriaToggleButton } from '@/components/ui/aria-tab-button';
 import { useAdminAssessments, useAdminAssessmentDecision } from '@/lib/api-hooks';
 
 type AssessmentStatus = 'completed' | 'flagged' | 'in_progress';
@@ -40,17 +41,17 @@ export default function AdminAssessmentsPage() {
         {/* Filter tabs */}
         <div className="flex gap-2" role="group" aria-label="Filter assessments">
           {(['all', 'completed', 'flagged', 'in_progress'] as const).map((f) => (
-            <button
+            <AriaToggleButton
               key={f}
+              pressed={filter === f}
               onClick={() => setFilter(f)}
-              aria-pressed={filter === f}
               className={cn(
                 'px-4 py-2 rounded-lg text-sm font-medium transition-all',
                 filter === f ? 'bg-accent-cyan text-bg-base' : 'text-text-muted hover:text-text-secondary'
               )}
             >
               {f === 'all' ? 'All' : f === 'in_progress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)}
-            </button>
+            </AriaToggleButton>
           ))}
         </div>
 
@@ -120,12 +121,12 @@ export default function AdminAssessmentsPage() {
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-3 gap-3 text-center">
               {[
-                { label: 'Score', value: reviewing.score ?? '—', color: '#00D4FF' },
-                { label: 'Flags', value: reviewing.flagCount, color: reviewing.flagCount > 0 ? '#EF4444' : '#10B981' },
-                { label: 'Duration', value: `${reviewing.duration}m`, color: '#F59E0B' },
+                { label: 'Score', value: reviewing.score ?? '—', className: 'stat-value-cyan' },
+                { label: 'Flags', value: reviewing.flagCount, className: reviewing.flagCount > 0 ? 'stat-value-red' : 'stat-value-green' },
+                { label: 'Duration', value: `${reviewing.duration}m`, className: 'stat-value-amber' },
               ].map((s) => (
                 <div key={s.label} className="bg-bg-elevated rounded-xl p-3">
-                  <p className="font-mono font-bold text-xl" style={{ color: s.color }}>{s.value}</p>
+                  <p className={cn('font-mono font-bold text-xl', s.className)}>{s.value}</p>
                   <p className="text-xs text-text-muted mt-0.5">{s.label}</p>
                 </div>
               ))}

@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { NeuronScoreRing } from '@/components/ui/neuron-score-ring';
+import { AriaCheckbox } from '@/components/ui/aria-tab-button';
+import { avatarToneClass } from '@/lib/avatar-tone';
 import { formatPrice, type ProductListing } from '@/lib/marketplace-data';
 
 interface ProductCardProps {
@@ -79,7 +81,12 @@ export function ProductCard({
         {onCompareToggle && (
           <div className="absolute bottom-2 left-2 z-10">
             <label className="flex items-center gap-1.5 cursor-pointer" onClick={(e) => e.stopPropagation()}>
-              <div
+              <AriaCheckbox
+                checked={isComparing}
+                onClick={() => !compareDisabled && onCompareToggle(p.id)}
+                onKeyDown={(e) => e.key === 'Enter' && !compareDisabled && onCompareToggle(p.id)}
+                aria-label={`Compare ${p.name}`}
+                aria-disabled={compareDisabled && !isComparing}
                 className={cn(
                   'w-4 h-4 rounded border-2 flex items-center justify-center transition-all',
                   isComparing
@@ -87,13 +94,6 @@ export function ProductCard({
                     : 'border-white/40 bg-bg-elevated/80 hover:border-accent-cyan',
                   compareDisabled && !isComparing && 'opacity-40 cursor-not-allowed'
                 )}
-                onClick={() => !compareDisabled && onCompareToggle(p.id)}
-                role="checkbox"
-                aria-checked={isComparing}
-                aria-label={`Compare ${p.name}`}
-                aria-disabled={compareDisabled && !isComparing}
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && !compareDisabled && onCompareToggle(p.id)}
                 data-testid={`compare-checkbox-${p.id}`}
               >
                 {isComparing && (
@@ -101,7 +101,7 @@ export function ProductCard({
                     <path d="M1 4L3.5 6.5L9 1" stroke="#080B14" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 )}
-              </div>
+              </AriaCheckbox>
               <span className="text-[10px] text-white/70 font-mono">Compare</span>
             </label>
           </div>
@@ -133,8 +133,10 @@ export function ProductCard({
         {/* Engineer row */}
         <div className="flex items-center gap-2 mb-3">
           <div
-            className="w-5 h-5 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-[8px] shrink-0"
-            style={{ background: p.engineerColor }}
+            className={cn(
+              'w-5 h-5 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-[8px] shrink-0',
+              avatarToneClass(p.engineerName),
+            )}
             aria-hidden="true"
           >
             {p.engineerInitials}

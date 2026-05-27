@@ -228,18 +228,16 @@ describe('Module 7: Payments, Analytics & Settings', () => {
       render(<MarketRatesPage />);
       
       expect(screen.getByText('Market Rate Intelligence')).toBeInTheDocument();
-      expect(screen.getByText('Updated Weekly')).toBeInTheDocument();
+      expect(screen.getByText(/Updated from live profiles/i)).toBeInTheDocument();
       expect(screen.getByPlaceholderText('Search skills...')).toBeInTheDocument();
     });
 
     it('displays rate range visualization with percentiles', () => {
       render(<MarketRatesPage />);
       
-      expect(screen.getByText('P10')).toBeInTheDocument();
-      expect(screen.getByText('P25')).toBeInTheDocument();
-      expect(screen.getByText('Median')).toBeInTheDocument();
-      expect(screen.getByText('P75')).toBeInTheDocument();
-      expect(screen.getByText('P90')).toBeInTheDocument();
+      expect(screen.getByText(/Entry Level \(P10\)/)).toBeInTheDocument();
+      expect(screen.getByText(/Market Median/)).toBeInTheDocument();
+      expect(screen.getByText(/Expert Level \(P90\)/)).toBeInTheDocument();
     });
 
     it('shows NeuronScore tier breakdown', () => {
@@ -430,10 +428,10 @@ describe('Module 7: Payments, Analytics & Settings', () => {
     it('settings tabs have proper ARIA roles', () => {
       render(<EngineerSettingsPage />);
       
-      expect(screen.getByRole('tablist', { name: 'Settings navigation' })).toBeInTheDocument();
+      expect(screen.getByRole('navigation', { name: 'Settings navigation' })).toBeInTheDocument();
       
-      const tabs = screen.getAllByRole('tab');
-      expect(tabs.length).toBe(6);
+      const profileNav = screen.getByRole('button', { name: /Profile/ });
+      expect(profileNav).toHaveAttribute('aria-current', 'page');
     });
 
     it('toggle switches have proper ARIA attributes', () => {

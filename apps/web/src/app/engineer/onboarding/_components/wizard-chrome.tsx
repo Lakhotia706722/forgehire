@@ -1,7 +1,7 @@
 'use client';
-
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
 import { calcCompletion, type OnboardingState } from '@/lib/onboarding-store';
 
 const STEPS = [
@@ -34,12 +34,7 @@ export function WizardChrome({ currentStep, state, children }: WizardChromeProps
           </span>
           <span className="text-xs font-mono text-accent-cyan">{completion}% complete</span>
         </div>
-        <div className="h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
-          <div
-            className="h-full bg-accent-cyan rounded-full transition-all duration-500"
-            style={{ width: `${(currentStep / STEPS.length) * 100}%` }}
-          />
-        </div>
+        <Progress value={(currentStep / STEPS.length) * 100} max={100} size="sm" label="Onboarding step progress" />
       </div>
 
       {/* ── Desktop: left sidebar ────────────────────────── */}
@@ -118,17 +113,7 @@ export function WizardChrome({ currentStep, state, children }: WizardChromeProps
             <span className="text-xs text-text-muted">Profile completion</span>
             <span className="text-xs font-mono text-accent-cyan">{completion}%</span>
           </div>
-          <div className="h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
-            <div
-              className="h-full bg-accent-cyan rounded-full transition-all duration-700"
-              style={{ width: `${completion}%` }}
-              role="progressbar"
-              aria-valuenow={completion}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Profile completion"
-            />
-          </div>
+          <Progress value={completion} max={100} size="sm" label="Profile completion" />
           {completion < 70 && (
             <p className="text-[10px] text-text-muted mt-1.5">
               Reach 70% to unlock the Assessment

@@ -1,6 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { getEnv } from '../config/env';
-import { Queue } from 'bullmq';
+import Anthropic from "@anthropic-ai/sdk";
+import { getEnv } from "../config/env";
+import { Queue } from "bullmq";
+import { getBullMQConnection } from "../config/bullmq";
 
 export interface TaskEnrichmentResult {
   estimatedTimeline: number; // days
@@ -10,7 +11,7 @@ export interface TaskEnrichmentResult {
     currency: string;
   };
   vagueDeliverables: string[];
-  recommendedType: 'bounty' | 'direct' | 'contest';
+  recommendedType: "bounty" | "direct" | "contest";
   autoTaggedSkills: string[];
   postingQuality: number; // 1-10
   suggestions: string[];
@@ -18,30 +19,39 @@ export interface TaskEnrichmentResult {
 
 export class TaskAIEnrichmentService {
   private anthropic: Anthropic;
-  private enrichmentQueue: Queue;
+  private enrichmentQueue: Queue | null;
 
   constructor() {
     const env = getEnv();
     this.anthropic = new Anthropic({
-      apiKey: env.ANTHROPIC_API_KEY
+      apiKey: env.ANTHROPIC_API_KEY,
     });
 
-    this.enrichmentQueue = new Queue('task-enrichment', {
-      connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379')
-      }
-    });
+    const connection = getBullMQConnection();
+    this.enrichmentQueue = connection
+      ? new Queue("task-enrichment", { connection })
+      : null;
   }
 
   /**
    * Queue task for AI enrichment (async via BullMQ)
    */
   async queueEnrichment(taskId: string, taskData: any): Promise<void> {
-    await this.enrichmentQueue.add('enrich-task', {
+    if (!this.enrichmentQueue) {
+      await this.enrichTaskInline(taskId, taskData);
+      return;
+    }
+    await this.enrichmentQueue.add("enrich-task", {
       taskId,
-      taskData
+      taskData,
     });
+  }
+
+  /** Run enrichment synchronously when BullMQ is disabled (memory Redis / local dev) */
+  private async enrichTaskInline(taskId: string, _taskData: any): Promise<void> {
+    const { TaskService } = await import("./task.service");
+    const taskService = new TaskService();
+    await taskService.enrichTask(taskId);
   }
 
   /**
@@ -56,7 +66,7 @@ Task Details:
 - Problem Statement: ${taskData.problemStatement}
 - Expected Outcome: ${taskData.expectedOutcome}
 - Deliverables: ${JSON.stringify(taskData.deliverables)}
-- Tech Requirements: ${taskData.techRequirements.join(', ')}
+- Tech Requirements: ${taskData.techRequirements.join(", ")}
 - Timeline: ${taskData.timeline} days
 - Reward: ₹${taskData.rewardAmount}
 - Difficulty: ${taskData.difficulty}
@@ -83,13 +93,13 @@ Return as JSON:
 
     try {
       const message = await this.anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 2048,
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{ role: "user", content: prompt }],
       });
 
       const content = message.content[0];
-      if (content.type === 'text') {
+      if (content.type === "text") {
         const jsonMatch = content.text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           return JSON.parse(jsonMatch[0]);
@@ -98,7 +108,7 @@ Return as JSON:
 
       return this.getFallbackEnrichment(taskData);
     } catch (error) {
-      console.error('Task enrichment error:', error);
+      console.error("Task enrichment error:", error);
       return this.getFallbackEnrichment(taskData);
     }
   }
@@ -109,22 +119,22 @@ Return as JSON:
   private getFallbackEnrichment(taskData: any): TaskEnrichmentResult {
     // Simple heuristics
     const baseReward = parseFloat(taskData.rewardAmount.toString());
-    
+
     return {
       estimatedTimeline: taskData.timeline,
       suggestedReward: {
         min: Math.round(baseReward * 0.8),
         max: Math.round(baseReward * 1.2),
-        currency: 'INR'
+        currency: "INR",
       },
       vagueDeliverables: [],
       recommendedType: taskData.type,
       autoTaggedSkills: taskData.techRequirements,
       postingQuality: 7,
       suggestions: [
-        'Consider adding more specific deliverables',
-        'Include acceptance criteria for each deliverable'
-      ]
+        "Consider adding more specific deliverables",
+        "Include acceptance criteria for each deliverable",
+      ],
     };
   }
 
@@ -141,50 +151,54 @@ Return as JSON:
 
     // Required fields
     if (!taskData.title || taskData.title.length < 10) {
-      errors.push('Title must be at least 10 characters');
+      errors.push("Title must be at least 10 characters");
     }
 
     if (!taskData.problemStatement || taskData.problemStatement.length < 50) {
-      errors.push('Problem statement must be at least 50 characters');
+      errors.push("Problem statement must be at least 50 characters");
     }
 
     if (!taskData.expectedOutcome || taskData.expectedOutcome.length < 30) {
-      errors.push('Expected outcome must be at least 30 characters');
+      errors.push("Expected outcome must be at least 30 characters");
     }
 
     if (!taskData.deliverables || taskData.deliverables.length === 0) {
-      errors.push('At least one deliverable is required');
+      errors.push("At least one deliverable is required");
     }
 
     if (!taskData.techRequirements || taskData.techRequirements.length === 0) {
-      errors.push('At least one tech requirement is required');
+      errors.push("At least one tech requirement is required");
     }
 
     if (taskData.timeline < 1) {
-      errors.push('Timeline must be at least 1 day');
+      errors.push("Timeline must be at least 1 day");
     }
 
     if (taskData.rewardAmount < 1000) {
-      errors.push('Reward amount must be at least ₹1,000');
+      errors.push("Reward amount must be at least ₹1,000");
     }
 
     // Warnings
     if (taskData.timeline > 90) {
-      warnings.push('Timeline exceeds 90 days - consider breaking into smaller tasks');
+      warnings.push(
+        "Timeline exceeds 90 days - consider breaking into smaller tasks",
+      );
     }
 
     if (taskData.rewardAmount > 500000) {
-      warnings.push('High reward amount - ensure escrow can be funded');
+      warnings.push("High reward amount - ensure escrow can be funded");
     }
 
     if (taskData.deliverables.length > 10) {
-      warnings.push('Many deliverables - consider simplifying or splitting task');
+      warnings.push(
+        "Many deliverables - consider simplifying or splitting task",
+      );
     }
 
     return {
       isValid: errors.length === 0,
       errors,
-      warnings
+      warnings,
     };
   }
 }

@@ -1,4 +1,4 @@
-import { getPrismaClient } from '../config/database';
+import { getPrismaClient } from "../config/database";
 
 export interface CompletenessResult {
   score: number;
@@ -14,18 +14,20 @@ export class ProfileCompletenessService {
    * Calculate profile completeness score (0-100)
    * Minimum 70% required to unlock assessment
    */
-  async calculateCompleteness(engineerProfileId: string): Promise<CompletenessResult> {
+  async calculateCompleteness(
+    engineerProfileId: string,
+  ): Promise<CompletenessResult> {
     const profile = await this.prisma.engineerProfile.findUnique({
       where: { id: engineerProfileId },
       include: {
         skills: true,
         projects: true,
-        experiences: true
-      }
+        experiences: true,
+      },
     });
 
     if (!profile) {
-      throw new Error('Engineer profile not found');
+      throw new Error("Engineer profile not found");
     }
 
     const weights = {
@@ -35,7 +37,7 @@ export class ProfileCompletenessService {
       projects: 25,
       pricing: 10,
       payment: 5,
-      kyc: 10
+      kyc: 10,
     };
 
     let score = 0;
@@ -46,64 +48,72 @@ export class ProfileCompletenessService {
     if (profile.basicInfoComplete) {
       score += weights.basicInfo;
     } else {
-      missingFields.push('Basic Information');
-      suggestions.push('Complete your basic profile information including name, bio, and location');
+      missingFields.push("Basic Information");
+      suggestions.push(
+        "Complete your basic profile information including name, bio, and location",
+      );
     }
 
     // Skills (20%)
     if (profile.skillsComplete && profile.skills.length >= 3) {
       score += weights.skills;
     } else if (profile.skills.length === 0) {
-      missingFields.push('Skills');
-      suggestions.push('Add at least 3 skills with proficiency levels');
+      missingFields.push("Skills");
+      suggestions.push("Add at least 3 skills with proficiency levels");
     } else if (profile.skills.length < 3) {
       score += (profile.skills.length / 3) * weights.skills;
-      missingFields.push('More Skills');
-      suggestions.push(`Add ${3 - profile.skills.length} more skill(s) to reach the minimum`);
+      missingFields.push("More Skills");
+      suggestions.push(
+        `Add ${3 - profile.skills.length} more skill(s) to reach the minimum`,
+      );
     }
 
     // Experience (15%)
     if (profile.experienceComplete && profile.experiences.length >= 1) {
       score += weights.experience;
     } else {
-      missingFields.push('Work Experience');
-      suggestions.push('Add at least one work experience entry');
+      missingFields.push("Work Experience");
+      suggestions.push("Add at least one work experience entry");
     }
 
     // Projects (25%)
     if (profile.projectsComplete && profile.projects.length >= 2) {
       score += weights.projects;
     } else if (profile.projects.length === 0) {
-      missingFields.push('Projects');
-      suggestions.push('Showcase at least 2 projects with detailed descriptions');
+      missingFields.push("Projects");
+      suggestions.push(
+        "Showcase at least 2 projects with detailed descriptions",
+      );
     } else if (profile.projects.length === 1) {
       score += (1 / 2) * weights.projects;
-      missingFields.push('More Projects');
-      suggestions.push('Add one more project to reach the minimum');
+      missingFields.push("More Projects");
+      suggestions.push("Add one more project to reach the minimum");
     }
 
     // Pricing (10%)
     if (profile.pricingComplete) {
       score += weights.pricing;
     } else {
-      missingFields.push('Pricing');
-      suggestions.push('Set your hourly rate or rate range');
+      missingFields.push("Pricing");
+      suggestions.push("Set your hourly rate or rate range");
     }
 
     // Payment (5%)
     if (profile.paymentComplete && profile.upiId) {
       score += weights.payment;
     } else {
-      missingFields.push('Payment Details');
-      suggestions.push('Add your UPI ID for receiving payments');
+      missingFields.push("Payment Details");
+      suggestions.push("Add your UPI ID for receiving payments");
     }
 
     // KYC (10%)
     if (profile.kycComplete || profile.kycVerified) {
       score += weights.kyc;
     } else {
-      missingFields.push('KYC Verification');
-      suggestions.push('Complete KYC verification to build trust with companies');
+      missingFields.push("KYC Verification");
+      suggestions.push(
+        "Complete KYC verification to build trust with companies",
+      );
     }
 
     const finalScore = Math.round(score);
@@ -112,14 +122,14 @@ export class ProfileCompletenessService {
     // Update the profile with the new score
     await this.prisma.engineerProfile.update({
       where: { id: engineerProfileId },
-      data: { completenessScore: finalScore }
+      data: { completenessScore: finalScore },
     });
 
     return {
       score: finalScore,
       missingFields,
       suggestions,
-      canAccessAssessment
+      canAccessAssessment,
     };
   }
 
@@ -129,30 +139,30 @@ export class ProfileCompletenessService {
   async updateStepCompletion(
     engineerProfileId: string,
     step: string,
-    completed: boolean
+    completed: boolean,
   ): Promise<void> {
     const updateData: any = {};
-    
+
     switch (step) {
-      case 'basicInfo':
+      case "basicInfo":
         updateData.basicInfoComplete = completed;
         break;
-      case 'skills':
+      case "skills":
         updateData.skillsComplete = completed;
         break;
-      case 'experience':
+      case "experience":
         updateData.experienceComplete = completed;
         break;
-      case 'projects':
+      case "projects":
         updateData.projectsComplete = completed;
         break;
-      case 'pricing':
+      case "pricing":
         updateData.pricingComplete = completed;
         break;
-      case 'payment':
+      case "payment":
         updateData.paymentComplete = completed;
         break;
-      case 'kyc':
+      case "kyc":
         updateData.kycComplete = completed;
         break;
       default:
@@ -161,7 +171,7 @@ export class ProfileCompletenessService {
 
     await this.prisma.engineerProfile.update({
       where: { id: engineerProfileId },
-      data: updateData
+      data: updateData,
     });
 
     // Recalculate completeness after update
@@ -182,25 +192,49 @@ export class ProfileCompletenessService {
         pricingComplete: true,
         paymentComplete: true,
         kycComplete: true,
-        completenessScore: true
-      }
+        completenessScore: true,
+      },
     });
 
     if (!profile) {
-      throw new Error('Engineer profile not found');
+      throw new Error("Engineer profile not found");
     }
 
     const steps = [
-      { name: 'Basic Info', key: 'basicInfoComplete', completed: profile.basicInfoComplete },
-      { name: 'Skills', key: 'skillsComplete', completed: profile.skillsComplete },
-      { name: 'Experience', key: 'experienceComplete', completed: profile.experienceComplete },
-      { name: 'Projects', key: 'projectsComplete', completed: profile.projectsComplete },
-      { name: 'Pricing', key: 'pricingComplete', completed: profile.pricingComplete },
-      { name: 'Payment', key: 'paymentComplete', completed: profile.paymentComplete },
-      { name: 'KYC', key: 'kycComplete', completed: profile.kycComplete }
+      {
+        name: "Basic Info",
+        key: "basicInfoComplete",
+        completed: profile.basicInfoComplete,
+      },
+      {
+        name: "Skills",
+        key: "skillsComplete",
+        completed: profile.skillsComplete,
+      },
+      {
+        name: "Experience",
+        key: "experienceComplete",
+        completed: profile.experienceComplete,
+      },
+      {
+        name: "Projects",
+        key: "projectsComplete",
+        completed: profile.projectsComplete,
+      },
+      {
+        name: "Pricing",
+        key: "pricingComplete",
+        completed: profile.pricingComplete,
+      },
+      {
+        name: "Payment",
+        key: "paymentComplete",
+        completed: profile.paymentComplete,
+      },
+      { name: "KYC", key: "kycComplete", completed: profile.kycComplete },
     ];
 
-    const completedSteps = steps.filter(s => s.completed).length;
+    const completedSteps = steps.filter((s) => s.completed).length;
     const totalSteps = steps.length;
 
     return {
@@ -208,7 +242,7 @@ export class ProfileCompletenessService {
       completedSteps,
       totalSteps,
       completenessScore: profile.completenessScore,
-      canAccessAssessment: profile.completenessScore >= 70
+      canAccessAssessment: profile.completenessScore >= 70,
     };
   }
 }

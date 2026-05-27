@@ -13,5 +13,9 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1'
   },
-  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts']
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
+  globalSetup: '<rootDir>/src/__tests__/globalSetup.ts',
+  // Prevent worker hang from connection-pool handles when DB / Redis are unavailable
+  forceExit: true,
+  testTimeout: 30000,
 };

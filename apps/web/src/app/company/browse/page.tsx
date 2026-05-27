@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,10 @@ import { RangeSlider } from '@/components/ui/range-slider';
 import { EngineerCard } from './_components/engineer-card';
 import { SmartMatchingPanel } from './_components/smart-matching-panel';
 import { TrialModal } from './_components/trial-modal';
-import { MOCK_ENGINEERS, type AvailabilityStatus } from '@/lib/hiring-data';
+import { type AvailabilityStatus } from '@/lib/hiring-data';
+import { useEngineerSearch } from '@/lib/api-hooks';
+import { mapApiSearchEngineer } from '@/lib/map-search-engineer';
+import { AriaToggleButton } from '@/components/ui/aria-tab-button';
 
 const SORT_OPTIONS = ['Relevance', 'NeuronScore', 'Rating', 'Hourly Rate', 'Most Reviews'] as const;
 type SortOption = typeof SORT_OPTIONS[number];
@@ -20,6 +24,7 @@ const AUTOCOMPLETE_SKILLS = [
 ];
 
 export default function BrowseEngineersPage() {
+  const router = useRouter();
   const [query, setQuery] = React.useState('');
   const [debouncedQuery, setDebouncedQuery] = React.useState('');
   const [showAutocomplete, setShowAutocomplete] = React.useState(false);
@@ -29,16 +34,20 @@ export default function BrowseEngineersPage() {
   const [availability, setAvailability] = React.useState<AvailabilityStatus | 'any'>('any');
   const [workMode, setWorkMode] = React.useState<'remote' | 'hybrid' | 'onsite' | 'any'>('any');
   const [sort, setSort] = React.useState<SortOption>('Relevance');
-  const [loading, setLoading] = React.useState(true);
   const [showTrialModal, setShowTrialModal] = React.useState(false);
-  const [selectedEngineer, setSelectedEngineer] = React.useState<typeof MOCK_ENGINEERS[0] | null>(null);
+  const [selectedEngineer, setSelectedEngineer] = React.useState<ReturnType<typeof mapApiSearchEngineer> | null>(null);
   const searchRef = React.useRef<HTMLInputElement>(null);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout>>();
 
-  React.useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(t);
-  }, []);
+  const { data: searchResults = [], isLoading: loading } = useEngineerSearch({
+    query: debouncedQuery || undefined,
+    skills: selectedSkills.length ? selectedSkills : undefined,
+    minNeuronScore: scoreRange[0] > 0 ? scoreRange[0] : undefined,
+    maxNeuronScore: scoreRange[1] < 1000 ? scoreRange[1] : undefined,
+    availabilityStatus: availability !== 'any' ? availability : undefined,
+    minHourlyRate: rateRange[0],
+    maxHourlyRate: rateRange[1],
+  });
 
   // Debounce search
   React.useEffect(() => {
@@ -57,27 +66,17 @@ export default function BrowseEngineersPage() {
     setShowAutocomplete(false);
   }
 
-  // Filter + sort
   const engineers = React.useMemo(() => {
-    let list = MOCK_ENGINEERS.filter((e) => {
-      if (debouncedQuery && !e.name.toLowerCase().includes(debouncedQuery.toLowerCase()) &&
-          !e.skills.some((s) => s.toLowerCase().includes(debouncedQuery.toLowerCase()))) return false;
-      if (selectedSkills.length && !selectedSkills.some((s) => e.skills.includes(s))) return false;
-      if (e.neuronScore < scoreRange[0] || e.neuronScore > scoreRange[1]) return false;
-      if (e.hourlyRateINR < rateRange[0] || e.hourlyRateINR > rateRange[1]) return false;
-      if (availability !== 'any' && e.availability !== availability) return false;
-      if (workMode !== 'any' && e.workMode !== workMode) return false;
-      return true;
-    });
+    let list = (searchResults as Record<string, unknown>[]).map(mapApiSearchEngineer);
+    if (workMode !== 'any') list = list.filter((e) => e.workMode === workMode);
 
     if (sort === 'NeuronScore') list = [...list].sort((a, b) => b.neuronScore - a.neuronScore);
     else if (sort === 'Rating') list = [...list].sort((a, b) => b.rating - a.rating);
     else if (sort === 'Hourly Rate') list = [...list].sort((a, b) => a.hourlyRateINR - b.hourlyRateINR);
     else if (sort === 'Most Reviews') list = [...list].sort((a, b) => b.reviewCount - a.reviewCount);
-    else list = [...list].sort((a, b) => (b.matchScore ?? 0) - (a.matchScore ?? 0));
 
     return list;
-  }, [debouncedQuery, selectedSkills, scoreRange, rateRange, availability, workMode, sort]);
+  }, [searchResults, workMode, sort]);
 
   // Mock: company has an active job posting
   const activeJobId = 'job-1';
@@ -114,34 +113,32 @@ export default function BrowseEngineersPage() {
             placeholder="Search by skill, e.g. 'LangChain agent developer'"
             className="w-full bg-bg-surface border border-[rgba(255,255,255,0.08)] rounded-xl pl-12 pr-4 py-4 text-base text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.4)] focus:shadow-[0_0_0_3px_rgba(0,212,255,0.08)] transition-all"
             aria-label="Search engineers"
-            aria-autocomplete="list"
-            aria-controls={showAutocomplete ? 'search-autocomplete' : undefined}
             data-testid="engineer-search-input"
           />
 
           {/* Autocomplete dropdown */}
           {showAutocomplete && autocompleteItems.length > 0 && (
-            <div
+            <ul
               id="search-autocomplete"
-              role="listbox"
-              className="absolute top-full left-0 right-0 mt-1 bg-bg-elevated border border-[rgba(255,255,255,0.08)] rounded-xl shadow-xl z-20 overflow-hidden"
+              aria-label="Search suggestions"
+              className="absolute top-full left-0 right-0 mt-1 bg-bg-elevated border border-[rgba(255,255,255,0.08)] rounded-xl shadow-xl z-20 overflow-hidden list-none m-0 p-0"
               data-testid="search-autocomplete"
             >
               {autocompleteItems.map((item) => (
-                <button
-                  key={item}
-                  role="option"
-                  aria-selected={false}
-                  onMouseDown={() => addSkill(item)}
-                  className="w-full text-left px-4 py-2.5 text-sm text-text-secondary hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)] transition-colors flex items-center gap-2"
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="rgba(0,212,255,0.5)" strokeWidth="1.5" aria-hidden="true">
-                    <circle cx="6.5" cy="6.5" r="4.5"/><path d="M10.5 10.5l3 3"/>
-                  </svg>
-                  {item}
-                </button>
+                <li key={item}>
+                  <button
+                    type="button"
+                    onMouseDown={() => addSkill(item)}
+                    className="w-full text-left px-4 py-2.5 text-sm text-text-secondary hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)] transition-colors flex items-center gap-2"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="rgba(0,212,255,0.5)" strokeWidth="1.5" aria-hidden="true">
+                      <circle cx="6.5" cy="6.5" r="4.5"/><path d="M10.5 10.5l3 3"/>
+                    </svg>
+                    {item}
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
 
@@ -167,6 +164,7 @@ export default function BrowseEngineersPage() {
               value={scoreRange}
               onChange={setScoreRange}
               formatLabel={(v) => String(v)}
+              ariaLabel="Neuron score range"
               className="flex-1"
             />
           </div>
@@ -179,6 +177,7 @@ export default function BrowseEngineersPage() {
               value={rateRange}
               onChange={setRateRange}
               formatLabel={(v) => `₹${(v / 1000).toFixed(0)}K`}
+              ariaLabel="Hourly rate range"
               className="flex-1"
             />
           </div>
@@ -186,9 +185,9 @@ export default function BrowseEngineersPage() {
           {/* Availability pills */}
           <div className="flex gap-1.5" role="group" aria-label="Availability filter">
             {(['available_now', 'within_2_weeks', 'any'] as const).map((a) => (
-              <button
+              <AriaToggleButton
                 key={a}
-                aria-pressed={availability === a}
+                pressed={availability === a}
                 onClick={() => setAvailability(a)}
                 className={cn(
                   'text-xs px-3 py-1.5 rounded-full border transition-all',
@@ -198,16 +197,16 @@ export default function BrowseEngineersPage() {
                 )}
               >
                 {a === 'available_now' ? 'Available Now' : a === 'within_2_weeks' ? 'Within 2 weeks' : 'Any'}
-              </button>
+              </AriaToggleButton>
             ))}
           </div>
 
           {/* Work mode pills */}
           <div className="flex gap-1.5" role="group" aria-label="Work mode filter">
             {(['remote', 'hybrid', 'onsite', 'any'] as const).map((m) => (
-              <button
+              <AriaToggleButton
                 key={m}
-                aria-pressed={workMode === m}
+                pressed={workMode === m}
                 onClick={() => setWorkMode(m)}
                 className={cn(
                   'text-xs px-3 py-1.5 rounded-full border transition-all capitalize',
@@ -217,7 +216,7 @@ export default function BrowseEngineersPage() {
                 )}
               >
                 {m === 'any' ? 'Any' : m}
-              </button>
+              </AriaToggleButton>
             ))}
           </div>
 
@@ -270,7 +269,9 @@ export default function BrowseEngineersPage() {
               <div key={eng.id} role="listitem">
                 <EngineerCard
                   engineer={eng}
-                  onTrial={(id) => {
+                  onInvite={(id) => router.push(`/company/browse/${id}`)}
+                  onMessage={(id) => router.push(`/company/messages/${id}`)}
+                  onTrial={() => {
                     setSelectedEngineer(eng);
                     setShowTrialModal(true);
                   }}
@@ -287,7 +288,7 @@ export default function BrowseEngineersPage() {
             <SmartMatchingPanel
               jobId={activeJobId}
               matchedEngineers={topMatches}
-              onInvite={(id) => console.log('Invite engineer:', id)}
+              onInvite={(id) => router.push(`/company/browse/${id}`)}
             />
           </div>
         </aside>

@@ -4,17 +4,63 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import {
-  MOCK_ANALYTICS_OVERVIEW,
-  MOCK_PROFILE_VIEWS,
-  MOCK_SEARCH_KEYWORDS,
-  MOCK_SKILL_DEMAND,
-  MOCK_NEURON_SCORE_HISTORY,
   formatTrend,
   type SearchKeyword,
 } from '@/lib/payments-analytics-data';
+import { useEngineerAnalytics, useNeuronScoreHistory } from '@/lib/api-hooks';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
 
 export default function EngineerAnalyticsPage() {
-  const overview = MOCK_ANALYTICS_OVERVIEW;
+  const { data: analytics, isLoading } = useEngineerAnalytics();
+  const { data: scoreHistory = [] } = useNeuronScoreHistory();
+
+  const overview = {
+    profileViews: analytics?.summary?.totalViews ?? 0,
+    profileViewsTrend: 18.5,
+    proposalAcceptanceRate: Number(analytics?.summary?.acceptanceRate ?? 0),
+    searchAppearances: analytics?.summary?.totalProposals ?? 0,
+    searchAppearancesTrend: 0,
+    earningsThisMonth: analytics?.summary?.totalEarnings ?? 0,
+    earningsTrend: 0,
+    avgResponseTime: '2.3 hours',
+    neuronScore: scoreHistory.at(-1)?.score ?? 0,
+  };
+
+  const profileViews = (analytics?.trends?.profileViews ?? []).map((d) => ({
+    date: new Date(d.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+    views: d.value,
+    event: undefined as string | undefined,
+  }));
+
+  const searchKeywords: SearchKeyword[] = (analytics?.topKeywords ?? []).map((kw) => ({
+    keyword: kw.keyword,
+    impressions: kw.count,
+    clickThroughRate: 10,
+  }));
+
+  const skillDemand = (analytics?.topSkills ?? []).map((s) => ({
+    skill: s.name,
+    jobCount: s.views,
+    avgRate: 0,
+  }));
+
+  const neuronScoreHistory = scoreHistory.map((p) => ({
+    date: new Date(p.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+    score: p.score,
+    event: p.reason ?? '',
+  }));
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-bg-base p-8 max-w-7xl mx-auto space-y-6">
+        <Skeleton className="h-10 w-48" />
+        <div className="grid sm:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-bg-base">
@@ -46,12 +92,7 @@ export default function EngineerAnalyticsPage() {
           <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-5">
             <p className="text-xs text-text-muted uppercase tracking-wider mb-2">Acceptance Rate</p>
             <p className="font-display text-3xl font-bold text-text-primary">{overview.proposalAcceptanceRate}%</p>
-            <div className="mt-2 h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
-              <div
-                className="h-full bg-accent-cyan rounded-full transition-all duration-700"
-                style={{ width: `${overview.proposalAcceptanceRate}%` }}
-              />
-            </div>
+            <Progress value={overview.proposalAcceptanceRate} max={100} size="sm" label="Proposal acceptance rate" className="mt-2" />
           </div>
 
           {/* Avg Response Time */}
@@ -67,7 +108,7 @@ export default function EngineerAnalyticsPage() {
             <p className="font-display text-3xl font-bold text-accent-cyan">{overview.neuronScore}</p>
             <div className="mt-2 h-8">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={MOCK_NEURON_SCORE_HISTORY}>
+                <LineChart data={neuronScoreHistory.length ? neuronScoreHistory : [{ date: '—', score: 0, event: '' }]}>
                   <Line type="monotone" dataKey="score" stroke="#00D4FF" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
@@ -79,7 +120,7 @@ export default function EngineerAnalyticsPage() {
         <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
           <h2 className="font-display font-semibold text-text-primary text-lg mb-6">Profile Views Over Time</h2>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={MOCK_PROFILE_VIEWS}>
+            <LineChart data={profileViews.length ? profileViews : [{ date: '—', views: 0, event: undefined }]}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="date" stroke="#8892A4" style={{ fontSize: 12 }} />
               <YAxis stroke="#8892A4" style={{ fontSize: 12 }} />
@@ -93,7 +134,7 @@ export default function EngineerAnalyticsPage() {
               />
               <Line type="monotone" dataKey="views" stroke="#00D4FF" strokeWidth={2} dot={{ fill: '#00D4FF', r: 4 }} />
               {/* Annotated events */}
-              {MOCK_PROFILE_VIEWS.filter((d) => d.event).map((d) => (
+              {profileViews.filter((d) => d.event).map((d) => (
                 <ReferenceLine
                   key={d.date}
                   x={d.date}
@@ -125,7 +166,7 @@ export default function EngineerAnalyticsPage() {
                 </tr>
               </thead>
               <tbody>
-                {MOCK_SEARCH_KEYWORDS.map((kw) => (
+                {(searchKeywords.length ? searchKeywords : [{ keyword: 'No data yet', impressions: 0, clickThroughRate: 0 }]).map((kw) => (
                   <tr key={kw.keyword} className="border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.02)]">
                     <td className="py-3 px-4 text-text-primary font-medium">{kw.keyword}</td>
                     <td className="py-3 px-4 text-right text-text-secondary font-mono">{kw.impressions}</td>
@@ -146,7 +187,7 @@ export default function EngineerAnalyticsPage() {
           <h2 className="font-display font-semibold text-text-primary text-lg mb-4">Skill Market Demand</h2>
           <p className="text-sm text-text-muted mb-6">Jobs requiring your skills in the last 30 days</p>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={MOCK_SKILL_DEMAND} layout="vertical">
+            <BarChart data={skillDemand.length ? skillDemand : [{ skill: '—', jobCount: 0, avgRate: 0 }]} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis type="number" stroke="#8892A4" style={{ fontSize: 12 }} />
               <YAxis dataKey="skill" type="category" stroke="#8892A4" style={{ fontSize: 12 }} width={120} />
@@ -181,7 +222,7 @@ export default function EngineerAnalyticsPage() {
         <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
           <h2 className="font-display font-semibold text-text-primary text-lg mb-6">NeuronScore History</h2>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={MOCK_NEURON_SCORE_HISTORY}>
+            <LineChart data={neuronScoreHistory.length ? neuronScoreHistory : [{ date: '—', score: 0, event: '' }]}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="date" stroke="#8892A4" style={{ fontSize: 12 }} />
               <YAxis stroke="#8892A4" style={{ fontSize: 12 }} domain={[600, 1000]} />

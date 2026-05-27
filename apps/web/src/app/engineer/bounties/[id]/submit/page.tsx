@@ -7,13 +7,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
-import { MOCK_BOUNTY_DETAIL } from '@/lib/bounty-data';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '@/lib/api-fetch';
+import { mapApiTaskToBountyDetail } from '@/lib/map-task-to-bounty';
+import { useSubmitTask } from '@/lib/api-hooks';
+import { toast } from 'sonner';
 
 interface Metric { id: string; key: string; value: string }
 interface Screenshot { id: string; url: string; name: string }
 
 export default function SubmitPage({ params }: { params: { id: string } }) {
-  const bounty = MOCK_BOUNTY_DETAIL;
+  const { data: taskRaw, isLoading, isError } = useQuery({
+    queryKey: ['task', params.id],
+    queryFn: () => apiFetch<Record<string, unknown>>(`/api/tasks/${params.id}`),
+    enabled: !!params.id,
+  });
+  const bounty = taskRaw ? mapApiTaskToBountyDetail(taskRaw) : null;
+  const submitTask = useSubmitTask(params.id);
   const [description, setDescription] = React.useState('');
   const [demoUrl, setDemoUrl] = React.useState('');
   const [githubUrl, setGithubUrl] = React.useState('');
@@ -80,6 +91,56 @@ export default function SubmitPage({ params }: { params: { id: string } }) {
   ];
   const [confirmChecked, setConfirmChecked] = React.useState<Record<string, boolean>>({});
   const allConfirmed = CONFIRM_CHECKLIST.every((_, i) => confirmChecked[i]);
+
+  async function handleConfirmSubmit() {
+    const plainDescription = description.replace(/<[^>]+>/g, ' ').trim();
+    if (plainDescription.length < 50) {
+      toast.error('Description must be at least 50 characters');
+      return;
+    }
+
+    const metricsRecord = metrics.reduce<Record<string, string>>((acc, m) => {
+      if (m.key.trim()) acc[m.key.trim()] = m.value;
+      return acc;
+    }, {});
+
+    try {
+      await submitTask.mutateAsync({
+        description: plainDescription,
+        demoUrl: demoUrl || null,
+        githubUrl: githubUrl || null,
+        videoUrl: videoUrl || null,
+        performanceMetrics: Object.keys(metricsRecord).length ? metricsRecord : null,
+        architectureDiagram: archDiagram || null,
+      });
+      setShowConfirm(false);
+      setSubmitted(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to submit solution');
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-bg-base p-8 max-w-3xl mx-auto space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
+  if (isError || !bounty) {
+    return (
+      <div className="min-h-screen bg-bg-base flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-text-primary font-semibold mb-2">Bounty not found</p>
+          <Link href="/engineer/bounties" className="text-accent-cyan text-sm hover:underline">
+            Back to bounties
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (submitted) {
     return (
@@ -214,7 +275,16 @@ export default function SubmitPage({ params }: { params: { id: string } }) {
                 <p className="text-sm text-text-secondary">Drag & drop or <span className="text-accent-cyan">browse</span></p>
                 <p className="text-xs text-text-muted mt-1">PNG, JPG, WebP · Multiple files accepted</p>
               </div>
-              <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+              <input
+                ref={fileRef}
+                id="screenshot-upload-input"
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                aria-label="Upload screenshot files"
+                onChange={(e) => e.target.files && handleFiles(e.target.files)}
+              />
 
               {screenshots.length > 0 && (
                 <div className="flex flex-wrap gap-3 mt-3">
@@ -311,23 +381,12 @@ export default function SubmitPage({ params }: { params: { id: string } }) {
           <div className="space-y-3">
             {CONFIRM_CHECKLIST.map((item, i) => (
               <label key={i} className="flex items-start gap-3 cursor-pointer">
-                <div
-                  className={cn(
-                    'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all',
-                    confirmChecked[i] ? 'bg-accent-cyan border-accent-cyan' : 'border-[rgba(255,255,255,0.2)]'
-                  )}
-                  onClick={() => setConfirmChecked((prev) => ({ ...prev, [i]: !prev[i] }))}
-                  role="checkbox"
-                  aria-checked={!!confirmChecked[i]}
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && setConfirmChecked((prev) => ({ ...prev, [i]: !prev[i] }))}
-                >
-                  {confirmChecked[i] && (
-                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
-                      <path d="M1 4L3.5 6.5L9 1" stroke="#080B14" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </div>
+                <input
+                  type="checkbox"
+                  checked={!!confirmChecked[i]}
+                  onChange={() => setConfirmChecked((prev) => ({ ...prev, [i]: !prev[i] }))}
+                  className="mt-0.5 w-5 h-5 shrink-0 rounded border-[rgba(255,255,255,0.2)] bg-bg-elevated accent-accent-cyan"
+                />
                 <span className="text-sm text-text-secondary">{item}</span>
               </label>
             ))}
@@ -336,10 +395,10 @@ export default function SubmitPage({ params }: { params: { id: string } }) {
             <Button
               size="md"
               className="flex-1"
-              disabled={!allConfirmed}
-              onClick={() => { setShowConfirm(false); setSubmitted(true); }}
+              disabled={!allConfirmed || submitTask.isPending}
+              onClick={handleConfirmSubmit}
             >
-              Confirm & Submit
+              {submitTask.isPending ? 'Submitting…' : 'Confirm & Submit'}
             </Button>
             <Button variant="ghost" size="md" onClick={() => setShowConfirm(false)}>Cancel</Button>
           </div>

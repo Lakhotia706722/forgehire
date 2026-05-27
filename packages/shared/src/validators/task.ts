@@ -155,10 +155,10 @@ export const taskSearchSchema = z.object({
   type: z.enum(['bounty', 'direct', 'contest']).optional(),
   category: z.array(z.string()).optional(),
   difficulty: z.enum(['easy', 'medium', 'hard', 'expert']).optional(),
-  minReward: z.number().min(0).optional(),
-  maxReward: z.number().min(0).optional(),
-  minNeuronScore: z.number().min(0).max(1000).optional(),
-  maxNeuronScore: z.number().min(0).max(1000).optional(),
+  minReward: z.coerce.number().min(0).optional(),
+  maxReward: z.coerce.number().min(0).optional(),
+  minNeuronScore: z.coerce.number().min(0).max(1000).optional(),
+  maxNeuronScore: z.coerce.number().min(0).max(1000).optional(),
   skills: z.array(z.string()).optional(),
   status: z.enum(['draft', 'pending_escrow', 'open', 'in_progress', 'in_review', 'completed', 'cancelled']).optional(),
   ndaRequired: z.boolean().optional(),
@@ -172,7 +172,7 @@ export const taskSearchSchema = z.object({
   
   // Pagination
   cursor: z.string().optional(),
-  limit: z.number().min(1).max(100).default(20)
+  limit: z.coerce.number().min(1).max(100).default(20),
 }).refine(
   (data) => {
     if (data.minReward && data.maxReward) {

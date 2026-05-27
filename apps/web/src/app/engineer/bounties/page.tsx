@@ -7,16 +7,9 @@ import { BountyCard } from './_components/bounty-card';
 import { NewBountyToast, useNewBountyNotifications } from './_components/new-bounty-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useQuery } from '@tanstack/react-query';
-
-async function apiFetch<T>(path: string): Promise<T> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+import { apiFetchList } from '@/lib/api-fetch';
+import { mapApiTaskToBountyCard } from '@/lib/map-task-to-bounty';
+import { FilterSidebarToggle } from '@/components/ui/aria-tab-button';
 
 const ENGINEER_SCORE = 920;
 const ENGINEER_SKILLS = ['LangChain', 'PyTorch', 'FastAPI', 'LLM', 'RAG'];
@@ -30,33 +23,48 @@ export default function BountiesPage() {
 
   const { data: tasksData, isLoading } = useQuery({
     queryKey: ['tasks', 'bounties', applied],
-    queryFn: () => apiFetch<{ tasks: any[]; total: number }>('/api/tasks?status=open&limit=20'),
+    queryFn: async () => {
+      try {
+        const list = await apiFetchList<Record<string, unknown>>(
+          '/api/tasks?status=open&limit=20',
+        );
+        return {
+          tasks: list.map(mapApiTaskToBountyCard),
+          total: list.length,
+        };
+      } catch {
+        return { tasks: [], total: 0 };
+      }
+    },
     staleTime: 60_000,
   });
 
-  const allBounties = tasksData?.tasks ?? [];
-
-  // Filter bounties client-side
   const filtered = React.useMemo(() => {
+    const allBounties = tasksData?.tasks ?? [];
     return allBounties.filter((b) => {
-      if (applied.search && !b.title.toLowerCase().includes(applied.search.toLowerCase()) &&
-          !b.description.toLowerCase().includes(applied.search.toLowerCase())) return false;
+      if (
+        applied.search &&
+        !b.title.toLowerCase().includes(applied.search.toLowerCase()) &&
+        !(b.description ?? '').toLowerCase().includes(applied.search.toLowerCase())
+      ) {
+        return false;
+      }
       if (applied.types.length && !applied.types.includes(b.type)) return false;
       if (applied.difficulties.length && !applied.difficulties.includes(b.difficulty)) return false;
       if (b.reward < applied.rewardRange[0] || b.reward > applied.rewardRange[1]) return false;
       if (applied.skills.length && !applied.skills.some((s) => b.skills.includes(s))) return false;
       if (applied.eligibleOnly && ENGINEER_SCORE < b.minNeuronScore) return false;
-      if (applied.deadline === 'this_week') {
+      if (b.deadline && applied.deadline === 'this_week') {
         const diff = b.deadline.getTime() - Date.now();
         if (diff > 7 * 24 * 60 * 60 * 1000) return false;
       }
-      if (applied.deadline === 'this_month') {
+      if (b.deadline && applied.deadline === 'this_month') {
         const diff = b.deadline.getTime() - Date.now();
         if (diff > 30 * 24 * 60 * 60 * 1000) return false;
       }
       return true;
     });
-  }, [applied]);
+  }, [tasksData?.tasks, applied]);
 
   return (
     <div className="min-h-screen bg-bg-base">
@@ -72,17 +80,16 @@ export default function BountiesPage() {
             </p>
           </div>
           {/* Mobile filter toggle */}
-          <button
+          <FilterSidebarToggle
+            expanded={sidebarOpen}
             className="md:hidden flex items-center gap-2 px-3 py-2 rounded-lg border border-[rgba(255,255,255,0.08)] text-sm text-text-secondary"
             onClick={() => setSidebarOpen((o) => !o)}
-            aria-expanded={sidebarOpen}
-            aria-controls="filter-sidebar"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
               <path d="M2 4h12M4 8h8M6 12h4"/>
             </svg>
             Filters
-          </button>
+          </FilterSidebarToggle>
         </div>
 
         <div className="flex gap-8">

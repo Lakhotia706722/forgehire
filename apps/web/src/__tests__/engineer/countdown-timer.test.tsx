@@ -57,9 +57,9 @@ describe('AssessmentTopbar — countdown timer display', () => {
 
   it('highlights active section pill', () => {
     render(<AssessmentTopbar section="coding" secondsLeft={5400} tabSwitchCount={0} />);
-    const codingTab = screen.getByRole('tab', { name: 'Coding' });
-    expect(codingTab).toHaveAttribute('aria-selected', 'true');
-    expect(codingTab.className).toContain('bg-accent-cyan');
+    const codingPill = screen.getByText('Coding');
+    expect(codingPill).toHaveAttribute('aria-current', 'step');
+    expect(codingPill.className).toContain('bg-accent-cyan');
   });
 
   it('timer decrements correctly — 1 second interval accuracy', () => {

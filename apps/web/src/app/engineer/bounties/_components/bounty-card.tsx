@@ -4,6 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { avatarToneClass } from '@/lib/avatar-tone';
 import { getDeadlineLabel, formatReward, type BountyCard as BountyCardType } from '@/lib/bounty-data';
 
 const TYPE_COLORS = {
@@ -46,15 +47,9 @@ export function BountyCard({ bounty, engineerScore = 920, 'data-testid': testId 
     >
       {/* Animated left border — grows from 0 to full height on hover */}
       <div
-        className="absolute left-0 top-0 w-0.5 bg-accent-cyan transition-all duration-200 ease-out"
-        style={{ height: '0%' }}
+        className="absolute left-0 top-0 w-0.5 bg-accent-cyan h-0 group-hover:h-full transition-all duration-200 ease-out"
         aria-hidden="true"
       />
-      <style>{`
-        [data-testid="${testId ?? `bounty-card-${bounty.id}`}"]:hover > div:first-child {
-          height: 100%;
-        }
-      `}</style>
 
       {/* Locked overlay */}
       {isLocked && (
@@ -77,8 +72,10 @@ export function BountyCard({ bounty, engineerScore = 920, 'data-testid': testId 
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div
-              className="w-7 h-7 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-[10px] shrink-0"
-              style={{ background: bounty.companyColor }}
+              className={cn(
+                'w-7 h-7 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-[10px] shrink-0',
+                avatarToneClass(bounty.company),
+              )}
               aria-hidden="true"
             >
               {bounty.companyInitials}

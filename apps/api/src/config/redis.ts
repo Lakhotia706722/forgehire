@@ -1,11 +1,19 @@
-import Redis from 'ioredis';
-import { getEnv } from './env';
+import Redis from "ioredis";
+import { getEnv } from "./env";
+import { MemoryRedis } from "./redis-memory";
 
-let redis: Redis;
+let redis: Redis | MemoryRedis;
 
-export function getRedisClient(): Redis {
+export function getRedisClient(): Redis | MemoryRedis {
   if (!redis) {
     const env = getEnv();
+
+    if (env.REDIS_URL === "memory://") {
+      redis = new MemoryRedis();
+      console.log("✅ Using in-memory Redis (development)");
+      return redis;
+    }
+
     redis = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: 3,
       retryStrategy(times) {
@@ -14,7 +22,7 @@ export function getRedisClient(): Redis {
         return delay;
       },
       reconnectOnError(err) {
-        const targetError = 'READONLY';
+        const targetError = "READONLY";
         if (err.message.includes(targetError)) {
           return true;
         }
@@ -23,15 +31,15 @@ export function getRedisClient(): Redis {
       lazyConnect: false,
     });
 
-    redis.on('error', (err) => {
+    redis.on("error", (err) => {
       // Suppress noisy ECONNREFUSED spam from retry attempts
-      if ((err as any).code !== 'ECONNREFUSED') {
-        console.error('Redis error:', err);
+      if ((err as any).code !== "ECONNREFUSED") {
+        console.error("Redis error:", err);
       }
     });
 
-    redis.on('connect', () => {
-      console.log('✅ Redis connected successfully');
+    redis.on("connect", () => {
+      console.log("✅ Redis connected successfully");
     });
   }
 
@@ -42,9 +50,16 @@ export async function connectRedis(): Promise<void> {
   try {
     const client = getRedisClient();
     await client.ping();
-    console.log('✅ Redis connection verified');
+    if (getEnv().REDIS_URL !== "memory://") {
+      console.log("✅ Redis connection verified");
+    }
   } catch (error) {
-    console.error('❌ Redis connection failed:', error);
+    console.error("❌ Redis connection failed:", error);
+    if (getEnv().NODE_ENV === "development") {
+      console.warn(
+        "⚠️  Set REDIS_URL=memory:// in .env.local to run without Redis",
+      );
+    }
     throw error;
   }
 }
@@ -52,8 +67,7 @@ export async function connectRedis(): Promise<void> {
 export async function disconnectRedis(): Promise<void> {
   if (redis) {
     await redis.quit();
-    console.log('Redis disconnected');
+    console.log("Redis disconnected");
   }
 }
 
-export { redis };

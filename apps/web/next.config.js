@@ -37,9 +37,23 @@ const withPWA = require('next-pwa')({
         expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
       },
     },
-    // Network-first for pages
+    // Same-origin navigations only — do NOT cache Clerk or other cross-origin fetches
     {
-      urlPattern: /^https?:\/\/.*/i,
+      urlPattern: ({ url, request }) => {
+        const host = url.hostname;
+        if (
+          host.includes('clerk.accounts.dev') ||
+          host.includes('clerk.com') ||
+          host.endsWith('.clerk.dev')
+        ) {
+          return false;
+        }
+        return (
+          request.mode === 'navigate' &&
+          typeof self !== 'undefined' &&
+          url.origin === self.location.origin
+        );
+      },
       handler: 'NetworkFirst',
       options: {
         cacheName: 'pages-cache',

@@ -6,6 +6,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
 import { cn } from '@/lib/utils';
+import { AriaToggleButton } from '@/components/ui/aria-tab-button';
 
 interface RichTextEditorProps {
   value?: string;
@@ -23,14 +24,15 @@ export function RichTextEditor({
   minHeight = 160,
 }: RichTextEditorProps) {
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit,
       Placeholder.configure({ placeholder }),
       Link.configure({ openOnClick: false }),
     ],
     content: value,
-    onUpdate: ({ editor }) => {
-      onChange?.(editor.getHTML());
+    onUpdate: ({ editor: ed }) => {
+      onChange?.(ed.getHTML());
     },
     editorProps: {
       attributes: {
@@ -39,7 +41,25 @@ export function RichTextEditor({
     },
   });
 
-  if (!editor) return null;
+  React.useEffect(() => {
+    if (!editor) return;
+    const current = editor.getHTML();
+    if (value !== current) {
+      editor.commands.setContent(value, { emitUpdate: false });
+    }
+  }, [editor, value]);
+
+  if (!editor) {
+    return (
+      <div
+        className={cn(
+          'rich-editor-skeleton border border-[rgba(255,255,255,0.06)] rounded-xl bg-bg-surface animate-pulse',
+          className,
+        )}
+        aria-hidden="true"
+      />
+    );
+  }
 
   return (
     <div className={cn('border border-[rgba(255,255,255,0.06)] rounded-xl overflow-hidden', className)}>
@@ -50,13 +70,12 @@ export function RichTextEditor({
           { label: 'I', action: () => editor.chain().focus().toggleItalic().run(), active: editor.isActive('italic'), title: 'Italic' },
           { label: 'S', action: () => editor.chain().focus().toggleStrike().run(), active: editor.isActive('strike'), title: 'Strikethrough' },
         ].map((btn) => (
-          <button
+          <AriaToggleButton
             key={btn.title}
-            type="button"
+            pressed={btn.active}
             onClick={btn.action}
             title={btn.title}
             aria-label={btn.title}
-            aria-pressed={btn.active}
             className={cn(
               'w-7 h-7 rounded text-xs font-semibold transition-colors',
               btn.active
@@ -65,7 +84,7 @@ export function RichTextEditor({
             )}
           >
             {btn.label}
-          </button>
+          </AriaToggleButton>
         ))}
 
         <div className="w-px h-4 bg-[rgba(255,255,255,0.08)] mx-1" aria-hidden="true" />
@@ -74,13 +93,12 @@ export function RichTextEditor({
           { label: 'H2', action: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active: editor.isActive('heading', { level: 2 }), title: 'Heading 2' },
           { label: 'H3', action: () => editor.chain().focus().toggleHeading({ level: 3 }).run(), active: editor.isActive('heading', { level: 3 }), title: 'Heading 3' },
         ].map((btn) => (
-          <button
+          <AriaToggleButton
             key={btn.title}
-            type="button"
+            pressed={btn.active}
             onClick={btn.action}
             title={btn.title}
             aria-label={btn.title}
-            aria-pressed={btn.active}
             className={cn(
               'px-2 h-7 rounded text-xs font-mono transition-colors',
               btn.active
@@ -89,17 +107,16 @@ export function RichTextEditor({
             )}
           >
             {btn.label}
-          </button>
+          </AriaToggleButton>
         ))}
 
         <div className="w-px h-4 bg-[rgba(255,255,255,0.08)] mx-1" aria-hidden="true" />
 
-        <button
-          type="button"
+        <AriaToggleButton
+          pressed={editor.isActive('bulletList')}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           title="Bullet list"
           aria-label="Bullet list"
-          aria-pressed={editor.isActive('bulletList')}
           className={cn(
             'w-7 h-7 rounded text-xs transition-colors',
             editor.isActive('bulletList')
@@ -108,14 +125,13 @@ export function RichTextEditor({
           )}
         >
           ≡
-        </button>
+        </AriaToggleButton>
 
-        <button
-          type="button"
+        <AriaToggleButton
+          pressed={editor.isActive('orderedList')}
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           title="Numbered list"
           aria-label="Numbered list"
-          aria-pressed={editor.isActive('orderedList')}
           className={cn(
             'w-7 h-7 rounded text-xs transition-colors',
             editor.isActive('orderedList')
@@ -124,14 +140,13 @@ export function RichTextEditor({
           )}
         >
           1.
-        </button>
+        </AriaToggleButton>
 
-        <button
-          type="button"
+        <AriaToggleButton
+          pressed={editor.isActive('codeBlock')}
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
           title="Code block"
           aria-label="Code block"
-          aria-pressed={editor.isActive('codeBlock')}
           className={cn(
             'w-7 h-7 rounded text-xs font-mono transition-colors',
             editor.isActive('codeBlock')
@@ -140,7 +155,7 @@ export function RichTextEditor({
           )}
         >
           {'</>'}
-        </button>
+        </AriaToggleButton>
       </div>
 
       {/* Editor area */}

@@ -1,13 +1,40 @@
 import { z } from 'zod';
 
 // Engineer Profile Validators
+const emptyToNull = (val: unknown) =>
+  val === '' || val === undefined ? null : val;
+
+const emptyToUndefined = (val: unknown) =>
+  val === '' || val === null || val === undefined ? undefined : val;
+
+/** Add https:// when missing; empty → null */
+const normalizeUrlInput = (val: unknown): string | null => {
+  if (val === '' || val === null || val === undefined) return null;
+  const s = String(val).trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  return `https://${s}`;
+};
+
+const optionalUrl = z
+  .union([z.string().url(), z.literal('')])
+  .transform((v) => (v === '' ? null : v))
+  .optional()
+  .nullable();
+
+const patchUrl = z.preprocess(
+  normalizeUrlInput,
+  z.union([z.string().url('Invalid URL'), z.null()]).optional().nullable(),
+);
+
 export const engineerBasicInfoSchema = z.object({
   fullName: z.string().min(2, 'Full name must be at least 2 characters'),
+  headline: z.string().max(200).optional().nullable(),
   bio: z.string().max(1000, 'Bio must not exceed 1000 characters').optional().nullable(),
   location: z.string().max(100).optional().nullable(),
-  githubUrl: z.string().url('Invalid GitHub URL').optional().nullable(),
-  linkedinUrl: z.string().url('Invalid LinkedIn URL').optional().nullable(),
-  portfolioUrl: z.string().url('Invalid portfolio URL').optional().nullable(),
+  githubUrl: optionalUrl,
+  linkedinUrl: optionalUrl,
+  portfolioUrl: optionalUrl,
   yearsOfExperience: z.number().min(0).max(50).optional().nullable()
 });
 
@@ -75,6 +102,51 @@ export const engineerAvailabilitySchema = z.object({
   { message: 'Available in weeks is required when status is available_in_weeks' }
 );
 
+/** Single-request update from engineer profile edit page */
+export const engineerProfilePatchSchema = z
+  .object({
+    fullName: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .min(2, 'Full name must be at least 2 characters')
+        .optional(),
+    ),
+    headline: z.preprocess(
+      emptyToNull,
+      z.string().max(200).optional().nullable(),
+    ),
+    bio: z.preprocess(
+      emptyToNull,
+      z.string().max(1000, 'Bio must not exceed 1000 characters').optional().nullable(),
+    ),
+    location: z.preprocess(
+      emptyToNull,
+      z.string().max(100).optional().nullable(),
+    ),
+    githubUrl: patchUrl,
+    linkedinUrl: patchUrl,
+    portfolioUrl: patchUrl,
+    yearsOfExperience: z.number().min(0).max(50).optional().nullable(),
+    hourlyRate: z.number().min(0).max(100000).optional().nullable(),
+    minHourlyRate: z.number().min(0).max(100000).optional().nullable(),
+    maxHourlyRate: z.number().min(0).max(100000).optional().nullable(),
+    availabilityStatus: z
+      .enum(['available_now', 'available_in_weeks', 'not_available'])
+      .optional(),
+    availableInWeeks: z.number().min(1).max(52).optional().nullable(),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.availabilityStatus === 'available_in_weeks' && data.availableInWeeks == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Enter how many weeks until you are available',
+        path: ['availableInWeeks'],
+      });
+    }
+  });
+
 export const buildInPublicActivitySchema = z.object({
   content: z.string().min(10, 'Content must be at least 10 characters').max(1000)
 });
@@ -130,6 +202,7 @@ export type EngineerExperienceInput = z.infer<typeof engineerExperienceSchema>;
 export type EngineerPricingInput = z.infer<typeof engineerPricingSchema>;
 export type EngineerPaymentInput = z.infer<typeof engineerPaymentSchema>;
 export type EngineerAvailabilityInput = z.infer<typeof engineerAvailabilitySchema>;
+export type EngineerProfilePatchInput = z.infer<typeof engineerProfilePatchSchema>;
 export type BuildInPublicActivityInput = z.infer<typeof buildInPublicActivitySchema>;
 export type CompanyProfileInput = z.infer<typeof companyProfileSchema>;
 export type CompanyHiringInput = z.infer<typeof companyHiringSchema>;

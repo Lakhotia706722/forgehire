@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Badge, TierBadge } from '@/components/ui/badge';
 import { NeuronScoreRing } from '@/components/ui/neuron-score-ring';
+import { avatarToneClass } from '@/lib/avatar-tone';
 import type { SearchEngineer } from '@/lib/hiring-data';
 
 interface EngineerCardProps {
@@ -17,9 +18,9 @@ interface EngineerCardProps {
 }
 
 const AVAILABILITY_CONFIG = {
-  available_now:    { color: '#10B981', label: 'Available Now',    pulse: true },
-  within_2_weeks:   { color: '#F59E0B', label: 'In 2 weeks',       pulse: false },
-  any:              { color: '#4A5568', label: 'Not specified',     pulse: false },
+  available_now:    { dotClass: 'avail-dot-green', label: 'Available Now',    pulse: true },
+  within_2_weeks:   { dotClass: 'avail-dot-amber', label: 'In 2 weeks',       pulse: false },
+  any:              { dotClass: 'avail-dot-gray', label: 'Not specified',     pulse: false },
 };
 
 export function EngineerCard({
@@ -42,8 +43,7 @@ export function EngineerCard({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-1.5">
             <div
-              className={cn('w-2 h-2 rounded-full', avail.pulse && 'animate-pulse')}
-              style={{ background: avail.color }}
+              className={cn('w-2 h-2 rounded-full', avail.dotClass, avail.pulse && 'animate-pulse')}
               aria-hidden="true"
             />
             <span className="text-xs text-text-muted">{avail.label}</span>
@@ -54,8 +54,10 @@ export function EngineerCard({
         {/* Avatar + name + badges */}
         <div className="flex items-start gap-3 mb-3">
           <div
-            className="w-12 h-12 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-sm shrink-0"
-            style={{ background: eng.avatarColor }}
+            className={cn(
+              'w-12 h-12 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-sm shrink-0',
+              avatarToneClass(eng.name),
+            )}
             aria-hidden="true"
           >
             {eng.initials}

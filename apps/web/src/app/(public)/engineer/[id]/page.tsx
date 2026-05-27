@@ -1,24 +1,29 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { MOCK_ENGINEER } from '@/lib/mock-data';
 import { ProfileHero } from './_components/profile-hero';
 import { ProfileContent } from './_components/profile-content';
+import { mapApiEngineerToPublicProfile } from '@/lib/map-api-engineer-profile';
+import type { EngineerProfile } from '@/lib/mock-data';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 
 interface Props {
   params: { id: string };
 }
 
-/**
- * SSR: data is fetched server-side — no client-only data fetching.
- * In production, replace MOCK_ENGINEER with an API call:
- *   const engineer = await fetch(`${API_URL}/api/engineer/${params.id}`).then(r => r.json())
- */
-async function getEngineer(id: string) {
-  // Simulate DB lookup — in production this is a real fetch
-  if (id === MOCK_ENGINEER.id || id) {
-    return { ...MOCK_ENGINEER, id };
+async function getEngineer(id: string): Promise<EngineerProfile | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/engineer/profiles/${id}`, {
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const data = json?.data ?? json;
+    if (!data?.id) return null;
+    return mapApiEngineerToPublicProfile(data as Record<string, unknown>);
+  } catch {
+    return null;
   }
-  return null;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

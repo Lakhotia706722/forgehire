@@ -7,37 +7,17 @@ import { Badge, TierBadge } from '@/components/ui/badge';
 import { NeuronScoreRing } from '@/components/ui/neuron-score-ring';
 import { Skeleton } from '@/components/ui/skeleton';
 import { HireModal } from '../_components/hire-modal';
-
-const MOCK_ENGINEER = {
-  id: 'e1',
-  name: 'Arjun Sharma',
-  initials: 'AS',
-  color: '#F59E0B',
-  headline: 'LLM Engineer · RAG Systems · Agentic AI',
-  bio: 'Specialized in building production-grade LLM applications with a focus on RAG pipelines, multi-agent systems, and LLM evaluation frameworks. 5+ years of experience shipping AI products at scale.',
-  location: 'Bangalore, India',
-  neuronScore: 920,
-  neuronTier: 'Elite' as const,
-  hourlyRateINR: 5000,
-  availability: 'available_now',
-  skills: ['LangChain', 'PyTorch', 'FastAPI', 'LlamaIndex', 'OpenAI', 'Pinecone'],
-  rating: 4.9,
-  reviewCount: 18,
-  completedProjects: 12,
-  responseRate: 98,
-  onTimeDelivery: 100,
-};
+import { usePublicEngineerProfile } from '@/lib/api-hooks';
+import { mapApiEngineerToPublicProfile } from '@/lib/map-api-engineer-profile';
+import { avatarToneClass } from '@/lib/avatar-tone';
 
 export default function CompanyEngineerViewPage({ params }: { params: { id: string } }) {
-  const [loading, setLoading] = React.useState(true);
+  const { data, isLoading, isError } = usePublicEngineerProfile(params.id);
   const [showHireModal, setShowHireModal] = React.useState(false);
 
-  React.useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(t);
-  }, []);
+  const engineer = data ? mapApiEngineerToPublicProfile(data) : null;
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-bg-base">
         <div className="max-w-4xl mx-auto px-4 md:px-6 py-8 space-y-6">
@@ -56,69 +36,88 @@ export default function CompanyEngineerViewPage({ params }: { params: { id: stri
     );
   }
 
+  if (isError || !engineer) {
+    return (
+      <div className="min-h-screen bg-bg-base flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-text-primary font-semibold mb-2">Engineer not found</p>
+          <Link href="/company/browse" className="text-accent-cyan text-sm hover:underline">
+            Back to browse
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-bg-base">
       <div className="max-w-4xl mx-auto px-4 md:px-6 py-8 space-y-6">
-        {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-xs text-text-muted">
           <Link href="/company/browse" className="hover:text-text-secondary">Browse Engineers</Link>
           <span>/</span>
-          <span className="text-text-secondary">{MOCK_ENGINEER.name}</span>
+          <span className="text-text-secondary">{engineer.name}</span>
         </div>
 
-        {/* Hero */}
         <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-8">
           <div className="flex flex-col sm:flex-row items-start gap-6">
-            <div className="w-20 h-20 rounded-2xl flex items-center justify-center font-display font-bold text-bg-base text-2xl shrink-0" style={{ background: MOCK_ENGINEER.color }} aria-hidden="true">
-              {MOCK_ENGINEER.initials}
+            <div
+              className={`w-20 h-20 rounded-2xl flex items-center justify-center font-display font-bold text-bg-base text-2xl shrink-0 ${avatarToneClass(engineer.name)}`}
+              aria-hidden="true"
+            >
+              {engineer.avatarInitials}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-3 mb-2">
-                <h1 className="font-display text-2xl font-bold text-text-primary">{MOCK_ENGINEER.name}</h1>
-                <TierBadge tier={MOCK_ENGINEER.neuronTier} />
+                <h1 className="font-display text-2xl font-bold text-text-primary">{engineer.name}</h1>
+                <TierBadge tier={engineer.tier} />
               </div>
-              <p className="text-text-secondary text-sm mb-3">{MOCK_ENGINEER.headline}</p>
+              <p className="text-text-secondary text-sm mb-3">{engineer.headline}</p>
               <div className="flex flex-wrap gap-4 text-xs text-text-muted mb-4">
-                <span>📍 {MOCK_ENGINEER.location}</span>
-                <span className="text-accent-green">● Available Now</span>
-                <span>₹{MOCK_ENGINEER.hourlyRateINR.toLocaleString('en-IN')}/hr</span>
+                <span>📍 {engineer.location}</span>
+                <span className="text-accent-green">● {engineer.availabilityLabel}</span>
+                <span>₹{engineer.hourlyRateINR.toLocaleString('en-IN')}/hr</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {MOCK_ENGINEER.skills.map((skill) => (
-                  <Badge key={skill} variant="gray">{skill}</Badge>
+                {engineer.skills.map((skill) => (
+                  <Badge key={skill.name} variant="gray">{skill.name}</Badge>
                 ))}
               </div>
             </div>
             <div className="shrink-0">
-              <NeuronScoreRing score={MOCK_ENGINEER.neuronScore} size={80} strokeWidth={6} animate={false} />
+              <NeuronScoreRing score={engineer.neuronScore} size={80} strokeWidth={6} animate={false} />
             </div>
           </div>
 
           <div className="flex gap-3 mt-6 pt-6 border-t border-[rgba(255,255,255,0.06)]">
-            <Button size="md" onClick={() => setShowHireModal(true)}>Hire {MOCK_ENGINEER.name.split(' ')[0]}</Button>
-            <Button variant="secondary" size="md">Send Message</Button>
+            <Button size="md" onClick={() => setShowHireModal(true)}>
+              Hire {engineer.name.split(' ')[0]}
+            </Button>
+            <Link
+              href={`/company/messages/${params.id}`}
+              className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl text-sm font-medium bg-transparent text-accent-cyan border border-[rgba(0,212,255,0.3)] hover:border-[rgba(0,212,255,0.6)] hover:bg-[rgba(0,212,255,0.05)] transition-all"
+            >
+              Send Message
+            </Link>
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Projects Done',   value: MOCK_ENGINEER.completedProjects, color: '#00D4FF' },
-            { label: 'Rating',          value: `${MOCK_ENGINEER.rating}★`,      color: '#F59E0B' },
-            { label: 'Response Rate',   value: `${MOCK_ENGINEER.responseRate}%`, color: '#10B981' },
-            { label: 'On-time',         value: `${MOCK_ENGINEER.onTimeDelivery}%`, color: '#7B5EA7' },
+            { label: 'Projects Done', value: engineer.projectCount, className: 'text-accent-cyan' },
+            { label: 'Rating', value: `${engineer.rating}★`, className: 'text-accent-amber' },
+            { label: 'Response Rate', value: `${engineer.responseRate}%`, className: 'text-accent-green' },
+            { label: 'Reviews', value: engineer.reviewCount, className: 'text-accent-violet' },
           ].map((stat) => (
             <div key={stat.label} className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-4 text-center">
-              <p className="font-mono font-bold text-xl" style={{ color: stat.color }}>{stat.value}</p>
+              <p className={`font-mono font-bold text-xl ${stat.className}`}>{stat.value}</p>
               <p className="text-xs text-text-muted mt-1">{stat.label}</p>
             </div>
           ))}
         </div>
 
-        {/* Bio */}
         <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
           <h2 className="font-display font-semibold text-text-primary text-lg mb-3">About</h2>
-          <p className="text-text-secondary text-sm leading-relaxed">{MOCK_ENGINEER.bio}</p>
+          <p className="text-text-secondary text-sm leading-relaxed">{engineer.bio || 'No bio provided.'}</p>
         </div>
       </div>
 
@@ -126,8 +125,8 @@ export default function CompanyEngineerViewPage({ params }: { params: { id: stri
         <HireModal
           open={showHireModal}
           onClose={() => setShowHireModal(false)}
-          engineerName={MOCK_ENGINEER.name}
-          engineerHourlyRate={MOCK_ENGINEER.hourlyRateINR}
+          engineerName={engineer.name}
+          engineerHourlyRate={engineer.hourlyRateINR}
         />
       )}
     </div>

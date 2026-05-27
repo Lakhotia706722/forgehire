@@ -4,7 +4,9 @@ import * as React from 'react';
 import { NeuronScoreRing } from '@/components/ui/neuron-score-ring';
 import { Badge, TierBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AriaDisclosureButton } from '@/components/ui/aria-tab-button';
 import { cn } from '@/lib/utils';
+import { avatarToneClass } from '@/lib/avatar-tone';
 import type { EngineerProfile } from '@/lib/mock-data';
 
 const TIER_RING_COLOR: Record<string, string> = {
@@ -38,14 +40,7 @@ export function ProfileHero({ engineer: eng }: ProfileHeroProps) {
   return (
     <div className="relative">
       {/* Banner */}
-      <div
-        className="h-40 md:h-52 w-full geo-pattern"
-        style={{
-          background:
-            'linear-gradient(135deg, rgba(0,212,255,0.06) 0%, rgba(123,94,167,0.08) 50%, rgba(8,11,20,1) 100%)',
-        }}
-        aria-hidden="true"
-      />
+      <div className="h-40 md:h-52 w-full geo-pattern profile-hero-banner" aria-hidden="true" />
 
       {/* Profile card */}
       <div className="max-w-5xl mx-auto px-6">
@@ -59,9 +54,9 @@ export function ProfileHero({ engineer: eng }: ProfileHeroProps) {
                   'w-24 h-24 md:w-28 md:h-28 rounded-full flex items-center justify-center',
                   'font-display font-bold text-bg-base text-2xl',
                   'ring-4 ring-offset-4 ring-offset-bg-base',
-                  TIER_RING_COLOR[eng.tier]
+                  TIER_RING_COLOR[eng.tier],
+                  avatarToneClass(eng.name),
                 )}
-                style={{ background: eng.avatarColor }}
                 aria-label={`${eng.name}'s avatar`}
               >
                 {eng.avatarInitials}
@@ -235,28 +230,26 @@ function HireDropdown() {
 
   return (
     <div className="relative" ref={ref}>
-      <Button
-        size="md"
+      <AriaDisclosureButton
+        expanded={open}
         onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
+        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-accent-cyan text-bg-base font-semibold text-sm hover:brightness-110 transition-all"
       >
         Hire
         <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" className={cn('transition-transform', open && 'rotate-180')} aria-hidden="true">
           <path d="M2 4l4 4 4-4"/>
         </svg>
-      </Button>
+      </AriaDisclosureButton>
       {open && (
         <div
           className="absolute top-full left-0 mt-2 w-48 bg-bg-elevated border border-[rgba(255,255,255,0.08)] rounded-xl shadow-xl z-50 overflow-hidden"
-          role="listbox"
+          role="group"
           aria-label="Hiring mode"
         >
           {modes.map((mode) => (
             <button
               key={mode}
-              role="option"
-              aria-selected={false}
+              type="button"
               className="w-full text-left px-4 py-2.5 text-sm text-text-secondary hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)] transition-colors"
               onClick={() => setOpen(false)}
             >

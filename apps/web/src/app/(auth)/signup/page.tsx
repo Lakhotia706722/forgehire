@@ -250,7 +250,7 @@ function RoleCard({ selected, onClick, accent, icon, title, description }: RoleC
         '--bg': bgColor,
         '--border': borderColor,
       } as React.CSSProperties}
-      aria-pressed={selected}
+      aria-pressed={selected ? "true" : "false"}
     >
       {/* Checkmark */}
       {selected && (

@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
-import { getEnv } from '../config/env';
+import { PrismaClient } from "@prisma/client";
+import Anthropic from "@anthropic-ai/sdk";
+import { getEnv } from "../config/env";
 
 export class ProductRecommendationService {
   private prisma: PrismaClient;
@@ -10,7 +10,7 @@ export class ProductRecommendationService {
     this.prisma = new PrismaClient();
     const env = getEnv();
     this.anthropic = new Anthropic({
-      apiKey: env.ANTHROPIC_API_KEY
+      apiKey: env.ANTHROPIC_API_KEY,
     });
   }
 
@@ -28,70 +28,76 @@ export class ProductRecommendationService {
               select: {
                 category: true,
                 tags: true,
-                aiModelUsed: true
-              }
-            }
-          }
-        }
-      }
+                aiModelUsed: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!user || !user.companyProfile) {
-      throw new Error('Company profile not found');
+      throw new Error("Company profile not found");
     }
 
     // Build company context
     const companyContext = {
       industry: user.companyProfile.industry,
       aiRequirements: user.companyProfile.aiRequirements,
-      pastPurchases: user.purchases.map(p => ({
+      pastPurchases: user.purchases.map((p) => ({
         category: p.product.category,
         tags: p.product.tags,
-        aiModel: p.product.aiModelUsed
-      }))
+        aiModel: p.product.aiModelUsed,
+      })),
     };
 
     // Get all published products
     const products = await this.prisma.product.findMany({
       where: {
-        status: 'published'
+        status: "published",
       },
       include: {
         engineerProfile: {
           select: {
             fullName: true,
             neuronScore: true,
-            neuronTier: true
-          }
+            neuronTier: true,
+          },
         },
         _count: {
           select: {
             purchases: true,
-            reviews: true
-          }
-        }
-      }
+            reviews: true,
+          },
+        },
+      },
     });
 
     // Score products based on relevance
     const scoredProducts = await Promise.all(
       products.map(async (product) => {
-        const relevanceScore = await this.calculateRelevanceScore(product, companyContext);
+        const relevanceScore = await this.calculateRelevanceScore(
+          product,
+          companyContext,
+        );
         return {
           product,
-          relevanceScore
+          relevanceScore,
         };
-      })
+      }),
     );
 
     // Sort by relevance score
     scoredProducts.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
     // Return top N recommendations
-    return scoredProducts.slice(0, limit).map(sp => ({
+    return scoredProducts.slice(0, limit).map((sp) => ({
       ...sp.product,
       relevanceScore: sp.relevanceScore,
-      recommendationReason: this.generateRecommendationReason(sp.product, companyContext)
+      recommendationReason: this.generateRecommendationReason(
+        sp.product,
+        companyContext,
+      ),
     }));
   }
 
@@ -100,51 +106,51 @@ export class ProductRecommendationService {
    */
   async getSimilarProducts(productId: string, limit: number = 5) {
     const product = await this.prisma.product.findUnique({
-      where: { id: productId }
+      where: { id: productId },
     });
 
     if (!product) {
-      throw new Error('Product not found');
+      throw new Error("Product not found");
     }
 
     // Find products with similar category, tags, or AI model
     const similarProducts = await this.prisma.product.findMany({
       where: {
         id: { not: productId },
-        status: 'published',
+        status: "published",
         OR: [
           { category: product.category },
           { tags: { hasSome: product.tags } },
-          { aiModelUsed: product.aiModelUsed }
-        ]
+          { aiModelUsed: product.aiModelUsed },
+        ],
       },
       include: {
         engineerProfile: {
           select: {
             fullName: true,
-            neuronScore: true
-          }
+            neuronScore: true,
+          },
         },
         _count: {
           select: {
             purchases: true,
-            reviews: true
-          }
-        }
+            reviews: true,
+          },
+        },
       },
-      take: limit * 2 // Get more to filter
+      take: limit * 2, // Get more to filter
     });
 
     // Calculate similarity scores
-    const scoredProducts = similarProducts.map(p => ({
+    const scoredProducts = similarProducts.map((p) => ({
       product: p,
-      similarityScore: this.calculateSimilarityScore(product, p)
+      similarityScore: this.calculateSimilarityScore(product, p),
     }));
 
     // Sort by similarity
     scoredProducts.sort((a, b) => b.similarityScore - a.similarityScore);
 
-    return scoredProducts.slice(0, limit).map(sp => sp.product);
+    return scoredProducts.slice(0, limit).map((sp) => sp.product);
   }
 
   /**
@@ -157,58 +163,59 @@ export class ProductRecommendationService {
 
     const products = await this.prisma.product.findMany({
       where: {
-        status: 'published',
+        status: "published",
         publishedAt: {
-          lte: thirtyDaysAgo
-        }
+          lte: thirtyDaysAgo,
+        },
       },
       include: {
         engineerProfile: {
           select: {
             fullName: true,
-            neuronScore: true
-          }
+            neuronScore: true,
+          },
         },
         purchases: {
           where: {
             purchasedAt: {
-              gte: thirtyDaysAgo
+              gte: thirtyDaysAgo,
             },
-            status: 'completed'
-          }
+            status: "completed",
+          },
         },
         _count: {
           select: {
             purchases: true,
-            reviews: true
-          }
-        }
-      }
+            reviews: true,
+          },
+        },
+      },
     });
 
     // Calculate trending score
-    const scoredProducts = products.map(p => {
+    const scoredProducts = products.map((p) => {
       const recentPurchases = p.purchases.length;
       const totalPurchases = p._count.purchases;
       const rating = Number(p.rating || 0);
-      
+
       // Trending score: weighted by recent activity and rating
-      const trendingScore = (recentPurchases * 2) + (totalPurchases * 0.5) + (rating * 10);
-      
+      const trendingScore =
+        recentPurchases * 2 + totalPurchases * 0.5 + rating * 10;
+
       return {
         product: p,
         trendingScore,
-        recentPurchases
+        recentPurchases,
       };
     });
 
     // Sort by trending score
     scoredProducts.sort((a, b) => b.trendingScore - a.trendingScore);
 
-    return scoredProducts.slice(0, limit).map(sp => ({
+    return scoredProducts.slice(0, limit).map((sp) => ({
       ...sp.product,
       trendingScore: sp.trendingScore,
-      recentPurchases: sp.recentPurchases
+      recentPurchases: sp.recentPurchases,
     }));
   }
 
@@ -218,40 +225,43 @@ export class ProductRecommendationService {
   async getProductsByNeuronScore(minScore: number = 700, limit: number = 20) {
     return await this.prisma.product.findMany({
       where: {
-        status: 'published',
+        status: "published",
         engineerProfile: {
           neuronScore: {
-            gte: minScore
-          }
-        }
+            gte: minScore,
+          },
+        },
       },
       include: {
         engineerProfile: {
           select: {
             fullName: true,
             neuronScore: true,
-            neuronTier: true
-          }
+            neuronTier: true,
+          },
         },
         _count: {
           select: {
             purchases: true,
-            reviews: true
-          }
-        }
+            reviews: true,
+          },
+        },
       },
       orderBy: {
         engineerProfile: {
-          neuronScore: 'desc'
-        }
+          neuronScore: "desc",
+        },
       },
-      take: limit
+      take: limit,
     });
   }
 
   // Helper methods
 
-  private async calculateRelevanceScore(product: any, companyContext: any): Promise<number> {
+  private async calculateRelevanceScore(
+    product: any,
+    companyContext: any,
+  ): Promise<number> {
     let score = 0;
 
     // Industry match
@@ -260,13 +270,17 @@ export class ProductRecommendationService {
     }
 
     // AI requirements match
-    const matchingRequirements = companyContext.aiRequirements.filter((req: string) =>
-      product.tags.includes(req) || product.description.toLowerCase().includes(req.toLowerCase())
+    const matchingRequirements = companyContext.aiRequirements.filter(
+      (req: string) =>
+        product.tags.includes(req) ||
+        product.description.toLowerCase().includes(req.toLowerCase()),
     );
     score += matchingRequirements.length * 15;
 
     // Past purchase patterns
-    const pastCategories = companyContext.pastPurchases.map((p: any) => p.category);
+    const pastCategories = companyContext.pastPurchases.map(
+      (p: any) => p.category,
+    );
     if (pastCategories.includes(product.category)) {
       score += 20;
     }
@@ -297,7 +311,9 @@ export class ProductRecommendationService {
     }
 
     // Tag overlap
-    const commonTags = product1.tags.filter((tag: string) => product2.tags.includes(tag));
+    const commonTags = product1.tags.filter((tag: string) =>
+      product2.tags.includes(tag),
+    );
     score += commonTags.length * 10;
 
     // AI model match
@@ -318,18 +334,23 @@ export class ProductRecommendationService {
     return score;
   }
 
-  private generateRecommendationReason(product: any, companyContext: any): string {
+  private generateRecommendationReason(
+    product: any,
+    companyContext: any,
+  ): string {
     const reasons: string[] = [];
 
     if (product.tags.includes(companyContext.industry)) {
       reasons.push(`Matches your industry: ${companyContext.industry}`);
     }
 
-    const matchingRequirements = companyContext.aiRequirements.filter((req: string) =>
-      product.tags.includes(req)
+    const matchingRequirements = companyContext.aiRequirements.filter(
+      (req: string) => product.tags.includes(req),
     );
     if (matchingRequirements.length > 0) {
-      reasons.push(`Addresses your AI needs: ${matchingRequirements.join(', ')}`);
+      reasons.push(
+        `Addresses your AI needs: ${matchingRequirements.join(", ")}`,
+      );
     }
 
     if (product.engineerProfile.neuronScore >= 700) {
@@ -337,13 +358,15 @@ export class ProductRecommendationService {
     }
 
     if (product._count.purchases > 10) {
-      reasons.push(`Popular choice with ${product._count.purchases}+ purchases`);
+      reasons.push(
+        `Popular choice with ${product._count.purchases}+ purchases`,
+      );
     }
 
     if (product.rating && Number(product.rating) >= 4.5) {
       reasons.push(`Highly rated (${product.rating}/5)`);
     }
 
-    return reasons.length > 0 ? reasons.join(' • ') : 'Recommended for you';
+    return reasons.length > 0 ? reasons.join(" • ") : "Recommended for you";
   }
 }

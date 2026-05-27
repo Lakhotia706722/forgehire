@@ -1,7 +1,7 @@
-import { PrismaClient, SubscriptionTier } from '@prisma/client';
-import Razorpay from 'razorpay';
-import { getEnv } from '../config/env';
-import { FeeEngineService } from './fee-engine.service';
+import { PrismaClient, SubscriptionTier } from "@prisma/client";
+import Razorpay from "razorpay";
+import { getEnv } from "../config/env";
+import { FeeEngineService } from "./fee-engine.service";
 
 export class PlatformSubscriptionService {
   private prisma: PrismaClient;
@@ -15,14 +15,14 @@ export class PlatformSubscriptionService {
     engineer_premium: { monthly: 1499, quarterly: 3999, annual: 14999 },
     company_starter: { monthly: 2999, quarterly: 7999, annual: 29999 },
     company_growth: { monthly: 5999, quarterly: 15999, annual: 59999 },
-    company_enterprise: { monthly: 9999, quarterly: 26999, annual: 99999 }
+    company_enterprise: { monthly: 9999, quarterly: 26999, annual: 99999 },
   };
 
   constructor() {
     this.prisma = new PrismaClient();
     this.razorpay = new Razorpay({
-      key_id: getEnv('RAZORPAY_KEY_ID'),
-      key_secret: getEnv('RAZORPAY_KEY_SECRET')
+      key_id: getEnv("RAZORPAY_KEY_ID"),
+      key_secret: getEnv("RAZORPAY_KEY_SECRET"),
     });
     this.feeEngine = new FeeEngineService();
   }
@@ -35,25 +35,25 @@ export class PlatformSubscriptionService {
   async createSubscription(data: {
     userId: string;
     tier: SubscriptionTier;
-    billingCycle: 'monthly' | 'quarterly' | 'annual';
+    billingCycle: "monthly" | "quarterly" | "annual";
   }) {
     // Check if user already has active subscription
     const existing = await this.prisma.platformSubscription.findFirst({
       where: {
         userId: data.userId,
-        status: 'active'
-      }
+        status: "active",
+      },
     });
 
     if (existing) {
-      throw new Error('User already has an active subscription');
+      throw new Error("User already has an active subscription");
     }
 
     // Get pricing
     const amount = this.pricing[data.tier][data.billingCycle];
 
     if (amount === undefined) {
-      throw new Error('Invalid tier or billing cycle');
+      throw new Error("Invalid tier or billing cycle");
     }
 
     // Calculate billing period
@@ -66,11 +66,18 @@ export class PlatformSubscriptionService {
     let razorpaySubscriptionId: string | undefined;
 
     if (amount > 0) {
-      const plan = await this.createRazorpayPlan(data.tier, data.billingCycle, amount);
+      const plan = await this.createRazorpayPlan(
+        data.tier,
+        data.billingCycle,
+        amount,
+      );
       razorpayPlanId = plan.id;
 
       // Create Razorpay subscription
-      const subscription = await this.createRazorpaySubscription(data.userId, razorpayPlanId);
+      const subscription = await this.createRazorpaySubscription(
+        data.userId,
+        razorpayPlanId,
+      );
       razorpaySubscriptionId = subscription.id;
     }
 
@@ -80,15 +87,15 @@ export class PlatformSubscriptionService {
         userId: data.userId,
         tier: data.tier,
         amount,
-        currency: 'INR',
+        currency: "INR",
         billingCycle: data.billingCycle,
         razorpaySubscriptionId,
         razorpayPlanId,
-        status: 'active',
+        status: "active",
         currentPeriodStart,
         currentPeriodEnd,
-        nextBillingDate
-      }
+        nextBillingDate,
+      },
     });
 
     // Update user role based on tier
@@ -103,11 +110,15 @@ export class PlatformSubscriptionService {
   private async createRazorpayPlan(
     tier: SubscriptionTier,
     billingCycle: string,
-    amount: number
+    amount: number,
   ) {
-    const period = billingCycle === 'monthly' ? 'monthly' : 
-                   billingCycle === 'quarterly' ? 'monthly' : 'yearly';
-    const interval = billingCycle === 'quarterly' ? 3 : 1;
+    const period =
+      billingCycle === "monthly"
+        ? "monthly"
+        : billingCycle === "quarterly"
+          ? "monthly"
+          : "yearly";
+    const interval = billingCycle === "quarterly" ? 3 : 1;
 
     return await this.razorpay.plans.create({
       period,
@@ -115,9 +126,9 @@ export class PlatformSubscriptionService {
       item: {
         name: `NeuronHire ${tier} - ${billingCycle}`,
         amount: Math.round(amount * 100), // Convert to paise
-        currency: 'INR',
-        description: `${tier} subscription - ${billingCycle} billing`
-      }
+        currency: "INR",
+        description: `${tier} subscription - ${billingCycle} billing`,
+      },
     });
   }
 
@@ -126,11 +137,11 @@ export class PlatformSubscriptionService {
    */
   private async createRazorpaySubscription(userId: string, planId: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
 
     return await this.razorpay.subscriptions.create({
@@ -140,8 +151,8 @@ export class PlatformSubscriptionService {
       total_count: 0, // Infinite billing
       notes: {
         userId: user.id,
-        email: user.email
-      }
+        email: user.email,
+      },
     });
   }
 
@@ -150,18 +161,18 @@ export class PlatformSubscriptionService {
    */
   async processBilling(razorpaySubscriptionId: string) {
     const subscription = await this.prisma.platformSubscription.findFirst({
-      where: { razorpaySubscriptionId }
+      where: { razorpaySubscriptionId },
     });
 
     if (!subscription) {
-      throw new Error('Subscription not found');
+      throw new Error("Subscription not found");
     }
 
     // Calculate next billing period
     const currentPeriodStart = subscription.currentPeriodEnd;
     const currentPeriodEnd = this.calculatePeriodEnd(
       subscription.billingCycle,
-      currentPeriodStart
+      currentPeriodStart,
     );
     const nextBillingDate = currentPeriodEnd;
 
@@ -171,20 +182,20 @@ export class PlatformSubscriptionService {
       data: {
         currentPeriodStart,
         currentPeriodEnd,
-        nextBillingDate
-      }
+        nextBillingDate,
+      },
     });
 
     // Create payment record
     const feeCalc = this.feeEngine.calculateSubscriptionFee(
-      parseFloat(subscription.amount.toString())
+      parseFloat(subscription.amount.toString()),
     );
 
     await this.prisma.payment.create({
       data: {
         userId: subscription.userId,
-        type: 'subscription',
-        status: 'completed',
+        type: "subscription",
+        status: "completed",
         amount: subscription.amount,
         currency: subscription.currency,
         platformFee: 0,
@@ -192,8 +203,8 @@ export class PlatformSubscriptionService {
         netAmount: feeCalc.subtotal,
         description: `${subscription.tier} subscription - ${subscription.billingCycle}`,
         completedAt: new Date(),
-        idempotencyKey: `sub_${razorpaySubscriptionId}_${Date.now()}`
-      }
+        idempotencyKey: `sub_${razorpaySubscriptionId}_${Date.now()}`,
+      },
     });
 
     return { success: true, nextBillingDate };
@@ -210,36 +221,36 @@ export class PlatformSubscriptionService {
     const subscription = await this.prisma.platformSubscription.findFirst({
       where: {
         userId: data.userId,
-        status: 'active'
-      }
+        status: "active",
+      },
     });
 
     if (!subscription) {
-      throw new Error('No active subscription found');
+      throw new Error("No active subscription found");
     }
 
     // Cancel Razorpay subscription
     if (subscription.razorpaySubscriptionId) {
       await this.razorpay.subscriptions.cancel(
         subscription.razorpaySubscriptionId,
-        data.cancelAtPeriodEnd || false
+        data.cancelAtPeriodEnd || false,
       );
     }
 
     // Update subscription
     const updateData: any = {
       cancellationReason: data.reason,
-      cancelAtPeriodEnd: data.cancelAtPeriodEnd || false
+      cancelAtPeriodEnd: data.cancelAtPeriodEnd || false,
     };
 
     if (!data.cancelAtPeriodEnd) {
-      updateData.status = 'cancelled';
+      updateData.status = "cancelled";
       updateData.cancelledAt = new Date();
     }
 
     await this.prisma.platformSubscription.update({
       where: { id: subscription.id },
-      data: updateData
+      data: updateData,
     });
 
     // Downgrade user to basic tier if cancelled immediately
@@ -260,12 +271,12 @@ export class PlatformSubscriptionService {
     const subscription = await this.prisma.platformSubscription.findFirst({
       where: {
         userId: data.userId,
-        status: 'active'
-      }
+        status: "active",
+      },
     });
 
     if (!subscription) {
-      throw new Error('No active subscription found');
+      throw new Error("No active subscription found");
     }
 
     // Get new pricing
@@ -273,29 +284,40 @@ export class PlatformSubscriptionService {
     const newAmount = tierPricing[subscription.billingCycle];
 
     if (newAmount === undefined) {
-      throw new Error('Invalid tier');
+      throw new Error("Invalid tier");
     }
 
     // Calculate prorated amount
     const daysRemaining = Math.ceil(
-      (subscription.currentPeriodEnd.getTime() - new Date().getTime()) / 
-      (1000 * 60 * 60 * 24)
+      (subscription.currentPeriodEnd.getTime() - new Date().getTime()) /
+        (1000 * 60 * 60 * 24),
     );
     const totalDays = Math.ceil(
-      (subscription.currentPeriodEnd.getTime() - subscription.currentPeriodStart.getTime()) / 
-      (1000 * 60 * 60 * 24)
+      (subscription.currentPeriodEnd.getTime() -
+        subscription.currentPeriodStart.getTime()) /
+        (1000 * 60 * 60 * 24),
     );
-    const proratedAmount = ((newAmount - parseFloat(subscription.amount.toString())) * daysRemaining) / totalDays;
+    const proratedAmount =
+      ((newAmount - parseFloat(subscription.amount.toString())) *
+        daysRemaining) /
+      totalDays;
 
     // Create new Razorpay plan
-    const plan = await this.createRazorpayPlan(data.newTier, subscription.billingCycle, newAmount);
+    const plan = await this.createRazorpayPlan(
+      data.newTier,
+      subscription.billingCycle,
+      newAmount,
+    );
 
     // Update Razorpay subscription
     if (subscription.razorpaySubscriptionId) {
-      await this.razorpay.subscriptions.update(subscription.razorpaySubscriptionId, {
-        plan_id: plan.id,
-        quantity: 1
-      });
+      await this.razorpay.subscriptions.update(
+        subscription.razorpaySubscriptionId,
+        {
+          plan_id: plan.id,
+          quantity: 1,
+        },
+      );
     }
 
     // Update subscription
@@ -304,17 +326,17 @@ export class PlatformSubscriptionService {
       data: {
         tier: data.newTier,
         amount: newAmount,
-        razorpayPlanId: plan.id
-      }
+        razorpayPlanId: plan.id,
+      },
     });
 
     // Update user role
     await this.updateUserRole(data.userId, data.newTier);
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       proratedAmount,
-      newAmount 
+      newAmount,
     };
   }
 
@@ -326,23 +348,23 @@ export class PlatformSubscriptionService {
       where: {
         userId,
         status: {
-          in: ['active', 'past_due']
-        }
+          in: ["active", "past_due"],
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
 
     if (!subscription) {
       return {
         tier: SubscriptionTier.engineer_basic,
-        status: 'none',
-        features: this.getFeatures(SubscriptionTier.engineer_basic)
+        status: "none",
+        features: this.getFeatures(SubscriptionTier.engineer_basic),
       };
     }
 
     return {
       ...subscription,
-      features: this.getFeatures(subscription.tier)
+      features: this.getFeatures(subscription.tier),
     };
   }
 
@@ -352,50 +374,50 @@ export class PlatformSubscriptionService {
   private getFeatures(tier: SubscriptionTier): string[] {
     const features: Record<SubscriptionTier, string[]> = {
       engineer_basic: [
-        'Basic profile',
-        'Apply to jobs',
-        'Submit to bounties',
-        'Standard support'
+        "Basic profile",
+        "Apply to jobs",
+        "Submit to bounties",
+        "Standard support",
       ],
       engineer_pro: [
-        'All Basic features',
-        'Advanced analytics',
-        'Priority matching',
-        'Profile boost',
-        'Priority support',
-        'Unlimited proposals'
+        "All Basic features",
+        "Advanced analytics",
+        "Priority matching",
+        "Profile boost",
+        "Priority support",
+        "Unlimited proposals",
       ],
       engineer_premium: [
-        'All Pro features',
-        'Featured profile',
-        'Direct company outreach',
-        'Dedicated account manager',
-        'Custom portfolio showcase',
-        'Early access to jobs'
+        "All Pro features",
+        "Featured profile",
+        "Direct company outreach",
+        "Dedicated account manager",
+        "Custom portfolio showcase",
+        "Early access to jobs",
       ],
       company_starter: [
-        'Post up to 5 jobs/month',
-        'Basic talent search',
-        'Standard support',
-        'Basic analytics'
+        "Post up to 5 jobs/month",
+        "Basic talent search",
+        "Standard support",
+        "Basic analytics",
       ],
       company_growth: [
-        'Unlimited job posts',
-        'Advanced talent search API',
-        'Priority support',
-        'Advanced analytics',
-        'Team collaboration tools',
-        'Custom branding'
+        "Unlimited job posts",
+        "Advanced talent search API",
+        "Priority support",
+        "Advanced analytics",
+        "Team collaboration tools",
+        "Custom branding",
       ],
       company_enterprise: [
-        'All Growth features',
-        'Dedicated account manager',
-        'Custom integrations',
-        'White-label options',
-        'SLA guarantee',
-        'Custom contracts',
-        'Volume discounts'
-      ]
+        "All Growth features",
+        "Dedicated account manager",
+        "Custom integrations",
+        "White-label options",
+        "SLA guarantee",
+        "Custom contracts",
+        "Volume discounts",
+      ],
     };
 
     return features[tier] || [];
@@ -433,13 +455,13 @@ export class PlatformSubscriptionService {
     const end = new Date(start);
 
     switch (billingCycle) {
-      case 'monthly':
+      case "monthly":
         end.setMonth(end.getMonth() + 1);
         break;
-      case 'quarterly':
+      case "quarterly":
         end.setMonth(end.getMonth() + 3);
         break;
-      case 'annual':
+      case "annual":
         end.setFullYear(end.getFullYear() + 1);
         break;
     }
@@ -459,18 +481,18 @@ export class PlatformSubscriptionService {
    */
   async handlePaymentFailure(razorpaySubscriptionId: string) {
     const subscription = await this.prisma.platformSubscription.findFirst({
-      where: { razorpaySubscriptionId }
+      where: { razorpaySubscriptionId },
     });
 
     if (!subscription) {
-      throw new Error('Subscription not found');
+      throw new Error("Subscription not found");
     }
 
     await this.prisma.platformSubscription.update({
       where: { id: subscription.id },
       data: {
-        status: 'past_due'
-      }
+        status: "past_due",
+      },
     });
 
     return { success: true };
@@ -483,19 +505,19 @@ export class PlatformSubscriptionService {
     const subscription = await this.prisma.platformSubscription.findFirst({
       where: {
         userId,
-        status: 'past_due'
-      }
+        status: "past_due",
+      },
     });
 
     if (!subscription) {
-      throw new Error('No past due subscription found');
+      throw new Error("No past due subscription found");
     }
 
     await this.prisma.platformSubscription.update({
       where: { id: subscription.id },
       data: {
-        status: 'active'
-      }
+        status: "active",
+      },
     });
 
     return { success: true };

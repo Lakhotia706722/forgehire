@@ -7,12 +7,11 @@ function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        // Don't refetch on window focus in production — data is cached server-side
         refetchOnWindowFocus: false,
-        // Retry once on failure
         retry: 1,
-        // Consider data stale after 60 seconds
         staleTime: 60_000,
+        // Never crash the UI when API is down — show empty/error states instead
+        throwOnError: false,
       },
     },
   });

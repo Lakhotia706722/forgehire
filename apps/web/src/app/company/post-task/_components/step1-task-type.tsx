@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { AriaRadio } from '@/components/ui/aria-tab-button';
 import type { TaskType } from '@/lib/bounty-data';
 
 const TASK_TYPES: {
@@ -9,36 +10,36 @@ const TASK_TYPES: {
   icon: string;
   description: string;
   bestFor: string[];
-  color: string;
-  borderColor: string;
-  bgColor: string;
+  selectedClass: string;
+  dotClass: string;
+  bulletClass: string;
 }[] = [
   {
     type: 'Bounty',
     icon: '🎯',
     description: 'Post a task with a fixed reward. Any verified engineer can participate and submit a solution.',
     bestFor: ['One-time deliverables', 'Specific technical problems', 'When you want multiple solutions to compare'],
-    color: '#00D4FF',
-    borderColor: 'rgba(0,212,255,0.5)',
-    bgColor: 'rgba(0,212,255,0.06)',
+    selectedClass: 'task-type-card-bounty-selected',
+    dotClass: 'bg-accent-cyan',
+    bulletClass: 'text-accent-cyan',
   },
   {
     type: 'Direct',
     icon: '🤝',
     description: 'Hire a specific engineer directly for a project. Best for ongoing work or when you have a preferred candidate.',
     bestFor: ['Ongoing projects', 'Hourly or milestone-based work', 'When you already have someone in mind'],
-    color: '#7B5EA7',
-    borderColor: 'rgba(123,94,167,0.5)',
-    bgColor: 'rgba(123,94,167,0.06)',
+    selectedClass: 'task-type-card-direct-selected',
+    dotClass: 'bg-accent-violet',
+    bulletClass: 'text-accent-violet',
   },
   {
     type: 'Contest',
     icon: '🏆',
     description: 'Run a competition with ranked prizes. Multiple engineers compete and top solutions win.',
     bestFor: ['Innovation challenges', 'When you want the best possible solution', 'Community engagement'],
-    color: '#F59E0B',
-    borderColor: 'rgba(245,158,11,0.5)',
-    bgColor: 'rgba(245,158,11,0.06)',
+    selectedClass: 'task-type-card-contest-selected',
+    dotClass: 'bg-accent-amber',
+    bulletClass: 'text-accent-amber',
   },
 ];
 
@@ -57,24 +58,18 @@ export function Step1TaskType({ selected, onSelect }: Step1Props) {
 
       <div className="grid gap-4" role="radiogroup" aria-label="Task type selection">
         {TASK_TYPES.map((t) => (
-          <button
+          <AriaRadio
             key={t.type}
-            type="button"
-            role="radio"
-            aria-checked={selected === t.type}
+            checked={selected === t.type}
             onClick={() => onSelect(t.type)}
             className={cn(
               'text-left p-5 rounded-2xl border-2 transition-all duration-200',
               'hover:-translate-y-0.5',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
               selected === t.type
-                ? 'border-[var(--border)] bg-[var(--bg)]'
-                : 'border-[rgba(255,255,255,0.06)] bg-bg-surface hover:border-[var(--border)]'
+                ? t.selectedClass
+                : 'border-[rgba(255,255,255,0.06)] bg-bg-surface hover:border-[rgba(255,255,255,0.15)]'
             )}
-            style={{
-              '--border': t.borderColor,
-              '--bg': t.bgColor,
-            } as React.CSSProperties}
           >
             <div className="flex items-start gap-4">
               <span className="text-3xl shrink-0" aria-hidden="true">{t.icon}</span>
@@ -83,8 +78,7 @@ export function Step1TaskType({ selected, onSelect }: Step1Props) {
                   <span className="font-display font-bold text-text-primary text-lg">{t.type}</span>
                   {selected === t.type && (
                     <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center"
-                      style={{ background: t.color }}
+                      className={cn('w-5 h-5 rounded-full flex items-center justify-center', t.dotClass)}
                       aria-hidden="true"
                     >
                       <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
@@ -99,7 +93,7 @@ export function Step1TaskType({ selected, onSelect }: Step1Props) {
                   <ul className="space-y-1">
                     {t.bestFor.map((b) => (
                       <li key={b} className="flex items-center gap-1.5 text-xs text-text-muted">
-                        <span style={{ color: t.color }} aria-hidden="true">·</span>
+                        <span className={cn(t.bulletClass)} aria-hidden="true">·</span>
                         {b}
                       </li>
                     ))}
@@ -107,7 +101,7 @@ export function Step1TaskType({ selected, onSelect }: Step1Props) {
                 </div>
               </div>
             </div>
-          </button>
+          </AriaRadio>
         ))}
       </div>
     </div>

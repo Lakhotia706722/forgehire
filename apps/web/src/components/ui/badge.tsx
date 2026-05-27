@@ -43,7 +43,7 @@ export function Badge({
   );
 }
 
-/** Convenience tier badge */
+/** Display tier label from API (elite | professional | … or Title Case) */
 export type TierName = 'Elite' | 'Professional' | 'Verified' | 'Conditional';
 
 const tierConfig: Record<TierName, { variant: BadgeVariant; dot: string }> = {
@@ -53,12 +53,30 @@ const tierConfig: Record<TierName, { variant: BadgeVariant; dot: string }> = {
   Conditional:  { variant: 'gray',   dot: 'bg-text-muted' },
 };
 
-export function TierBadge({ tier }: { tier: TierName }) {
-  const { variant, dot } = tierConfig[tier];
+const TIER_ALIASES: Record<string, TierName> = {
+  elite: 'Elite',
+  professional: 'Professional',
+  verified: 'Verified',
+  conditional: 'Conditional',
+  Elite: 'Elite',
+  Professional: 'Professional',
+  Verified: 'Verified',
+  Conditional: 'Conditional',
+};
+
+export function normalizeTierName(tier: string | null | undefined): TierName {
+  if (!tier) return 'Conditional';
+  const key = tier.trim();
+  return TIER_ALIASES[key] ?? TIER_ALIASES[key.toLowerCase()] ?? 'Conditional';
+}
+
+export function TierBadge({ tier }: { tier: string | null | undefined }) {
+  const normalized = normalizeTierName(tier);
+  const { variant, dot } = tierConfig[normalized];
   return (
     <Badge variant={variant} tier>
       <span className={cn('w-1.5 h-1.5 rounded-full', dot)} />
-      {tier}
+      {normalized}
     </Badge>
   );
 }

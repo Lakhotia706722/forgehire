@@ -1,6 +1,6 @@
-import { PrismaClient, HiringMode, ContractStatus } from '@prisma/client';
-import { ContractGeneratorService } from './contract-generator.service';
-import { RazorpayEscrowService } from './razorpay-escrow.service';
+import { PrismaClient, HiringMode, ContractStatus } from "@prisma/client";
+import { ContractGeneratorService } from "./contract-generator.service";
+import { RazorpayEscrowService } from "./razorpay-escrow.service";
 
 export class ContractService {
   private prisma: PrismaClient;
@@ -43,7 +43,7 @@ export class ContractService {
   }) {
     // Calculate placement fee for full-time hires
     let placementFee: number | undefined;
-    if (data.hiringMode === 'full_time' && data.ctc) {
+    if (data.hiringMode === "full_time" && data.ctc) {
       const feePercentage = data.ctc < 1000000 ? 0.08 : 0.12; // 8% for <10L, 12% for >=10L
       placementFee = data.ctc * feePercentage;
     }
@@ -61,7 +61,7 @@ export class ContractService {
         startDate: data.startDate,
         endDate: data.endDate,
         rate: data.rate,
-        currency: data.currency || 'INR',
+        currency: data.currency || "INR",
         ctc: data.ctc,
         placementFee,
         stipendAmount: data.stipendAmount,
@@ -70,26 +70,27 @@ export class ContractService {
         estimatedHours: data.estimatedHours,
         totalAmount: data.totalAmount,
         milestones: data.milestones || undefined,
-        ipOwnership: data.ipOwnership || 'company',
+        ipOwnership: data.ipOwnership || "company",
         ndaRequired: data.ndaRequired ?? true,
         confidentialityTerms: data.confidentialityTerms,
         trialMode: data.trialMode || false,
-        status: ContractStatus.draft
+        status: ContractStatus.draft,
       },
       include: {
         companyProfile: true,
         engineerProfile: true,
         companyUser: true,
-        engineerUser: true
-      }
+        engineerUser: true,
+      },
     });
 
     // Generate pre-filled contract PDF
-    const contractPdfUrl = await this.contractGenerator.generateContractPDF(contract);
+    const contractPdfUrl =
+      await this.contractGenerator.generateContractPDF(contract);
 
     await this.prisma.contract.update({
       where: { id: contract.id },
-      data: { contractPdfUrl }
+      data: { contractPdfUrl },
     });
 
     return { ...contract, contractPdfUrl };
@@ -102,32 +103,32 @@ export class ContractService {
     contractId: string,
     userId: string,
     signature: string,
-    ipAddress: string
+    ipAddress: string,
   ) {
     const contract = await this.prisma.contract.findUnique({
       where: { id: contractId },
       include: {
         companyProfile: true,
-        engineerProfile: true
-      }
+        engineerProfile: true,
+      },
     });
 
     if (!contract) {
-      throw new Error('Contract not found');
+      throw new Error("Contract not found");
     }
 
     const isCompany = contract.companyUserId === userId;
     const isEngineer = contract.engineerUserId === userId;
 
     if (!isCompany && !isEngineer) {
-      throw new Error('Unauthorized to sign this contract');
+      throw new Error("Unauthorized to sign this contract");
     }
 
     const updateData: any = {};
 
     if (isCompany) {
       if (contract.companySigned) {
-        throw new Error('Company has already signed this contract');
+        throw new Error("Company has already signed this contract");
       }
       updateData.companySigned = true;
       updateData.companySignature = signature;
@@ -137,7 +138,7 @@ export class ContractService {
 
     if (isEngineer) {
       if (contract.engineerSigned) {
-        throw new Error('Engineer has already signed this contract');
+        throw new Error("Engineer has already signed this contract");
       }
       updateData.engineerSigned = true;
       updateData.engineerSignature = signature;
@@ -152,8 +153,8 @@ export class ContractService {
         companyProfile: true,
         engineerProfile: true,
         companyUser: true,
-        engineerUser: true
-      }
+        engineerUser: true,
+      },
     });
 
     // If both parties have signed, activate the contract
@@ -174,26 +175,27 @@ export class ContractService {
         companyProfile: true,
         engineerProfile: true,
         companyUser: true,
-        engineerUser: true
-      }
+        engineerUser: true,
+      },
     });
 
     if (!contract) {
-      throw new Error('Contract not found');
+      throw new Error("Contract not found");
     }
 
     // Generate final signed contract PDF
-    const finalContractUrl = await this.contractGenerator.generateSignedContractPDF(contract);
+    const finalContractUrl =
+      await this.contractGenerator.generateSignedContractPDF(contract);
 
     // Create escrow for non-full-time contracts
     let walletBalance: number | undefined;
-    if (contract.hiringMode === 'hourly_contract') {
+    if (contract.hiringMode === "hourly_contract") {
       // For hourly contracts, company needs to pre-fund wallet
       walletBalance = 0;
     }
 
     // Create milestones for project contracts
-    if (contract.hiringMode === 'project_contract' && contract.milestones) {
+    if (contract.hiringMode === "project_contract" && contract.milestones) {
       const milestones = contract.milestones as any[];
       for (let i = 0; i < milestones.length; i++) {
         const milestone = milestones[i];
@@ -204,10 +206,12 @@ export class ContractService {
             title: milestone.title,
             description: milestone.description,
             amount: milestone.amount,
-            dueDate: milestone.dueDate ? new Date(milestone.dueDate) : undefined,
+            dueDate: milestone.dueDate
+              ? new Date(milestone.dueDate)
+              : undefined,
             deliverables: milestone.deliverables || undefined,
-            status: 'pending'
-          }
+            status: "pending",
+          },
         });
       }
     }
@@ -219,8 +223,8 @@ export class ContractService {
         status: ContractStatus.active,
         finalContractUrl,
         activatedAt: new Date(),
-        walletBalance
-      }
+        walletBalance,
+      },
     });
 
     // Create project chat room
@@ -234,18 +238,18 @@ export class ContractService {
    */
   private async createProjectChatRoom(contractId: string) {
     const contract = await this.prisma.contract.findUnique({
-      where: { id: contractId }
+      where: { id: contractId },
     });
 
     if (!contract) {
-      throw new Error('Contract not found');
+      throw new Error("Contract not found");
     }
 
     const room = await this.prisma.projectChatRoom.create({
       data: {
         contractId,
-        name: `${contract.title} - Project Room`
-      }
+        name: `${contract.title} - Project Room`,
+      },
     });
 
     // Add company and engineer as participants
@@ -254,14 +258,14 @@ export class ContractService {
         {
           roomId: room.id,
           userId: contract.companyUserId,
-          role: 'company_admin'
+          role: "company_admin",
         },
         {
           roomId: room.id,
           userId: contract.engineerUserId,
-          role: 'engineer'
-        }
-      ]
+          role: "engineer",
+        },
+      ],
     });
 
     return room;
@@ -276,22 +280,25 @@ export class ContractService {
     data: {
       reason: string;
       changes: any;
-    }
+    },
   ) {
     const contract = await this.prisma.contract.findUnique({
-      where: { id: contractId }
+      where: { id: contractId },
     });
 
     if (!contract) {
-      throw new Error('Contract not found');
+      throw new Error("Contract not found");
     }
 
-    if (contract.companyUserId !== userId && contract.engineerUserId !== userId) {
-      throw new Error('Unauthorized');
+    if (
+      contract.companyUserId !== userId &&
+      contract.engineerUserId !== userId
+    ) {
+      throw new Error("Unauthorized");
     }
 
     if (contract.status !== ContractStatus.active) {
-      throw new Error('Can only amend active contracts');
+      throw new Error("Can only amend active contracts");
     }
 
     const amendmentNumber = contract.amendmentCount + 1;
@@ -301,7 +308,7 @@ export class ContractService {
       contract,
       amendmentNumber,
       data.reason,
-      data.changes
+      data.changes,
     );
 
     const amendment = await this.prisma.contractAmendment.create({
@@ -310,8 +317,8 @@ export class ContractService {
         amendmentNumber,
         reason: data.reason,
         changes: data.changes,
-        amendmentPdfUrl
-      }
+        amendmentPdfUrl,
+      },
     });
 
     // Update contract status
@@ -320,8 +327,8 @@ export class ContractService {
       data: {
         status: ContractStatus.amended,
         amendmentCount: amendmentNumber,
-        lastAmendedAt: new Date()
-      }
+        lastAmendedAt: new Date(),
+      },
     });
 
     return amendment;
@@ -333,18 +340,18 @@ export class ContractService {
   async signAmendment(amendmentId: string, userId: string) {
     const amendment = await this.prisma.contractAmendment.findUnique({
       where: { id: amendmentId },
-      include: { contract: true }
+      include: { contract: true },
     });
 
     if (!amendment) {
-      throw new Error('Amendment not found');
+      throw new Error("Amendment not found");
     }
 
     const isCompany = amendment.contract.companyUserId === userId;
     const isEngineer = amendment.contract.engineerUserId === userId;
 
     if (!isCompany && !isEngineer) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     const updateData: any = {};
@@ -361,24 +368,25 @@ export class ContractService {
 
     const updatedAmendment = await this.prisma.contractAmendment.update({
       where: { id: amendmentId },
-      data: updateData
+      data: updateData,
     });
 
     // If both signed, generate final amendment PDF and reactivate contract
     if (updatedAmendment.companySigned && updatedAmendment.engineerSigned) {
-      const finalPdfUrl = await this.contractGenerator.generateSignedAmendmentPDF(
-        amendment.contract,
-        updatedAmendment
-      );
+      const finalPdfUrl =
+        await this.contractGenerator.generateSignedAmendmentPDF(
+          amendment.contract,
+          updatedAmendment,
+        );
 
       await this.prisma.contractAmendment.update({
         where: { id: amendmentId },
-        data: { finalPdfUrl }
+        data: { finalPdfUrl },
       });
 
       await this.prisma.contract.update({
         where: { id: amendment.contractId },
-        data: { status: ContractStatus.active }
+        data: { status: ContractStatus.active },
       });
     }
 
@@ -390,19 +398,22 @@ export class ContractService {
    */
   async completeTrial(contractId: string, userId: string, extend: boolean) {
     const contract = await this.prisma.contract.findUnique({
-      where: { id: contractId }
+      where: { id: contractId },
     });
 
     if (!contract) {
-      throw new Error('Contract not found');
+      throw new Error("Contract not found");
     }
 
     if (!contract.trialMode) {
-      throw new Error('Contract is not in trial mode');
+      throw new Error("Contract is not in trial mode");
     }
 
-    if (contract.companyUserId !== userId && contract.engineerUserId !== userId) {
-      throw new Error('Unauthorized');
+    if (
+      contract.companyUserId !== userId &&
+      contract.engineerUserId !== userId
+    ) {
+      throw new Error("Unauthorized");
     }
 
     if (extend) {
@@ -410,8 +421,8 @@ export class ContractService {
         where: { id: contractId },
         data: {
           trialCompleted: true,
-          trialExtended: true
-        }
+          trialExtended: true,
+        },
       });
     } else {
       // Decline - terminate contract
@@ -421,8 +432,8 @@ export class ContractService {
           trialCompleted: true,
           status: ContractStatus.terminated,
           terminatedAt: new Date(),
-          terminationReason: 'Trial not extended'
-        }
+          terminationReason: "Trial not extended",
+        },
       });
     }
   }
@@ -440,27 +451,27 @@ export class ContractService {
           select: {
             id: true,
             email: true,
-            role: true
-          }
+            role: true,
+          },
         },
         engineerUser: {
           select: {
             id: true,
             email: true,
-            role: true
-          }
+            role: true,
+          },
         },
         milestonePayments: true,
         amendments: true,
         timeEntries: {
-          orderBy: { date: 'desc' },
-          take: 10
-        }
-      }
+          orderBy: { date: "desc" },
+          take: 10,
+        },
+      },
     });
 
     if (!contract) {
-      throw new Error('Contract not found');
+      throw new Error("Contract not found");
     }
 
     // Check authorization
@@ -468,7 +479,7 @@ export class ContractService {
       contract.companyUserId !== userId &&
       contract.engineerUserId !== userId
     ) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     return contract;
@@ -477,22 +488,22 @@ export class ContractService {
   /**
    * Get user's contracts
    */
-  async getUserContracts(userId: string, filters?: {
-    hiringMode?: HiringMode;
-    status?: ContractStatus;
-    role?: 'company' | 'engineer';
-  }) {
+  async getUserContracts(
+    userId: string,
+    filters?: {
+      hiringMode?: HiringMode;
+      status?: ContractStatus;
+      role?: "company" | "engineer";
+    },
+  ) {
     const where: any = {};
 
-    if (filters?.role === 'company') {
+    if (filters?.role === "company") {
       where.companyUserId = userId;
-    } else if (filters?.role === 'engineer') {
+    } else if (filters?.role === "engineer") {
       where.engineerUserId = userId;
     } else {
-      where.OR = [
-        { companyUserId: userId },
-        { engineerUserId: userId }
-      ];
+      where.OR = [{ companyUserId: userId }, { engineerUserId: userId }];
     }
 
     if (filters?.hiringMode) {
@@ -509,23 +520,23 @@ export class ContractService {
         companyProfile: {
           select: {
             companyName: true,
-            logoUrl: true
-          }
+            logoUrl: true,
+          },
         },
         engineerProfile: {
           select: {
             fullName: true,
-            neuronScore: true
-          }
+            neuronScore: true,
+          },
         },
         _count: {
           select: {
             milestonePayments: true,
-            timeEntries: true
-          }
-        }
+            timeEntries: true,
+          },
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
   }
 }

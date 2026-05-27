@@ -1,14 +1,14 @@
-import { PrismaClient, KYCStatus } from '@prisma/client';
-import { getEnv } from '../config/env';
+import { PrismaClient, KYCStatus } from "@prisma/client";
+import { getEnv } from "../config/env";
 
 export class KYCService {
   private prisma: PrismaClient;
-  private digioApiUrl = 'https://api.digio.in/v2';
+  private digioApiUrl = "https://api.digio.in/v2";
   private digioApiKey: string;
 
   constructor() {
     this.prisma = new PrismaClient();
-    this.digioApiKey = getEnv('DIGIO_API_KEY') ?? '';
+    this.digioApiKey = getEnv("DIGIO_API_KEY") ?? "";
   }
 
   /**
@@ -17,11 +17,11 @@ export class KYCService {
   async initiateKYC(userId: string, engineerProfileId: string) {
     // Check if KYC already exists
     let kyc = await this.prisma.kYCVerification.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
-    if (kyc && kyc.status === 'verified') {
-      throw new Error('KYC already verified');
+    if (kyc && kyc.status === "verified") {
+      throw new Error("KYC already verified");
     }
 
     if (!kyc) {
@@ -29,8 +29,8 @@ export class KYCService {
         data: {
           userId,
           engineerProfileId,
-          status: KYCStatus.pending
-        }
+          status: KYCStatus.pending,
+        },
       });
     }
 
@@ -40,18 +40,22 @@ export class KYCService {
   /**
    * Submit Aadhaar for verification
    */
-  async submitAadhaar(userId: string, aadhaarNumber: string, documentUrl: string) {
+  async submitAadhaar(
+    userId: string,
+    aadhaarNumber: string,
+    documentUrl: string,
+  ) {
     const kyc = await this.prisma.kYCVerification.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!kyc) {
-      throw new Error('KYC not initiated');
+      throw new Error("KYC not initiated");
     }
 
     // Validate Aadhaar format (12 digits)
     if (!/^\d{12}$/.test(aadhaarNumber)) {
-      throw new Error('Invalid Aadhaar number format');
+      throw new Error("Invalid Aadhaar number format");
     }
 
     // In production, integrate with Digio API for verification
@@ -61,14 +65,14 @@ export class KYCService {
       data: {
         aadhaarNumber,
         aadhaarDocUrl: documentUrl,
-        status: KYCStatus.pending
-      }
+        status: KYCStatus.pending,
+      },
     });
 
     // Trigger Digio verification
     await this.verifyAadhaarWithDigio(userId, aadhaarNumber);
 
-    return { success: true, message: 'Aadhaar submitted for verification' };
+    return { success: true, message: "Aadhaar submitted for verification" };
   }
 
   /**
@@ -76,16 +80,16 @@ export class KYCService {
    */
   async submitPAN(userId: string, panNumber: string, documentUrl: string) {
     const kyc = await this.prisma.kYCVerification.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!kyc) {
-      throw new Error('KYC not initiated');
+      throw new Error("KYC not initiated");
     }
 
     // Validate PAN format (ABCDE1234F)
     if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNumber)) {
-      throw new Error('Invalid PAN number format');
+      throw new Error("Invalid PAN number format");
     }
 
     await this.prisma.kYCVerification.update({
@@ -93,20 +97,21 @@ export class KYCService {
       data: {
         panNumber,
         panDocUrl: documentUrl,
-        status: KYCStatus.pending
-      }
+        status: KYCStatus.pending,
+      },
     });
 
     // Trigger Digio verification
     await this.verifyPANWithDigio(userId, panNumber);
 
-    return { success: true, message: 'PAN submitted for verification' };
+    return { success: true, message: "PAN submitted for verification" };
   }
 
   /**
    * Verify Aadhaar with Digio API
    */
-  private async verifyAadhaarWithDigio(userId: string, _aadhaarNumber: string) { // eslint-disable-line @typescript-eslint/no-unused-vars
+  private async verifyAadhaarWithDigio(userId: string, _aadhaarNumber: string) {
+    // eslint-disable-line @typescript-eslint/no-unused-vars
     try {
       // In production, call Digio API
       // const response = await axios.post(
@@ -127,8 +132,8 @@ export class KYCService {
           data: {
             aadhaarVerified: true,
             digioRequestId: `DIGIO_${Date.now()}`,
-            digioStatus: 'verified'
-          }
+            digioStatus: "verified",
+          },
         });
 
         // Check if both documents verified
@@ -137,15 +142,16 @@ export class KYCService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Digio Aadhaar verification error:', error);
-      throw new Error('Aadhaar verification failed');
+      console.error("Digio Aadhaar verification error:", error);
+      throw new Error("Aadhaar verification failed");
     }
   }
 
   /**
    * Verify PAN with Digio API
    */
-  private async verifyPANWithDigio(userId: string, _panNumber: string) { // eslint-disable-line @typescript-eslint/no-unused-vars
+  private async verifyPANWithDigio(userId: string, _panNumber: string) {
+    // eslint-disable-line @typescript-eslint/no-unused-vars
     try {
       // In production, call Digio API
       // const response = await axios.post(
@@ -164,8 +170,8 @@ export class KYCService {
         await this.prisma.kYCVerification.update({
           where: { userId },
           data: {
-            panVerified: true
-          }
+            panVerified: true,
+          },
         });
 
         // Check if both documents verified
@@ -174,8 +180,8 @@ export class KYCService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Digio PAN verification error:', error);
-      throw new Error('PAN verification failed');
+      console.error("Digio PAN verification error:", error);
+      throw new Error("PAN verification failed");
     }
   }
 
@@ -184,7 +190,7 @@ export class KYCService {
    */
   private async checkFullVerification(userId: string) {
     const kyc = await this.prisma.kYCVerification.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!kyc) return;
@@ -194,8 +200,8 @@ export class KYCService {
         where: { userId },
         data: {
           status: KYCStatus.verified,
-          verifiedAt: new Date()
-        }
+          verifiedAt: new Date(),
+        },
       });
     }
   }
@@ -205,14 +211,14 @@ export class KYCService {
    */
   async getKYCStatus(userId: string) {
     const kyc = await this.prisma.kYCVerification.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!kyc) {
       return {
         status: KYCStatus.not_started,
         aadhaarVerified: false,
-        panVerified: false
+        panVerified: false,
       };
     }
 
@@ -222,7 +228,7 @@ export class KYCService {
       panVerified: kyc.panVerified,
       verifiedAt: kyc.verifiedAt,
       rejectedAt: kyc.rejectedAt,
-      rejectionReason: kyc.rejectionReason
+      rejectionReason: kyc.rejectionReason,
     };
   }
 
@@ -237,7 +243,7 @@ export class KYCService {
     }
 
     const kyc = await this.prisma.kYCVerification.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     return kyc?.status === KYCStatus.verified;
@@ -253,8 +259,8 @@ export class KYCService {
         status: KYCStatus.rejected,
         rejectedAt: new Date(),
         rejectionReason: reason,
-        verifiedBy: rejectedBy
-      }
+        verifiedBy: rejectedBy,
+      },
     });
   }
 
@@ -269,8 +275,8 @@ export class KYCService {
         aadhaarVerified: true,
         panVerified: true,
         verifiedAt: new Date(),
-        verifiedBy
-      }
+        verifiedBy,
+      },
     });
   }
 }

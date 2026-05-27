@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
 
 const SCENARIO_PROMPT = `You are the lead AI engineer at a Series B fintech startup. The CTO has asked you to design and implement a fraud detection system that must:
 
@@ -57,8 +58,7 @@ export function ScenarioSection({ text, onChange }: ScenarioSectionProps) {
           value={text}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Write your technical proposal here..."
-          className="flex-1 bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)] focus:shadow-[0_0_0_3px_rgba(0,212,255,0.1)] resize-none transition-all leading-relaxed"
-          style={{ minHeight: '240px' }}
+          className="scenario-textarea-min flex-1 bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)] focus:shadow-[0_0_0_3px_rgba(0,212,255,0.1)] resize-none transition-all leading-relaxed"
           aria-describedby="word-count-info"
         />
 
@@ -85,20 +85,13 @@ export function ScenarioSection({ text, onChange }: ScenarioSectionProps) {
           </div>
 
           {/* Progress bar */}
-          <div className="h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
-            <div
-              className={cn(
-                'h-full rounded-full transition-all duration-300',
-                meetsMinimum ? 'bg-accent-green' : 'bg-accent-cyan'
-              )}
-              style={{ width: `${progress}%` }}
-              role="progressbar"
-              aria-valuenow={wordCount}
-              aria-valuemin={0}
-              aria-valuemax={MIN_WORDS}
-              aria-label="Word count progress"
-            />
-          </div>
+          <Progress
+            value={wordCount}
+            max={MIN_WORDS}
+            color={meetsMinimum ? 'green' : 'cyan'}
+            size="sm"
+            label="Word count progress"
+          />
         </div>
       </div>
     </div>

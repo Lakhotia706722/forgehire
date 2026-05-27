@@ -1,8 +1,8 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { writeFile, unlink, mkdir } from 'fs/promises';
-import { join } from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { exec } from "child_process";
+import { promisify } from "util";
+import { writeFile, unlink, mkdir } from "fs/promises";
+import { join } from "path";
+import { v4 as uuidv4 } from "uuid";
 
 const execAsync = promisify(exec);
 
@@ -23,15 +23,15 @@ export interface CodeEvaluationResult {
 
 export class CodeEvaluatorService {
   private readonly TIMEOUT = 30000; // 30 seconds
-  private readonly MEMORY_LIMIT = '256m';
-  private readonly TEMP_DIR = '/tmp/code-eval';
+  private readonly MEMORY_LIMIT = "256m";
+  private readonly TEMP_DIR = "/tmp/code-eval";
 
   /**
    * Evaluate Python code in Docker container
    */
   async evaluateCode(
     code: string,
-    testCases: Array<{ input: any; expectedOutput: any; hidden: boolean }>
+    testCases: Array<{ input: any; expectedOutput: any; hidden: boolean }>,
   ): Promise<CodeEvaluationResult> {
     const executionId = uuidv4();
     const codeFile = join(this.TEMP_DIR, `${executionId}.py`);
@@ -56,18 +56,21 @@ export class CodeEvaluatorService {
       // Parse results
       const testResults = this.parseTestResults(result.stdout, testCases);
       const correctness = this.calculateCorrectness(testResults);
-      const efficiency = this.calculateEfficiency(executionTime, result.memoryUsed);
+      const efficiency = this.calculateEfficiency(
+        executionTime,
+        result.memoryUsed,
+      );
 
       return {
-        passed: testResults.every(t => t.passed),
+        passed: testResults.every((t) => t.passed),
         testResults,
         executionTime,
         memoryUsed: result.memoryUsed,
         correctness,
-        efficiency
+        efficiency,
       };
     } catch (error: any) {
-      console.error('Code evaluation error:', error);
+      console.error("Code evaluation error:", error);
       return {
         passed: false,
         testResults: testCases.map((_, i) => ({
@@ -75,12 +78,12 @@ export class CodeEvaluatorService {
           passed: false,
           output: null,
           expected: testCases[i].expectedOutput,
-          error: error.message
+          error: error.message,
         })),
         executionTime: 0,
         memoryUsed: 0,
         correctness: 0,
-        efficiency: 0
+        efficiency: 0,
       };
     } finally {
       // Cleanup
@@ -98,7 +101,7 @@ export class CodeEvaluatorService {
    */
   private async runInDocker(
     executionId: string,
-    _testFile: string
+    _testFile: string,
   ): Promise<{ stdout: string; stderr: string; memoryUsed: number }> {
     const dockerCommand = `docker run --rm \
       --memory=${this.MEMORY_LIMIT} \
@@ -113,7 +116,7 @@ export class CodeEvaluatorService {
     try {
       const { stdout, stderr } = await execAsync(dockerCommand, {
         timeout: this.TIMEOUT,
-        maxBuffer: 1024 * 1024 // 1MB
+        maxBuffer: 1024 * 1024, // 1MB
       });
 
       // Get memory usage (simplified - in production, use Docker stats)
@@ -122,7 +125,7 @@ export class CodeEvaluatorService {
       return { stdout, stderr, memoryUsed };
     } catch (error: any) {
       if (error.killed) {
-        throw new Error('Execution timeout exceeded');
+        throw new Error("Execution timeout exceeded");
       }
       throw error;
     }
@@ -133,7 +136,7 @@ export class CodeEvaluatorService {
    */
   private generateTestRunner(
     userCode: string,
-    testCases: Array<{ input: any; expectedOutput: any }>
+    testCases: Array<{ input: any; expectedOutput: any }>,
   ): string {
     return `
 import json
@@ -179,7 +182,7 @@ print(json.dumps(results))
    */
   private parseTestResults(
     stdout: string,
-    testCases: Array<{ input: any; expectedOutput: any; hidden: boolean }>
+    testCases: Array<{ input: any; expectedOutput: any; hidden: boolean }>,
   ): Array<{
     testCase: number;
     passed: boolean;
@@ -191,7 +194,7 @@ print(json.dumps(results))
       const results = JSON.parse(stdout);
       return results.map((r: any, i: number) => ({
         ...r,
-        hidden: testCases[i].hidden
+        hidden: testCases[i].hidden,
       }));
     } catch (_error) {
       return testCases.map((tc, i) => ({
@@ -199,7 +202,7 @@ print(json.dumps(results))
         passed: false,
         output: null,
         expected: tc.expectedOutput,
-        error: 'Failed to parse test results'
+        error: "Failed to parse test results",
       }));
     }
   }
@@ -208,21 +211,27 @@ print(json.dumps(results))
    * Calculate correctness score (0-100)
    */
   private calculateCorrectness(
-    testResults: Array<{ passed: boolean }>
+    testResults: Array<{ passed: boolean }>,
   ): number {
-    const passedCount = testResults.filter(t => t.passed).length;
+    const passedCount = testResults.filter((t) => t.passed).length;
     return Math.round((passedCount / testResults.length) * 100);
   }
 
   /**
    * Calculate efficiency score (0-100)
    */
-  private calculateEfficiency(executionTime: number, memoryUsed: number): number {
+  private calculateEfficiency(
+    executionTime: number,
+    memoryUsed: number,
+  ): number {
     // Time score (faster is better, baseline 5 seconds)
     const timeScore = Math.max(0, 100 - (executionTime / 5000) * 100);
 
     // Memory score (less is better, baseline 128MB)
-    const memoryScore = Math.max(0, 100 - (memoryUsed / (128 * 1024 * 1024)) * 100);
+    const memoryScore = Math.max(
+      0,
+      100 - (memoryUsed / (128 * 1024 * 1024)) * 100,
+    );
 
     // Weighted average
     return Math.round(timeScore * 0.6 + memoryScore * 0.4);
@@ -242,17 +251,21 @@ print(json.dumps(results))
    */
   async checkPlagiarism(
     code: string,
-    knownSolutions: string[]
-  ): Promise<{ isPlagiarized: boolean; similarity: number; matchedSolution?: string }> {
+    knownSolutions: string[],
+  ): Promise<{
+    isPlagiarized: boolean;
+    similarity: number;
+    matchedSolution?: string;
+  }> {
     // Simplified plagiarism check
     // In production, use sentence-transformers or similar
-    
+
     let maxSimilarity = 0;
     let matchedSolution: string | undefined;
 
     for (const solution of knownSolutions) {
       const similarity = this.calculateCodeSimilarity(code, solution);
-      
+
       if (similarity > maxSimilarity) {
         maxSimilarity = similarity;
         matchedSolution = solution;
@@ -262,7 +275,7 @@ print(json.dumps(results))
     return {
       isPlagiarized: maxSimilarity > 0.7, // 70% threshold
       similarity: maxSimilarity,
-      matchedSolution: maxSimilarity > 0.7 ? matchedSolution : undefined
+      matchedSolution: maxSimilarity > 0.7 ? matchedSolution : undefined,
     };
   }
 
@@ -273,9 +286,9 @@ print(json.dumps(results))
     // Remove whitespace and comments for comparison
     const normalize = (code: string) => {
       return code
-        .replace(/\s+/g, ' ')
-        .replace(/#.*/g, '')
-        .replace(/""".*/g, '')
+        .replace(/\s+/g, " ")
+        .replace(/#.*/g, "")
+        .replace(/""".*/g, "")
         .trim()
         .toLowerCase();
     };
@@ -286,7 +299,7 @@ print(json.dumps(results))
     // Simple Levenshtein distance ratio
     const maxLength = Math.max(normalized1.length, normalized2.length);
     const distance = this.levenshteinDistance(normalized1, normalized2);
-    
+
     return 1 - distance / maxLength;
   }
 
@@ -312,7 +325,7 @@ print(json.dumps(results))
           matrix[i][j] = Math.min(
             matrix[i - 1][j - 1] + 1,
             matrix[i][j - 1] + 1,
-            matrix[i - 1][j] + 1
+            matrix[i - 1][j] + 1,
           );
         }
       }

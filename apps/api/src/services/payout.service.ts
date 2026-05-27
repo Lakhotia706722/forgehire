@@ -1,6 +1,6 @@
-import { PrismaClient, PayoutMethod } from '@prisma/client';
-import Razorpay from 'razorpay';
-import { getEnv } from '../config/env';
+import { PrismaClient, PayoutMethod } from "@prisma/client";
+import Razorpay from "razorpay";
+import { getEnv } from "../config/env";
 
 export class PayoutService {
   private prisma: PrismaClient;
@@ -11,8 +11,8 @@ export class PayoutService {
   constructor() {
     this.prisma = new PrismaClient();
     this.razorpay = new Razorpay({
-      key_id: getEnv('RAZORPAY_KEY_ID'),
-      key_secret: getEnv('RAZORPAY_KEY_SECRET')
+      key_id: getEnv("RAZORPAY_KEY_ID"),
+      key_secret: getEnv("RAZORPAY_KEY_SECRET"),
     });
   }
 
@@ -37,22 +37,24 @@ export class PayoutService {
 
     // Get wallet
     const wallet = await this.prisma.wallet.findUnique({
-      where: { userId: data.userId }
+      where: { userId: data.userId },
     });
 
     if (!wallet) {
-      throw new Error('Wallet not found');
+      throw new Error("Wallet not found");
     }
 
     // Check balance
     const balance = parseFloat(wallet.balance.toString());
     if (balance < data.amount) {
-      throw new Error('Insufficient wallet balance');
+      throw new Error("Insufficient wallet balance");
     }
 
     // Check monthly withdrawal limit and KYC requirement
     const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
-    let currentMonthWithdrawn = parseFloat(wallet.currentMonthWithdrawn.toString());
+    let currentMonthWithdrawn = parseFloat(
+      wallet.currentMonthWithdrawn.toString(),
+    );
 
     if (wallet.lastWithdrawalMonth !== currentMonth) {
       currentMonthWithdrawn = 0;
@@ -64,24 +66,26 @@ export class PayoutService {
     // Check KYC if required
     if (kycRequired) {
       const kyc = await this.prisma.kYCVerification.findUnique({
-        where: { userId: data.userId }
+        where: { userId: data.userId },
       });
 
-      if (!kyc || kyc.status !== 'verified') {
+      if (!kyc || kyc.status !== "verified") {
         throw new Error(
-          `KYC verification required for withdrawals above ₹${this.kycThreshold}/month. Please complete KYC verification.`
+          `KYC verification required for withdrawals above ₹${this.kycThreshold}/month. Please complete KYC verification.`,
         );
       }
     }
 
     // Validate payment method details
-    if (data.method === 'upi' && !data.upiId) {
-      throw new Error('UPI ID is required for UPI payout');
+    if (data.method === "upi" && !data.upiId) {
+      throw new Error("UPI ID is required for UPI payout");
     }
 
-    if ((data.method === 'neft' || data.method === 'imps') && 
-        (!data.accountNumber || !data.ifscCode || !data.accountHolderName)) {
-      throw new Error('Bank account details are required for NEFT/IMPS payout');
+    if (
+      (data.method === "neft" || data.method === "imps") &&
+      (!data.accountNumber || !data.ifscCode || !data.accountHolderName)
+    ) {
+      throw new Error("Bank account details are required for NEFT/IMPS payout");
     }
 
     // Create payout request
@@ -95,20 +99,20 @@ export class PayoutService {
         accountNumber: data.accountNumber,
         ifscCode: data.ifscCode,
         accountHolderName: data.accountHolderName,
-        status: 'pending',
+        status: "pending",
         kycRequired,
-        kycVerified: kycRequired ? true : false // Already checked above
-      }
+        kycVerified: kycRequired ? true : false, // Already checked above
+      },
     });
 
     // Deduct from wallet immediately (reserved)
     await this.prisma.$transaction(async (tx) => {
       const currentWallet = await tx.wallet.findUnique({
-        where: { userId: data.userId }
+        where: { userId: data.userId },
       });
 
       if (!currentWallet) {
-        throw new Error('Wallet not found');
+        throw new Error("Wallet not found");
       }
 
       const balanceBefore = parseFloat(currentWallet.balance.toString());
@@ -119,24 +123,24 @@ export class PayoutService {
         data: {
           balance: balanceAfter,
           totalWithdrawn: {
-            increment: data.amount
+            increment: data.amount,
           },
           currentMonthWithdrawn: currentMonthWithdrawn + data.amount,
-          lastWithdrawalMonth: currentMonth
-        }
+          lastWithdrawalMonth: currentMonth,
+        },
       });
 
       // Create wallet transaction
       await tx.walletTransaction.create({
         data: {
           walletId: currentWallet.id,
-          type: 'debit',
+          type: "debit",
           amount: data.amount,
           balanceBefore,
           balanceAfter,
           description: `Payout request - ${data.method.toUpperCase()}`,
-          payoutId: payout.id
-        }
+          payoutId: payout.id,
+        },
       });
     });
 
@@ -153,11 +157,11 @@ export class PayoutService {
    */
   private async processPayout(payoutId: string) {
     const payout = await this.prisma.payout.findUnique({
-      where: { id: payoutId }
+      where: { id: payoutId },
     });
 
     if (!payout) {
-      throw new Error('Payout not found');
+      throw new Error("Payout not found");
     }
 
     try {
@@ -165,9 +169,9 @@ export class PayoutService {
       await this.prisma.payout.update({
         where: { id: payoutId },
         data: {
-          status: 'processing',
-          processedAt: new Date()
-        }
+          status: "processing",
+          processedAt: new Date(),
+        },
       });
 
       // Create fund account if not exists
@@ -179,22 +183,22 @@ export class PayoutService {
 
         await this.prisma.payout.update({
           where: { id: payoutId },
-          data: { razorpayFundAccountId: fundAccountId }
+          data: { razorpayFundAccountId: fundAccountId },
         });
       }
 
       // Create Razorpay payout
       const razorpay = this.razorpay as any;
       const razorpayPayout = await razorpay.payouts.create({
-        account_number: getEnv('RAZORPAY_ACCOUNT_NUMBER'),
+        account_number: getEnv("RAZORPAY_ACCOUNT_NUMBER"),
         fund_account_id: fundAccountId,
         amount: Math.round(Number(payout.amount) * 100), // Convert to paise
         currency: payout.currency,
         mode: this.getRazorpayMode(payout.method),
-        purpose: 'payout',
+        purpose: "payout",
         queue_if_low_balance: true,
         reference_id: payout.id,
-        narration: 'NeuronHire payout'
+        narration: "NeuronHire payout",
       });
 
       // Update payout with Razorpay details
@@ -202,10 +206,12 @@ export class PayoutService {
         where: { id: payoutId },
         data: {
           razorpayPayoutId: razorpayPayout.id,
-          status: razorpayPayout.status === 'processed' ? 'completed' : 'processing',
-          completedAt: razorpayPayout.status === 'processed' ? new Date() : undefined,
-          utr: razorpayPayout.utr
-        }
+          status:
+            razorpayPayout.status === "processed" ? "completed" : "processing",
+          completedAt:
+            razorpayPayout.status === "processed" ? new Date() : undefined,
+          utr: razorpayPayout.utr,
+        },
       });
 
       return razorpayPayout;
@@ -221,11 +227,11 @@ export class PayoutService {
    */
   private async createFundAccount(payout: any) {
     const contactData: any = {
-      name: payout.accountHolderName || 'Engineer',
-      email: 'engineer@neuronhire.com', // Should get from user
-      contact: '9999999999', // Should get from user
-      type: 'vendor',
-      reference_id: payout.userId
+      name: payout.accountHolderName || "Engineer",
+      email: "engineer@neuronhire.com", // Should get from user
+      contact: "9999999999", // Should get from user
+      type: "vendor",
+      reference_id: payout.userId,
     };
 
     const razorpay = this.razorpay as any;
@@ -233,18 +239,18 @@ export class PayoutService {
 
     const fundAccountData: any = {
       contact_id: contact.id,
-      account_type: payout.method === 'upi' ? 'vpa' : 'bank_account'
+      account_type: payout.method === "upi" ? "vpa" : "bank_account",
     };
 
-    if (payout.method === 'upi') {
+    if (payout.method === "upi") {
       fundAccountData.vpa = {
-        address: payout.upiId
+        address: payout.upiId,
       };
     } else {
       fundAccountData.bank_account = {
         name: payout.accountHolderName,
         ifsc: payout.ifscCode,
-        account_number: payout.accountNumber
+        account_number: payout.accountNumber,
       };
     }
 
@@ -256,9 +262,9 @@ export class PayoutService {
    */
   private getRazorpayMode(method: PayoutMethod): string {
     const modes: Record<PayoutMethod, string> = {
-      upi: 'UPI',
-      neft: 'NEFT',
-      imps: 'IMPS'
+      upi: "UPI",
+      neft: "NEFT",
+      imps: "IMPS",
     };
     return modes[method];
   }
@@ -268,7 +274,7 @@ export class PayoutService {
    */
   private async handlePayoutFailure(payoutId: string, reason: string) {
     const payout = await this.prisma.payout.findUnique({
-      where: { id: payoutId }
+      where: { id: payoutId },
     });
 
     if (!payout) return;
@@ -277,16 +283,16 @@ export class PayoutService {
     await this.prisma.payout.update({
       where: { id: payoutId },
       data: {
-        status: 'failed',
+        status: "failed",
         failedAt: new Date(),
-        failureReason: reason
-      }
+        failureReason: reason,
+      },
     });
 
     // Refund to wallet
     await this.prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.findUnique({
-        where: { userId: payout.userId }
+        where: { userId: payout.userId },
       });
 
       if (!wallet) return;
@@ -299,22 +305,22 @@ export class PayoutService {
         data: {
           balance: balanceAfter,
           totalWithdrawn: {
-            decrement: parseFloat(payout.amount.toString())
-          }
-        }
+            decrement: parseFloat(payout.amount.toString()),
+          },
+        },
       });
 
       // Create refund transaction
       await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
-          type: 'credit',
+          type: "credit",
           amount: parseFloat(payout.amount.toString()),
           balanceBefore,
           balanceAfter,
           description: `Payout failed - refund: ${reason}`,
-          payoutId: payout.id
-        }
+          payoutId: payout.id,
+        },
       });
     });
   }
@@ -324,20 +330,20 @@ export class PayoutService {
    */
   async completePayout(razorpayPayoutId: string, utr?: string) {
     const payout = await this.prisma.payout.findFirst({
-      where: { razorpayPayoutId }
+      where: { razorpayPayoutId },
     });
 
     if (!payout) {
-      throw new Error('Payout not found');
+      throw new Error("Payout not found");
     }
 
     await this.prisma.payout.update({
       where: { id: payout.id },
       data: {
-        status: 'completed',
+        status: "completed",
         completedAt: new Date(),
-        utr
-      }
+        utr,
+      },
     });
 
     return payout;
@@ -348,15 +354,15 @@ export class PayoutService {
    */
   async getPayoutStatus(payoutId: string, userId: string) {
     const payout = await this.prisma.payout.findUnique({
-      where: { id: payoutId }
+      where: { id: payoutId },
     });
 
     if (!payout) {
-      throw new Error('Payout not found');
+      throw new Error("Payout not found");
     }
 
     if (payout.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     return payout;
@@ -368,8 +374,8 @@ export class PayoutService {
   async getPayoutHistory(userId: string, limit = 20) {
     return await this.prisma.payout.findMany({
       where: { userId },
-      orderBy: { requestedAt: 'desc' },
-      take: limit
+      orderBy: { requestedAt: "desc" },
+      take: limit,
     });
   }
 

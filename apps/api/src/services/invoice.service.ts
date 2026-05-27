@@ -1,16 +1,16 @@
-import { PrismaClient } from '@prisma/client';
-import { getEnv } from '../config/env';
-import { S3UploadService } from './s3-upload.service';
+import { PrismaClient } from "@prisma/client";
+import { getEnv } from "../config/env";
+import { S3UploadService } from "./s3-upload.service";
 
 export class InvoiceService {
   private prisma: PrismaClient;
-  private clearTaxApiUrl = 'https://api.cleartax.in/v2';
+  private clearTaxApiUrl = "https://api.cleartax.in/v2";
   private clearTaxApiKey: string;
   private s3Service: S3UploadService;
 
   constructor() {
     this.prisma = new PrismaClient();
-    this.clearTaxApiKey = getEnv('CLEARTAX_API_KEY') ?? '';
+    this.clearTaxApiKey = getEnv("CLEARTAX_API_KEY") ?? "";
     this.s3Service = new S3UploadService();
   }
 
@@ -25,19 +25,19 @@ export class InvoiceService {
         user: {
           include: {
             engineerProfile: true,
-            companyProfile: true
-          }
-        }
-      }
+            companyProfile: true,
+          },
+        },
+      },
     });
 
     if (!payment) {
-      throw new Error('Payment not found');
+      throw new Error("Payment not found");
     }
 
     // Check if invoice already exists
     const existing = await this.prisma.invoice.findUnique({
-      where: { paymentId }
+      where: { paymentId },
     });
 
     if (existing) {
@@ -51,34 +51,39 @@ export class InvoiceService {
     const invoiceData = {
       invoiceNumber,
       paymentId: payment.id,
-      fromName: 'NeuronHire Technologies Pvt Ltd',
-      fromAddress: 'Bangalore, Karnataka, India',
-      fromGstin: getEnv('COMPANY_GSTIN'),
-      toName: (payment.user as any).engineerProfile?.fullName || (payment.user as any).companyProfile?.companyName || 'Customer',
+      fromName: "NeuronHire Technologies Pvt Ltd",
+      fromAddress: "Bangalore, Karnataka, India",
+      fromGstin: getEnv("COMPANY_GSTIN"),
+      toName:
+        (payment.user as any).engineerProfile?.fullName ||
+        (payment.user as any).companyProfile?.companyName ||
+        "Customer",
       toAddress: this.getUserAddress(payment.user),
       toGstin: this.getUserGSTIN(payment.user),
       subtotal: parseFloat(payment.amount.toString()),
       gstRate: 18,
-      gstAmount: parseFloat(payment.gstAmount?.toString() || '0'),
-      total: parseFloat(payment.amount.toString()) + parseFloat(payment.gstAmount?.toString() || '0'),
+      gstAmount: parseFloat(payment.gstAmount?.toString() || "0"),
+      total:
+        parseFloat(payment.amount.toString()) +
+        parseFloat(payment.gstAmount?.toString() || "0"),
       currency: payment.currency,
       lineItems: this.generateLineItems(payment),
       invoiceDate: new Date(),
-      dueDate: null // Immediate payment
+      dueDate: null, // Immediate payment
     };
 
     // Create invoice in database
     const invoice = await this.prisma.invoice.create({
-      data: invoiceData
+      data: invoiceData,
     });
 
     // Generate PDF via ClearTax API
     try {
       const pdfUrl = await this.generateInvoicePDF(invoice);
-      
+
       await this.prisma.invoice.update({
         where: { id: invoice.id },
-        data: { pdfUrl }
+        data: { pdfUrl },
       });
 
       // Send invoice via email
@@ -86,7 +91,7 @@ export class InvoiceService {
 
       return invoice;
     } catch (error: any) {
-      console.error('Invoice PDF generation error:', error);
+      console.error("Invoice PDF generation error:", error);
       // Invoice created but PDF generation failed
       return invoice;
     }
@@ -97,19 +102,19 @@ export class InvoiceService {
    */
   private async generateInvoiceNumber(): Promise<string> {
     const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, '0');
-    
+    const month = String(new Date().getMonth() + 1).padStart(2, "0");
+
     // Get count of invoices this month
     const startOfMonth = new Date(year, new Date().getMonth(), 1);
     const count = await this.prisma.invoice.count({
       where: {
         invoiceDate: {
-          gte: startOfMonth
-        }
-      }
+          gte: startOfMonth,
+        },
+      },
     });
 
-    const sequence = String(count + 1).padStart(4, '0');
+    const sequence = String(count + 1).padStart(4, "0");
     return `INV-${year}${month}-${sequence}`;
   }
 
@@ -120,58 +125,58 @@ export class InvoiceService {
     const items: any[] = [];
 
     switch (payment.type) {
-      case 'escrow_deposit':
+      case "escrow_deposit":
         items.push({
-          description: 'Escrow Deposit',
+          description: "Escrow Deposit",
           quantity: 1,
           unitPrice: parseFloat(payment.amount.toString()),
-          total: parseFloat(payment.amount.toString())
+          total: parseFloat(payment.amount.toString()),
         });
         break;
 
-      case 'milestone_release':
+      case "milestone_release":
         items.push({
-          description: 'Milestone Payment',
+          description: "Milestone Payment",
           quantity: 1,
           unitPrice: parseFloat(payment.amount.toString()),
-          total: parseFloat(payment.amount.toString())
+          total: parseFloat(payment.amount.toString()),
         });
         break;
 
-      case 'subscription':
+      case "subscription":
         items.push({
-          description: 'Platform Subscription',
+          description: "Platform Subscription",
           quantity: 1,
           unitPrice: parseFloat(payment.amount.toString()),
-          total: parseFloat(payment.amount.toString())
+          total: parseFloat(payment.amount.toString()),
         });
         break;
 
-      case 'platform_fee':
+      case "platform_fee":
         items.push({
-          description: 'Platform Service Fee',
+          description: "Platform Service Fee",
           quantity: 1,
-          unitPrice: parseFloat(payment.platformFee?.toString() || '0'),
-          total: parseFloat(payment.platformFee?.toString() || '0')
+          unitPrice: parseFloat(payment.platformFee?.toString() || "0"),
+          total: parseFloat(payment.platformFee?.toString() || "0"),
         });
         break;
 
       default:
         items.push({
-          description: payment.description || 'Payment',
+          description: payment.description || "Payment",
           quantity: 1,
           unitPrice: parseFloat(payment.amount.toString()),
-          total: parseFloat(payment.amount.toString())
+          total: parseFloat(payment.amount.toString()),
         });
     }
 
     // Add GST line item
     if (payment.gstAmount && parseFloat(payment.gstAmount.toString()) > 0) {
       items.push({
-        description: 'GST @ 18%',
+        description: "GST @ 18%",
         quantity: 1,
         unitPrice: parseFloat(payment.gstAmount.toString()),
-        total: parseFloat(payment.gstAmount.toString())
+        total: parseFloat(payment.gstAmount.toString()),
       });
     }
 
@@ -213,11 +218,11 @@ export class InvoiceService {
 
       // For demo, generate a simple PDF URL
       const pdfUrl = `https://neuronhire-invoices.s3.amazonaws.com/${invoice.invoiceNumber}.pdf`;
-      
+
       return pdfUrl;
     } catch (error: any) {
-      console.error('ClearTax API error:', error);
-      throw new Error('Failed to generate invoice PDF');
+      console.error("ClearTax API error:", error);
+      throw new Error("Failed to generate invoice PDF");
     }
   }
 
@@ -230,14 +235,14 @@ export class InvoiceService {
       include: {
         payment: {
           include: {
-            user: true
-          }
-        }
-      }
+            user: true,
+          },
+        },
+      },
     });
 
     if (!invoice) {
-      throw new Error('Invoice not found');
+      throw new Error("Invoice not found");
     }
 
     // TODO: Integrate with email service (SendGrid, AWS SES, etc.)
@@ -246,8 +251,8 @@ export class InvoiceService {
       where: { id: invoiceId },
       data: {
         emailSent: true,
-        emailSentAt: new Date()
-      }
+        emailSentAt: new Date(),
+      },
     });
 
     return { success: true };
@@ -260,17 +265,17 @@ export class InvoiceService {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
       include: {
-        payment: true
-      }
+        payment: true,
+      },
     });
 
     if (!invoice) {
-      throw new Error('Invoice not found');
+      throw new Error("Invoice not found");
     }
 
     // Check authorization
     if (invoice.payment.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     return invoice;
@@ -281,7 +286,7 @@ export class InvoiceService {
    */
   async getInvoiceByPayment(paymentId: string) {
     return await this.prisma.invoice.findUnique({
-      where: { paymentId }
+      where: { paymentId },
     });
   }
 
@@ -292,17 +297,17 @@ export class InvoiceService {
     const invoices = await this.prisma.invoice.findMany({
       where: {
         payment: {
-          userId
+          userId,
         },
-        deletedAt: null // Only non-deleted invoices
+        deletedAt: null, // Only non-deleted invoices
       },
       include: {
-        payment: true
+        payment: true,
       },
       take: limit + 1,
       skip: cursor ? 1 : 0,
       cursor: cursor ? { id: cursor } : undefined,
-      orderBy: { invoiceDate: 'desc' }
+      orderBy: { invoiceDate: "desc" },
     });
 
     const hasMore = invoices.length > limit;
@@ -319,8 +324,8 @@ export class InvoiceService {
     return await this.prisma.invoice.update({
       where: { id: invoiceId },
       data: {
-        deletedAt: new Date()
-      }
+        deletedAt: new Date(),
+      },
     });
   }
 
@@ -329,12 +334,12 @@ export class InvoiceService {
    */
   private getUserAddress(user: any): string {
     if (user.companyProfile) {
-      return user.companyProfile.location || 'India';
+      return user.companyProfile.location || "India";
     }
     if (user.engineerProfile) {
-      return user.engineerProfile.location || 'India';
+      return user.engineerProfile.location || "India";
     }
-    return 'India';
+    return "India";
   }
 
   /**
@@ -354,7 +359,7 @@ export class InvoiceService {
     const invoice = await this.getInvoice(invoiceId, userId);
 
     if (!invoice.pdfUrl) {
-      throw new Error('Invoice PDF not available');
+      throw new Error("Invoice PDF not available");
     }
 
     return invoice.pdfUrl;
@@ -378,27 +383,30 @@ export class InvoiceService {
     return await this.prisma.invoice.findMany({
       where: {
         payment: {
-          userId
+          userId,
         },
         invoiceDate: {
           gte: startDate,
-          lte: endDate
+          lte: endDate,
         },
-        deletedAt: null
+        deletedAt: null,
       },
       include: {
-        payment: true
+        payment: true,
       },
-      orderBy: { invoiceDate: 'asc' }
+      orderBy: { invoiceDate: "asc" },
     });
   }
 
   /**
    * Get total GST paid by user in financial year
    */
-  async getTotalGSTPaid(userId: string, financialYear: number): Promise<number> {
+  async getTotalGSTPaid(
+    userId: string,
+    financialYear: number,
+  ): Promise<number> {
     const invoices = await this.getFinancialYearInvoices(userId, financialYear);
-    
+
     return invoices.reduce((total, invoice) => {
       return total + parseFloat(invoice.gstAmount.toString());
     }, 0);

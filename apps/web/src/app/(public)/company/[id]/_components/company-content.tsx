@@ -3,6 +3,8 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { AriaNavButton } from '@/components/ui/aria-tab-button';
+import { leftPctClass, quantizePct, wPctClass } from '@/lib/pct-classes';
 import type { CompanyProfile } from '@/lib/mock-data';
 
 type TabId = 'jobs' | 'bounties' | 'projects' | 'reviews' | 'team';
@@ -22,7 +24,7 @@ interface CompanyContentProps {
 export function CompanyContent({ company: co }: CompanyContentProps) {
   const [activeTab, setActiveTab] = React.useState<TabId>('jobs');
   const tabRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
-  const [underlineStyle, setUnderlineStyle] = React.useState({ left: 0, width: 0 });
+  const [underlinePct, setUnderlinePct] = React.useState({ left: 0, width: 20 });
 
   React.useEffect(() => {
     const idx = TABS.findIndex((t) => t.id === activeTab);
@@ -32,46 +34,48 @@ export function CompanyContent({ company: co }: CompanyContentProps) {
     if (!parent) return;
     const pr = parent.getBoundingClientRect();
     const er = el.getBoundingClientRect();
-    setUnderlineStyle({ left: er.left - pr.left, width: er.width });
+    if (pr.width <= 0) return;
+    setUnderlinePct({
+      left: quantizePct(((er.left - pr.left) / pr.width) * 100),
+      width: quantizePct((er.width / pr.width) * 100),
+    });
   }, [activeTab]);
 
   return (
     <>
       {/* Tab bar */}
-      <div
-        className="sticky-tabs"
-        role="tablist"
-        aria-label="Company profile sections"
-      >
+      <nav className="sticky-tabs" aria-label="Company profile sections">
         <div className="max-w-5xl mx-auto px-6">
-          <div className="relative flex gap-0 overflow-x-auto">
+          <div className="relative flex gap-0 overflow-x-auto" role="group" aria-label="Company section tabs">
             {TABS.map((tab, i) => (
-              <button
+              <AriaNavButton
                 key={tab.id}
                 ref={(el) => { tabRefs.current[i] = el; }}
-                role="tab"
-                aria-selected={activeTab === tab.id}
+                current={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
                   'px-4 py-4 text-sm font-medium whitespace-nowrap transition-colors duration-200',
-                  activeTab === tab.id ? 'text-text-primary' : 'text-text-muted hover:text-text-secondary'
+                  activeTab === tab.id ? 'text-text-primary' : 'text-text-muted hover:text-text-secondary',
                 )}
               >
                 {tab.label}
-              </button>
+              </AriaNavButton>
             ))}
             <div
-              className="absolute bottom-0 h-0.5 bg-accent-cyan rounded-full transition-all duration-300"
-              style={{ left: underlineStyle.left, width: underlineStyle.width, transitionTimingFunction: 'cubic-bezier(0.16,1,0.3,1)' }}
+              className={cn(
+                'absolute bottom-0 h-0.5 bg-accent-cyan rounded-full transition-all duration-300 tab-underline-slide',
+                leftPctClass(underlinePct.left),
+                wPctClass(underlinePct.width),
+              )}
               aria-hidden="true"
             />
           </div>
         </div>
-      </div>
+      </nav>
 
       {/* Tab content */}
       <div className="max-w-5xl mx-auto px-6 py-8">
-        <div key={activeTab} className="animate-fade-up" role="tabpanel">
+        <div key={activeTab} className="animate-fade-up" role="region" aria-label="Company profile content">
           {activeTab === 'jobs'     && <OpenJobsTab     jobs={co.openJobs} />}
           {activeTab === 'bounties' && <OpenBountiesTab bounties={co.openBounties} />}
           {activeTab === 'projects' && <PastProjectsTab projects={co.pastProjects} />}

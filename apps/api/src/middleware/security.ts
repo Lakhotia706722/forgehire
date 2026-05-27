@@ -1,6 +1,6 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
-import helmet from '@fastify/helmet';
-import rateLimit from '@fastify/rate-limit';
+import { FastifyRequest, FastifyReply } from "fastify";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
 // import { getEnv } from '../config/env';
 
 /**
@@ -13,30 +13,39 @@ export async function securityHeaders(app: any) {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", 'https://checkout.razorpay.com'],
-        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-        imgSrc: ["'self'", 'data:', 'https:', 'https://neuronhire-uploads.s3.amazonaws.com'],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://checkout.razorpay.com",
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "https:",
+          "https://neuronhire-uploads.s3.amazonaws.com",
+        ],
         connectSrc: [
           "'self'",
-          'https://api.neuronhire.com',
-          'wss://api.neuronhire.com',
-          'https://api.razorpay.com'
+          "https://api.neuronhire.com",
+          "wss://api.neuronhire.com",
+          "https://api.razorpay.com",
         ],
-        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
         objectSrc: ["'none'"],
-        mediaSrc: ["'self'", 'https://neuronhire-uploads.s3.amazonaws.com'],
-        frameSrc: ["'self'", 'https://api.razorpay.com'],
-        frameAncestors: ["'none'"]
-      }
+        mediaSrc: ["'self'", "https://neuronhire-uploads.s3.amazonaws.com"],
+        frameSrc: ["'self'", "https://api.razorpay.com"],
+        frameAncestors: ["'none'"],
+      },
     },
     hsts: {
       maxAge: 31536000, // 1 year
       includeSubDomains: true,
-      preload: true
+      preload: true,
     },
     referrerPolicy: {
-      policy: 'strict-origin-when-cross-origin'
-    }
+      policy: "strict-origin-when-cross-origin",
+    },
   });
 }
 
@@ -47,10 +56,10 @@ export async function setupRateLimiting(app: any) {
   // Global rate limit
   await app.register(rateLimit, {
     max: 100,
-    timeWindow: '1 minute',
+    timeWindow: "1 minute",
     redis: app.redis,
-    nameSpace: 'global-rate-limit:',
-    skipOnError: true
+    nameSpace: "global-rate-limit:",
+    skipOnError: true,
   });
 }
 
@@ -59,7 +68,7 @@ export async function setupRateLimiting(app: any) {
  */
 export const assessmentRateLimit = {
   max: 1,
-  timeWindow: '1 hour',
+  timeWindow: "1 hour",
   keyGenerator: (req: FastifyRequest) => {
     const user = (req as any).user;
     const params = req.params as any;
@@ -68,15 +77,15 @@ export const assessmentRateLimit = {
   errorResponseBuilder: () => {
     return {
       statusCode: 429,
-      error: 'Too Many Requests',
-      message: 'You can only attempt this assessment once per session'
+      error: "Too Many Requests",
+      message: "You can only attempt this assessment once per session",
     };
-  }
+  },
 };
 
 export const otpRateLimit = {
   max: 3,
-  timeWindow: '10 minutes',
+  timeWindow: "10 minutes",
   keyGenerator: (req: FastifyRequest) => {
     const body = req.body as any;
     return `otp:${body?.email || body?.phone}`;
@@ -84,15 +93,15 @@ export const otpRateLimit = {
   errorResponseBuilder: () => {
     return {
       statusCode: 429,
-      error: 'Too Many Requests',
-      message: 'Maximum 3 OTP requests per 10 minutes'
+      error: "Too Many Requests",
+      message: "Maximum 3 OTP requests per 10 minutes",
     };
-  }
+  },
 };
 
 export const payoutRateLimit = {
   max: 5,
-  timeWindow: '1 day',
+  timeWindow: "1 day",
   keyGenerator: (req: FastifyRequest) => {
     const user = (req as any).user;
     return `payout:${user?.id}`;
@@ -100,15 +109,15 @@ export const payoutRateLimit = {
   errorResponseBuilder: () => {
     return {
       statusCode: 429,
-      error: 'Too Many Requests',
-      message: 'Maximum 5 payout requests per day'
+      error: "Too Many Requests",
+      message: "Maximum 5 payout requests per day",
     };
-  }
+  },
 };
 
 export const loginRateLimit = {
   max: 5,
-  timeWindow: '15 minutes',
+  timeWindow: "15 minutes",
   keyGenerator: (req: FastifyRequest) => {
     const body = req.body as any;
     return `login:${body?.email}:${req.ip}`;
@@ -116,10 +125,10 @@ export const loginRateLimit = {
   errorResponseBuilder: () => {
     return {
       statusCode: 429,
-      error: 'Too Many Requests',
-      message: 'Too many login attempts. Please try again in 15 minutes'
+      error: "Too Many Requests",
+      message: "Too many login attempts. Please try again in 15 minutes",
     };
-  }
+  },
 };
 
 /**
@@ -127,7 +136,7 @@ export const loginRateLimit = {
  */
 export async function xssProtection(
   request: FastifyRequest,
-  _reply: FastifyReply
+  _reply: FastifyReply,
 ) {
   if (request.body) {
     request.body = sanitizeObject(request.body);
@@ -141,13 +150,13 @@ export async function xssProtection(
  * Sanitize object recursively
  */
 function sanitizeObject(obj: any): any {
-  if (typeof obj === 'string') {
+  if (typeof obj === "string") {
     return sanitizeString(obj);
   }
   if (Array.isArray(obj)) {
     return obj.map(sanitizeObject);
   }
-  if (obj && typeof obj === 'object') {
+  if (obj && typeof obj === "object") {
     const sanitized: any = {};
     for (const key in obj) {
       sanitized[key] = sanitizeObject(obj[key]);
@@ -162,11 +171,11 @@ function sanitizeObject(obj: any): any {
  */
 function sanitizeString(str: string): string {
   return str
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;');
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
+    .replace(/\//g, "&#x2F;");
 }
 
 /**
@@ -174,20 +183,20 @@ function sanitizeString(str: string): string {
  */
 export async function csrfProtection(
   request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
-  if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+  if (["GET", "HEAD", "OPTIONS"].includes(request.method)) {
     return;
   }
 
-  const csrfToken = request.headers['x-csrf-token'] as string;
+  const csrfToken = request.headers["x-csrf-token"] as string;
   const session = (request as any).session;
   const sessionToken = session?.csrfToken;
 
   if (!csrfToken || csrfToken !== sessionToken) {
     reply.code(403).send({
-      error: 'Forbidden',
-      message: 'Invalid CSRF token'
+      error: "Forbidden",
+      message: "Invalid CSRF token",
     });
     return;
   }
@@ -197,7 +206,7 @@ export async function csrfProtection(
  * Generate CSRF token
  */
 export function generateCSRFToken(): string {
-  return require('crypto').randomBytes(32).toString('hex');
+  return require("crypto").randomBytes(32).toString("hex");
 }
 
 /**
@@ -210,12 +219,14 @@ export interface DeviceFingerprint {
   acceptEncoding: string;
 }
 
-export function getDeviceFingerprint(request: FastifyRequest): DeviceFingerprint {
+export function getDeviceFingerprint(
+  request: FastifyRequest,
+): DeviceFingerprint {
   return {
-    userAgent: request.headers['user-agent'] || '',
+    userAgent: request.headers["user-agent"] || "",
     ip: request.ip,
-    acceptLanguage: request.headers['accept-language'] || '',
-    acceptEncoding: request.headers['accept-encoding'] || ''
+    acceptLanguage: request.headers["accept-language"] || "",
+    acceptEncoding: request.headers["accept-encoding"] || "",
   };
 }
 
@@ -225,14 +236,19 @@ export function getDeviceFingerprint(request: FastifyRequest): DeviceFingerprint
 export async function checkSuspiciousActivity(
   userId: string,
   currentFingerprint: DeviceFingerprint,
-  redis: any
+  redis: any,
 ): Promise<boolean> {
   const key = `device:${userId}`;
   const stored = await redis.get(key);
 
   if (!stored) {
     // First login, store fingerprint
-    await redis.set(key, JSON.stringify(currentFingerprint), 'EX', 60 * 60 * 24 * 30); // 30 days
+    await redis.set(
+      key,
+      JSON.stringify(currentFingerprint),
+      "EX",
+      60 * 60 * 24 * 30,
+    ); // 30 days
     return false;
   }
 
@@ -256,15 +272,19 @@ export async function checkSuspiciousActivity(
  */
 export async function requireAdmin(
   request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
   const user = (request as any).user;
   if (!user) {
-    reply.code(401).send({ error: 'Unauthorized', message: 'Authentication required' });
+    reply
+      .code(401)
+      .send({ error: "Unauthorized", message: "Authentication required" });
     return;
   }
-  if (user.role !== 'admin') {
-    reply.code(403).send({ error: 'Forbidden', message: 'Admin access required' });
+  if (user.role !== "admin") {
+    reply
+      .code(403)
+      .send({ error: "Forbidden", message: "Admin access required" });
     return;
   }
 }
@@ -277,7 +297,7 @@ export async function logSecurityEvent(
   userId: string | null,
   ip: string,
   details: any,
-  prisma: any
+  prisma: any,
 ) {
   try {
     await prisma.securityLog.create({
@@ -286,11 +306,11 @@ export async function logSecurityEvent(
         userId,
         ip,
         details,
-        timestamp: new Date()
-      }
+        timestamp: new Date(),
+      },
     });
   } catch (error) {
-    console.error('Failed to log security event:', error);
+    console.error("Failed to log security event:", error);
   }
 }
 
@@ -302,28 +322,28 @@ export function validateFileUpload(file: any): {
   error?: string;
 } {
   const allowedMimeTypes = [
-    'image/jpeg',
-    'image/png',
-    'image/gif',
-    'image/webp',
-    'application/pdf',
-    'application/zip',
-    'text/plain',
-    'text/csv'
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "application/pdf",
+    "application/zip",
+    "text/plain",
+    "text/csv",
   ];
 
   const maxSize = 50 * 1024 * 1024; // 50MB
 
   if (!file) {
-    return { valid: false, error: 'No file provided' };
+    return { valid: false, error: "No file provided" };
   }
 
   if (!allowedMimeTypes.includes(file.mimetype)) {
-    return { valid: false, error: 'File type not allowed' };
+    return { valid: false, error: "File type not allowed" };
   }
 
   if (file.size > maxSize) {
-    return { valid: false, error: 'File size exceeds 50MB limit' };
+    return { valid: false, error: "File size exceeds 50MB limit" };
   }
 
   return { valid: true };
@@ -334,8 +354,8 @@ export function validateFileUpload(file: any): {
  */
 export function sanitizeFilename(filename: string): string {
   return filename
-    .replace(/[^a-zA-Z0-9.-]/g, '_')
-    .replace(/\.{2,}/g, '.')
+    .replace(/[^a-zA-Z0-9.-]/g, "_")
+    .replace(/\.{2,}/g, ".")
     .substring(0, 255);
 }
 
@@ -344,11 +364,11 @@ export function sanitizeFilename(filename: string): string {
  */
 export function isTrustedOrigin(origin: string): boolean {
   const trustedOrigins = [
-    'https://neuronhire.com',
-    'https://www.neuronhire.com',
-    'https://app.neuronhire.com',
-    'http://localhost:3000', // Development
-    'http://localhost:3001'  // Development
+    "https://neuronhire.com",
+    "https://www.neuronhire.com",
+    "https://app.neuronhire.com",
+    "http://localhost:3000", // Development
+    "http://localhost:3001", // Development
   ];
 
   return trustedOrigins.includes(origin);
@@ -362,11 +382,15 @@ export const corsOptions = {
     if (!origin || isTrustedOrigin(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error("Not allowed by CORS"));
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
-  exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset']
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
+  exposedHeaders: [
+    "X-RateLimit-Limit",
+    "X-RateLimit-Remaining",
+    "X-RateLimit-Reset",
+  ],
 };

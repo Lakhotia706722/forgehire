@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
+import { AriaRadio } from '@/components/ui/aria-tab-button';
 import type { PostTaskState, ContestPrizeTier } from '@/lib/bounty-data';
 
 interface Step3Props {
@@ -98,11 +98,9 @@ export function Step3TimelineReward({ state, onChange }: Step3Props) {
           <label className="block text-sm font-medium text-text-secondary mb-2">Payment Type</label>
           <div className="flex gap-2" role="radiogroup" aria-label="Payment type">
             {(['fixed', 'milestone', 'hourly'] as const).map((pt) => (
-              <button
+              <AriaRadio
                 key={pt}
-                type="button"
-                role="radio"
-                aria-checked={state.paymentType === pt}
+                checked={state.paymentType === pt}
                 onClick={() => onChange({ paymentType: pt })}
                 className={cn(
                   'flex-1 py-2.5 rounded-xl text-sm font-medium transition-all',
@@ -112,7 +110,7 @@ export function Step3TimelineReward({ state, onChange }: Step3Props) {
                 )}
               >
                 {pt.charAt(0).toUpperCase() + pt.slice(1)}
-              </button>
+              </AriaRadio>
             ))}
           </div>
         </div>

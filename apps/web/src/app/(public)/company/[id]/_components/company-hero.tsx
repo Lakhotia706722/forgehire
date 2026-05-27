@@ -1,6 +1,8 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TrustScoreArc } from './trust-score-arc';
+import { avatarToneClass } from '@/lib/avatar-tone';
+import { cn } from '@/lib/utils';
 import type { CompanyProfile } from '@/lib/mock-data';
 
 interface CompanyHeroProps {
@@ -11,14 +13,7 @@ export function CompanyHero({ company: co }: CompanyHeroProps) {
   return (
     <div className="relative">
       {/* Banner */}
-      <div
-        className="h-36 w-full geo-pattern"
-        style={{
-          background:
-            'linear-gradient(135deg, rgba(123,94,167,0.08) 0%, rgba(0,212,255,0.05) 50%, rgba(8,11,20,1) 100%)',
-        }}
-        aria-hidden="true"
-      />
+      <div className="h-36 w-full geo-pattern company-hero-banner" aria-hidden="true" />
 
       <div className="max-w-5xl mx-auto px-6">
         <div className="relative -mt-12 pb-8">
@@ -26,8 +21,10 @@ export function CompanyHero({ company: co }: CompanyHeroProps) {
           <div className="flex flex-col sm:flex-row sm:items-end gap-5 mb-6">
             {/* Logo */}
             <div
-              className="w-20 h-20 rounded-2xl flex items-center justify-center font-display font-bold text-bg-base text-xl border-4 border-bg-base shrink-0"
-              style={{ background: co.logoColor }}
+              className={cn(
+                'w-20 h-20 rounded-2xl flex items-center justify-center font-display font-bold text-bg-base text-xl border-4 border-bg-base shrink-0',
+                avatarToneClass(co.name),
+              )}
               aria-label={`${co.name} logo`}
             >
               {co.logoInitials}

@@ -163,7 +163,7 @@ export default function ListProductPage() {
                 <div><h2 className="font-display text-2xl font-bold text-text-primary mb-1">Category & Basics</h2><p className="text-text-secondary text-sm">What type of AI product are you listing?</p></div>
                 <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Product category">
                   {LISTING_CATEGORIES.map((cat) => (
-                    <button key={cat.id} type="button" role="radio" aria-checked={state.category === cat.id}
+                    <button key={cat.id} type="button" role="radio" aria-checked={state.category === cat.id ? "true" : "false"}
                       onClick={() => patch({ category: cat.id })}
                       className={cn('text-left p-4 rounded-xl border-2 transition-all duration-150 hover:-translate-y-0.5',
                         state.category === cat.id ? 'border-[rgba(0,212,255,0.5)] bg-[rgba(0,212,255,0.06)]' : 'border-[rgba(255,255,255,0.06)] bg-bg-surface hover:border-[rgba(255,255,255,0.15)]'
@@ -256,7 +256,7 @@ export default function ListProductPage() {
                 <div><h2 className="font-display text-2xl font-bold text-text-primary mb-1">Pricing</h2><p className="text-text-secondary text-sm">Choose how you want to monetise your product.</p></div>
                 <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Pricing model">
                   {PRICING_MODELS.map((pm) => (
-                    <button key={pm.value} type="button" role="radio" aria-checked={state.pricingModel === pm.value}
+                    <button key={pm.value} type="button" role="radio" aria-checked={state.pricingModel === pm.value ? "true" : "false"}
                       onClick={() => patch({ pricingModel: pm.value })}
                       className={cn('text-left p-4 rounded-xl border-2 transition-all duration-150',
                         state.pricingModel === pm.value ? 'border-[rgba(0,212,255,0.5)] bg-[rgba(0,212,255,0.06)]' : 'border-[rgba(255,255,255,0.06)] bg-bg-surface hover:border-[rgba(255,255,255,0.15)]'
@@ -285,7 +285,7 @@ export default function ListProductPage() {
                 <label className="flex items-center gap-3 cursor-pointer group">
                   <div className={cn('relative w-10 h-5 rounded-full transition-colors duration-200 cursor-pointer', state.customizationAvailable ? 'bg-accent-cyan' : 'bg-[rgba(255,255,255,0.1)]')}
                     onClick={() => patch({ customizationAvailable: !state.customizationAvailable })}
-                    role="switch" aria-checked={state.customizationAvailable} aria-label="Customization available" tabIndex={0}
+                    role="switch" aria-checked={state.customizationAvailable ? "true" : "false"} aria-label="Customization available" tabIndex={0}
                     onKeyDown={(e) => e.key === 'Enter' && patch({ customizationAvailable: !state.customizationAvailable })}>
                     <div className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200', state.customizationAvailable ? 'translate-x-5' : 'translate-x-0.5')} />
                   </div>

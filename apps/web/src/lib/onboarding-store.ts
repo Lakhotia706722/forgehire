@@ -77,7 +77,7 @@ export interface OnboardingState {
 
 const STORAGE_KEY = 'nh_onboarding_v1';
 
-const DEFAULT_STATE: OnboardingState = {
+export const defaultOnboardingState: OnboardingState = {
   currentStep: 1,
   photoUrl: '',
   fullName: '',
@@ -100,13 +100,13 @@ const DEFAULT_STATE: OnboardingState = {
 };
 
 export function loadOnboardingState(): OnboardingState {
-  if (typeof window === 'undefined') return DEFAULT_STATE;
+  if (typeof window === 'undefined') return defaultOnboardingState;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_STATE;
-    return { ...DEFAULT_STATE, ...JSON.parse(raw) };
+    if (!raw) return defaultOnboardingState;
+    return { ...defaultOnboardingState, ...JSON.parse(raw) };
   } catch {
-    return DEFAULT_STATE;
+    return defaultOnboardingState;
   }
 }
 

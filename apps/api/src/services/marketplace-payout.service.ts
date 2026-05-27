@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import Razorpay from 'razorpay';
-import { getEnv } from '../config/env';
+import { PrismaClient } from "@prisma/client";
+import Razorpay from "razorpay";
+import { getEnv } from "../config/env";
 
 export class MarketplacePayoutService {
   private prisma: PrismaClient;
@@ -11,7 +11,7 @@ export class MarketplacePayoutService {
     const env = getEnv();
     this.razorpay = new Razorpay({
       key_id: env.RAZORPAY_KEY_ID,
-      key_secret: env.RAZORPAY_KEY_SECRET
+      key_secret: env.RAZORPAY_KEY_SECRET,
     });
   }
 
@@ -24,38 +24,39 @@ export class MarketplacePayoutService {
       include: {
         product: {
           include: {
-            engineerProfile: true
-          }
-        }
-      }
+            engineerProfile: true,
+          },
+        },
+      },
     });
 
     if (!purchase) {
-      throw new Error('Purchase not found');
+      throw new Error("Purchase not found");
     }
 
-    if (purchase.status !== 'completed') {
-      throw new Error('Purchase not completed');
+    if (purchase.status !== "completed") {
+      throw new Error("Purchase not completed");
     }
 
-    if (purchase.payoutStatus === 'completed') {
-      throw new Error('Payout already processed');
+    if (purchase.payoutStatus === "completed") {
+      throw new Error("Payout already processed");
     }
 
     if (!purchase.product.engineerProfile.upiId) {
-      throw new Error('Engineer UPI ID not configured');
+      throw new Error("Engineer UPI ID not configured");
     }
 
     // Check if 48 hours have passed
-    const hoursSincePurchase = (Date.now() - purchase.purchasedAt.getTime()) / (1000 * 60 * 60);
+    const hoursSincePurchase =
+      (Date.now() - purchase.purchasedAt.getTime()) / (1000 * 60 * 60);
     if (hoursSincePurchase < 48) {
-      throw new Error('Payout can only be processed after 48 hours');
+      throw new Error("Payout can only be processed after 48 hours");
     }
 
     try {
       // Create payout using Razorpay
       const payoutId = `payout_${Date.now()}_${purchaseId}`;
-      
+
       // TODO: Implement actual Razorpay payout API call
       // const payout = await this.razorpay.payouts.create({
       //   account_number: getEnv().RAZORPAY_ACCOUNT_NUMBER,
@@ -69,35 +70,37 @@ export class MarketplacePayoutService {
       //   narration: `Product sale: ${purchase.product.name}`
       // });
 
-      console.log(`Payout initiated: ${payoutId} for ₹${purchase.engineerPayout} to ${purchase.product.engineerProfile.upiId}`);
+      console.log(
+        `Payout initiated: ${payoutId} for ₹${purchase.engineerPayout} to ${purchase.product.engineerProfile.upiId}`,
+      );
 
       // Update purchase with payout info
       await this.prisma.purchase.update({
         where: { id: purchaseId },
         data: {
-          payoutStatus: 'processing',
+          payoutStatus: "processing",
           payoutId,
-          paidOutAt: new Date()
-        }
+          paidOutAt: new Date(),
+        },
       });
 
       return {
         success: true,
         payoutId,
         amount: purchase.engineerPayout,
-        status: 'processing'
+        status: "processing",
       };
     } catch (error) {
-      console.error('Payout error:', error);
-      
+      console.error("Payout error:", error);
+
       await this.prisma.purchase.update({
         where: { id: purchaseId },
         data: {
-          payoutStatus: 'failed'
-        }
+          payoutStatus: "failed",
+        },
       });
 
-      throw new Error('Failed to process payout');
+      throw new Error("Failed to process payout");
     }
   }
 
@@ -110,19 +113,19 @@ export class MarketplacePayoutService {
 
     const eligiblePurchases = await this.prisma.purchase.findMany({
       where: {
-        status: 'completed',
+        status: "completed",
         payoutStatus: null,
         purchasedAt: {
-          lte: cutoffTime
-        }
+          lte: cutoffTime,
+        },
       },
       include: {
         product: {
           include: {
-            engineerProfile: true
-          }
-        }
-      }
+            engineerProfile: true,
+          },
+        },
+      },
     });
 
     const results = [];
@@ -133,13 +136,13 @@ export class MarketplacePayoutService {
         results.push({
           purchaseId: purchase.id,
           ...result,
-          success: true
+          success: true,
         });
       } catch (error: any) {
         results.push({
           purchaseId: purchase.id,
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
     }
@@ -155,12 +158,12 @@ export class MarketplacePayoutService {
       // TODO: Implement actual Razorpay payout status check
       // const payout = await this.razorpay.payouts.fetch(payoutId);
       // return payout.status;
-      
+
       console.log(`Checking payout status: ${payoutId}`);
-      return 'processing';
+      return "processing";
     } catch (error) {
-      console.error('Get payout status error:', error);
-      return 'unknown';
+      console.error("Get payout status error:", error);
+      return "unknown";
     }
   }
 
@@ -171,22 +174,22 @@ export class MarketplacePayoutService {
     const purchases = await this.prisma.purchase.findMany({
       where: {
         product: {
-          userId: engineerId
+          userId: engineerId,
         },
-        status: 'completed'
+        status: "completed",
       },
       include: {
         product: {
           select: {
             name: true,
-            category: true
-          }
-        }
-      }
+            category: true,
+          },
+        },
+      },
     });
 
     const totalRevenue = purchases.reduce((sum, p) => {
-      const amount = p.currency === 'INR' ? p.priceINR : p.priceUSD;
+      const amount = p.currency === "INR" ? p.priceINR : p.priceUSD;
       return sum + Number(amount || 0);
     }, 0);
 
@@ -199,11 +202,11 @@ export class MarketplacePayoutService {
     }, 0);
 
     const pendingPayout = purchases
-      .filter(p => !p.payoutStatus || p.payoutStatus === 'pending')
+      .filter((p) => !p.payoutStatus || p.payoutStatus === "pending")
       .reduce((sum, p) => sum + Number(p.engineerPayout || 0), 0);
 
     const completedPayout = purchases
-      .filter(p => p.payoutStatus === 'completed')
+      .filter((p) => p.payoutStatus === "completed")
       .reduce((sum, p) => sum + Number(p.engineerPayout || 0), 0);
 
     return {
@@ -213,8 +216,9 @@ export class MarketplacePayoutService {
       totalPayout,
       pendingPayout,
       completedPayout,
-      averageOrderValue: purchases.length > 0 ? totalRevenue / purchases.length : 0,
-      recentPurchases: purchases.slice(0, 10)
+      averageOrderValue:
+        purchases.length > 0 ? totalRevenue / purchases.length : 0,
+      recentPurchases: purchases.slice(0, 10),
     };
   }
 
@@ -223,29 +227,29 @@ export class MarketplacePayoutService {
    */
   async getProductEarnings(productId: string, engineerId: string) {
     const product = await this.prisma.product.findUnique({
-      where: { id: productId }
+      where: { id: productId },
     });
 
     if (!product) {
-      throw new Error('Product not found');
+      throw new Error("Product not found");
     }
 
     if (product.userId !== engineerId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     const purchases = await this.prisma.purchase.findMany({
       where: {
         productId,
-        status: 'completed'
+        status: "completed",
       },
       orderBy: {
-        purchasedAt: 'desc'
-      }
+        purchasedAt: "desc",
+      },
     });
 
     const totalRevenue = purchases.reduce((sum, p) => {
-      const amount = p.currency === 'INR' ? p.priceINR : p.priceUSD;
+      const amount = p.currency === "INR" ? p.priceINR : p.priceUSD;
       return sum + Number(amount || 0);
     }, 0);
 
@@ -255,10 +259,11 @@ export class MarketplacePayoutService {
 
     // Group by month
     const monthlyRevenue: Record<string, number> = {};
-    purchases.forEach(p => {
+    purchases.forEach((p) => {
       const month = p.purchasedAt.toISOString().substring(0, 7); // YYYY-MM
-      const amount = p.currency === 'INR' ? p.priceINR : p.priceUSD;
-      monthlyRevenue[month] = (monthlyRevenue[month] || 0) + Number(amount || 0);
+      const amount = p.currency === "INR" ? p.priceINR : p.priceUSD;
+      monthlyRevenue[month] =
+        (monthlyRevenue[month] || 0) + Number(amount || 0);
     });
 
     return {
@@ -268,7 +273,7 @@ export class MarketplacePayoutService {
       totalRevenue,
       totalPayout,
       monthlyRevenue,
-      recentPurchases: purchases.slice(0, 20)
+      recentPurchases: purchases.slice(0, 20),
     };
   }
 }

@@ -1,5 +1,4 @@
 'use client';
-
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import type { MCQQuestion } from './assessment-store';
@@ -52,7 +51,7 @@ export function MCQSection({
                 ? 'border-[rgba(245,158,11,0.4)] bg-[rgba(245,158,11,0.08)] text-accent-amber'
                 : 'border-[rgba(255,255,255,0.08)] text-text-muted hover:border-[rgba(245,158,11,0.3)] hover:text-accent-amber'
             )}
-            aria-pressed={q.flagged}
+            aria-pressed={q.flagged ? "true" : "false"}
             aria-label={q.flagged ? 'Unflag question' : 'Flag for review'}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill={q.flagged ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -81,7 +80,7 @@ export function MCQSection({
               <button
                 key={i}
                 role="radio"
-                aria-checked={q.selectedOption === i}
+                aria-checked={q.selectedOption === i ? "true" : "false"}
                 onClick={() => onAnswer(q.id, i)}
                 className={cn(
                   'w-full text-left px-4 py-3.5 rounded-xl border transition-all duration-150',

@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { useScrollReveal } from '@/hooks/use-scroll-reveal';
+import { AriaToggleButton } from '@/components/ui/aria-tab-button';
 
 type Audience = 'engineer' | 'company';
 
@@ -41,12 +42,15 @@ export function HowItWorksSection() {
         </p>
 
         {/* Pill tab switcher */}
-        <div className="inline-flex items-center gap-1 mt-6 p-1 rounded-full bg-bg-elevated border border-[rgba(255,255,255,0.06)]" role="tablist" aria-label="Audience selector">
+        <div
+          className="inline-flex items-center gap-1 mt-6 p-1 rounded-full bg-bg-elevated border border-[rgba(255,255,255,0.06)]"
+          role="group"
+          aria-label="Audience selector"
+        >
           {(['engineer', 'company'] as Audience[]).map((a) => (
-            <button
+            <AriaToggleButton
               key={a}
-              role="tab"
-              aria-selected={audience === a}
+              pressed={audience === a}
               onClick={() => setAudience(a)}
               className={cn(
                 'px-5 py-2 rounded-full text-sm font-medium transition-all duration-200',
@@ -56,33 +60,34 @@ export function HowItWorksSection() {
               )}
             >
               {a === 'engineer' ? 'For Engineers' : 'For Companies'}
-            </button>
+            </AriaToggleButton>
           ))}
         </div>
       </div>
 
       {/* Steps grid */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6" role="tabpanel">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6" role="region" aria-label={`Steps for ${audience === 'engineer' ? 'engineers' : 'companies'}`}>
         {STEPS[audience].map((step, i) => (
           <div
             key={`${audience}-${step.num}`}
-            className="scroll-reveal relative"
-            style={{ transitionDelay: `${i * 100}ms` }}
+            className={cn(
+              'scroll-reveal relative',
+              i === 0 && 'scroll-reveal-delay-0',
+              i === 1 && 'scroll-reveal-delay-100',
+              i === 2 && 'scroll-reveal-delay-200',
+              i === 3 && 'scroll-reveal-delay-300',
+            )}
           >
-            {/* Connector line */}
             {i < STEPS[audience].length - 1 && (
               <div
-                className="hidden lg:block absolute top-10 left-full w-full h-px z-0"
-                style={{ background: 'linear-gradient(90deg, rgba(0,212,255,0.2), transparent)' }}
+                className="hidden lg:block absolute top-10 left-full w-full h-px z-0 how-it-works-connector"
                 aria-hidden="true"
               />
             )}
 
             <div className="relative z-10 p-6 rounded-xl bg-bg-surface border border-[rgba(255,255,255,0.06)] hover:border-[rgba(0,212,255,0.2)] transition-all duration-300 hover:-translate-y-0.5 h-full">
-              {/* Big number background */}
               <div
-                className="font-display font-bold text-[80px] leading-none mb-2 select-none"
-                style={{ color: 'rgba(0,212,255,0.08)' }}
+                className="font-display font-bold text-[80px] leading-none mb-2 select-none how-it-works-step-watermark"
                 aria-hidden="true"
               >
                 {step.num}

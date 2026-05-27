@@ -4,6 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { usePlatformStats } from '@/lib/api-hooks';
+import { cn } from '@/lib/utils';
 
 function StatBadge({ value, label, loading }: { value: string; label: string; loading: boolean }) {
   return (
@@ -22,15 +23,19 @@ function StatBadge({ value, label, loading }: { value: string; label: string; lo
 }
 
 function formatCount(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K+`;
-  return `${n}+`;
+  const value = Number(n ?? 0);
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K+`;
+  return `${value}+`;
 }
 
 function formatPaidOut(n: number): string {
-  if (n >= 10_000_000) return `₹${(n / 10_000_000).toFixed(1)}Cr+`;
-  if (n >= 100_000) return `₹${(n / 100_000).toFixed(0)}L+`;
-  return `₹${n.toLocaleString('en-IN')}`;
+  const value = Number(n ?? 0);
+  if (value >= 10_000_000) return `₹${(value / 10_000_000).toFixed(1)}Cr+`;
+  if (value >= 100_000) return `₹${(value / 100_000).toFixed(0)}L+`;
+  return `₹${value.toLocaleString('en-IN')}`;
 }
+
+const STAT_DELAY_CLASS = ['anim-delay-800', 'anim-delay-920', 'anim-delay-1040'] as const;
 
 export function HeroSection() {
   const [statsVisible, setStatsVisible] = React.useState(false);
@@ -61,34 +66,13 @@ export function HeroSection() {
       className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 overflow-hidden"
       aria-labelledby="hero-heading"
     >
-      {/* ── Mesh gradient blobs ─────────────────────────── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        <div
-          className="absolute w-[600px] h-[600px] rounded-full animate-blob-1"
-          style={{
-            background: 'radial-gradient(circle, rgba(0,212,255,0.08) 0%, transparent 70%)',
-            top: '10%', left: '15%',
-          }}
-        />
-        <div
-          className="absolute w-[500px] h-[500px] rounded-full animate-blob-2"
-          style={{
-            background: 'radial-gradient(circle, rgba(123,94,167,0.1) 0%, transparent 70%)',
-            top: '30%', right: '10%',
-          }}
-        />
-        <div
-          className="absolute w-[400px] h-[400px] rounded-full animate-blob-3"
-          style={{
-            background: 'radial-gradient(circle, rgba(8,11,20,0.9) 0%, rgba(0,212,255,0.04) 70%)',
-            bottom: '10%', left: '40%',
-          }}
-        />
+        <div className="absolute w-[600px] h-[600px] rounded-full animate-blob-1 hero-blob-1" />
+        <div className="absolute w-[500px] h-[500px] rounded-full animate-blob-2 hero-blob-2" />
+        <div className="absolute w-[400px] h-[400px] rounded-full animate-blob-3 hero-blob-3" />
       </div>
 
-      {/* ── Content ─────────────────────────────────────── */}
       <div className="relative z-10 max-w-4xl mx-auto">
-        {/* Eyebrow */}
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[rgba(0,212,255,0.2)] bg-[rgba(0,212,255,0.05)] mb-8 animate-fade-up">
           <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-pulse" />
           <span className="text-xs font-mono text-accent-cyan tracking-wider uppercase">
@@ -96,40 +80,25 @@ export function HeroSection() {
           </span>
         </div>
 
-        {/* Headline */}
         <h1
           id="hero-heading"
-          className="font-display font-bold text-[clamp(2.5rem,7vw,4.5rem)] text-text-primary leading-[1.08] mb-6 animate-fade-up"
-          style={{ animationDelay: '100ms' }}
+          className="font-display font-bold text-[clamp(2.5rem,7vw,4.5rem)] text-text-primary leading-[1.08] mb-6 animate-fade-up anim-delay-100"
         >
           India&apos;s Only{' '}
-          <span
-            className="text-transparent bg-clip-text"
-            style={{
-              backgroundImage: 'linear-gradient(135deg, #00D4FF 0%, #7B5EA7 100%)',
-            }}
-          >
+          <span className="text-transparent bg-clip-text text-gradient-brand">
             Verified AI
           </span>
           <br />
           Talent Network
         </h1>
 
-        {/* Subheadline */}
-        <p
-          className="text-text-secondary text-[clamp(1rem,2.5vw,1.25rem)] max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-up"
-          style={{ animationDelay: '200ms' }}
-        >
+        <p className="text-text-secondary text-[clamp(1rem,2.5vw,1.25rem)] max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-up anim-delay-200">
           Every engineer is assessed, scored, and ranked.
           <br className="hidden sm:block" />
           No noise. Only builders.
         </p>
 
-        {/* CTAs */}
-        <div
-          className="flex flex-wrap gap-4 justify-center mb-16 animate-fade-up"
-          style={{ animationDelay: '300ms' }}
-        >
+        <div className="flex flex-wrap gap-4 justify-center mb-16 animate-fade-up anim-delay-300">
           <Link href="/signup?role=engineer">
             <Button size="lg" className="min-w-[180px]">
               Join as Engineer
@@ -142,13 +111,15 @@ export function HeroSection() {
           </Link>
         </div>
 
-        {/* Floating stat badges — real data */}
         <div className="flex flex-wrap gap-3 justify-center">
           {statItems.map((stat, i) => (
             <div
               key={stat.label}
-              className={`transition-all duration-300 ${statsVisible ? 'animate-stat-pop opacity-100' : 'opacity-0'}`}
-              style={{ animationDelay: `${800 + i * 120}ms` }}
+              className={cn(
+                'transition-all duration-300',
+                statsVisible ? 'animate-stat-pop opacity-100' : 'opacity-0',
+                STAT_DELAY_CLASS[i],
+              )}
             >
               <StatBadge value={stat.value} label={stat.label} loading={isLoading} />
             </div>
@@ -156,8 +127,10 @@ export function HeroSection() {
         </div>
       </div>
 
-      {/* Scroll indicator */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 animate-fade-up" style={{ animationDelay: '1200ms' }} aria-hidden="true">
+      <div
+        className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 animate-fade-up anim-delay-1200"
+        aria-hidden="true"
+      >
         <span className="text-text-muted text-xs font-mono">scroll</span>
         <div className="w-px h-8 bg-gradient-to-b from-[rgba(0,212,255,0.4)] to-transparent" />
       </div>

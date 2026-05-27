@@ -1,5 +1,5 @@
-import { getPrismaClient } from '../config/database';
-import { v4 as uuidv4 } from 'uuid';
+import { getPrismaClient } from "../config/database";
+import { v4 as uuidv4 } from "uuid";
 
 export interface ScoreDimensions {
   assessment: number; // 0-250 (25%)
@@ -32,11 +32,11 @@ export class NeuronScoreService {
    * Determine tier from score
    */
   determineTier(score: number): string {
-    if (score >= 850) return 'elite';
-    if (score >= 700) return 'elite';
-    if (score >= 550) return 'professional';
-    if (score >= 400) return 'verified';
-    return 'conditional';
+    if (score >= 850) return "elite";
+    if (score >= 700) return "elite";
+    if (score >= 550) return "professional";
+    if (score >= 400) return "verified";
+    return "conditional";
   }
 
   /**
@@ -44,13 +44,13 @@ export class NeuronScoreService {
    */
   getInitialScoreFromTier(tier: string): number {
     switch (tier) {
-      case 'elite':
+      case "elite":
         return Math.floor(Math.random() * 151) + 700; // 700-850
-      case 'professional':
+      case "professional":
         return Math.floor(Math.random() * 150) + 550; // 550-699
-      case 'verified':
+      case "verified":
         return Math.floor(Math.random() * 150) + 400; // 400-549
-      case 'conditional':
+      case "conditional":
         return Math.floor(Math.random() * 200) + 200; // 200-399
       default:
         return 200;
@@ -64,23 +64,23 @@ export class NeuronScoreService {
     engineerProfileId: string,
     reason: string,
     dimension?: string,
-    triggeredBy?: string
+    triggeredBy?: string,
   ): Promise<number> {
     const profile = await this.prisma.engineerProfile.findUnique({
       where: { id: engineerProfileId },
       include: {
         assessments: {
-          where: { status: 'evaluated' },
-          orderBy: { evaluatedAt: 'desc' },
-          take: 1
+          where: { status: "evaluated" },
+          orderBy: { evaluatedAt: "desc" },
+          take: 1,
         },
         projects: true,
-        skills: true
-      }
+        skills: true,
+      },
     });
 
     if (!profile) {
-      throw new Error('Engineer profile not found');
+      throw new Error("Engineer profile not found");
     }
 
     // Calculate each dimension
@@ -90,7 +90,7 @@ export class NeuronScoreService {
       portfolioDepth: this.calculatePortfolioScore(profile),
       workDelivery: this.calculateWorkDeliveryScore(profile),
       marketplace: this.calculateMarketplaceScore(profile),
-      community: this.calculateCommunityScore(profile)
+      community: this.calculateCommunityScore(profile),
     };
 
     // Calculate total score
@@ -107,8 +107,8 @@ export class NeuronScoreService {
       data: {
         neuronScore: newScore,
         neuronTier: newTier,
-        lastActivityAt: new Date()
-      }
+        lastActivityAt: new Date(),
+      },
     });
 
     // Log score history
@@ -127,8 +127,8 @@ export class NeuronScoreService {
         community: dimensions.community,
         reason,
         dimension,
-        triggeredBy
-      }
+        triggeredBy,
+      },
     });
 
     return newScore;
@@ -141,7 +141,7 @@ export class NeuronScoreService {
     if (assessments.length === 0) return 0;
 
     const latestAssessment = assessments[0];
-    
+
     if (!latestAssessment.totalScore) return 0;
 
     // Convert assessment score (0-100) to dimension score (0-250)
@@ -217,15 +217,15 @@ export class NeuronScoreService {
    */
   async applyScoreDecay(engineerProfileId: string): Promise<number> {
     const profile = await this.prisma.engineerProfile.findUnique({
-      where: { id: engineerProfileId }
+      where: { id: engineerProfileId },
     });
 
     if (!profile) {
-      throw new Error('Engineer profile not found');
+      throw new Error("Engineer profile not found");
     }
 
     const daysSinceActivity = Math.floor(
-      (Date.now() - profile.lastActivityAt.getTime()) / (1000 * 60 * 60 * 24)
+      (Date.now() - profile.lastActivityAt.getTime()) / (1000 * 60 * 60 * 24),
     );
 
     // No decay if active within 90 days
@@ -241,15 +241,17 @@ export class NeuronScoreService {
     const decayPercentage = Math.min(15, decayPeriods * 2);
 
     // Apply decay
-    const decayAmount = Math.round(profile.neuronScore * (decayPercentage / 100));
+    const decayAmount = Math.round(
+      profile.neuronScore * (decayPercentage / 100),
+    );
     const newScore = profile.neuronScore - decayAmount;
 
     if (decayAmount > 0) {
       await this.recalculateScore(
         engineerProfileId,
         `Inactivity decay: ${decayPercentage}% (${daysSinceActivity} days inactive)`,
-        'inactivity_decay',
-        'system'
+        "inactivity_decay",
+        "system",
       );
     }
 
@@ -261,12 +263,12 @@ export class NeuronScoreService {
    */
   async getScoreHistory(
     engineerProfileId: string,
-    limit: number = 50
+    limit: number = 50,
   ): Promise<any[]> {
     return await this.prisma.neuronScoreHistory.findMany({
       where: { engineerProfileId },
-      orderBy: { createdAt: 'desc' },
-      take: limit
+      orderBy: { createdAt: "desc" },
+      take: limit,
     });
   }
 
@@ -283,17 +285,17 @@ export class NeuronScoreService {
       where: { id: engineerProfileId },
       include: {
         assessments: {
-          where: { status: 'evaluated' },
-          orderBy: { evaluatedAt: 'desc' },
-          take: 1
+          where: { status: "evaluated" },
+          orderBy: { evaluatedAt: "desc" },
+          take: 1,
         },
         projects: true,
-        skills: true
-      }
+        skills: true,
+      },
     });
 
     if (!profile) {
-      throw new Error('Engineer profile not found');
+      throw new Error("Engineer profile not found");
     }
 
     const dimensions: ScoreDimensions = {
@@ -302,7 +304,7 @@ export class NeuronScoreService {
       portfolioDepth: this.calculatePortfolioScore(profile),
       workDelivery: this.calculateWorkDeliveryScore(profile),
       marketplace: this.calculateMarketplaceScore(profile),
-      community: this.calculateCommunityScore(profile)
+      community: this.calculateCommunityScore(profile),
     };
 
     const history = await this.getScoreHistory(engineerProfileId, 10);
@@ -311,7 +313,7 @@ export class NeuronScoreService {
       totalScore: profile.neuronScore,
       tier: profile.neuronTier,
       dimensions,
-      history
+      history,
     };
   }
 }

@@ -79,6 +79,7 @@ model EngineerProfile {
   id                String   @id @default(uuid()) @db.Uuid
   userId            String   @unique @db.Uuid
   fullName          String
+  headline          String?
   bio               String?  @db.Text
   location          String?
   githubUrl         String?

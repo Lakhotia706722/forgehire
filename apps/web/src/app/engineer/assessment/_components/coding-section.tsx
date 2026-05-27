@@ -1,5 +1,4 @@
 'use client';
-
 import * as React from 'react';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
@@ -100,7 +99,7 @@ export function CodingSection({
                 ? 'bg-accent-cyan text-bg-base font-semibold'
                 : 'text-text-muted hover:text-text-secondary'
             )}
-            aria-selected={currentTask === i}
+            aria-selected={currentTask === i ? "true" : "false"}
             role="tab"
           >
             Task {i + 1}

@@ -1,7 +1,7 @@
-import { PrismaClient, ContractDisputeStatus } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
-import { getEnv } from '../config/env';
-import { EscrowService } from './escrow.service';
+import { PrismaClient, ContractDisputeStatus } from "@prisma/client";
+import Anthropic from "@anthropic-ai/sdk";
+import { getEnv } from "../config/env";
+import { EscrowService } from "./escrow.service";
 
 export class ContractDisputeService {
   private prisma: PrismaClient;
@@ -11,7 +11,7 @@ export class ContractDisputeService {
   constructor() {
     this.prisma = new PrismaClient();
     this.anthropic = new Anthropic({
-      apiKey: getEnv('ANTHROPIC_API_KEY')
+      apiKey: getEnv("ANTHROPIC_API_KEY"),
     });
     this.escrowService = new EscrowService();
   }
@@ -29,23 +29,29 @@ export class ContractDisputeService {
     evidence?: any[];
   }) {
     const contract = await this.prisma.contract.findUnique({
-      where: { id: data.contractId }
+      where: { id: data.contractId },
     });
 
     if (!contract) {
-      throw new Error('Contract not found');
+      throw new Error("Contract not found");
     }
 
     // Check if user is part of the contract
-    if (contract.companyUserId !== data.raisedBy && contract.engineerUserId !== data.raisedBy) {
-      throw new Error('Unauthorized to raise dispute on this contract');
+    if (
+      contract.companyUserId !== data.raisedBy &&
+      contract.engineerUserId !== data.raisedBy
+    ) {
+      throw new Error("Unauthorized to raise dispute on this contract");
     }
 
     // Check if within dispute window (7 days from contract completion)
     if (contract.completedAt) {
-      const daysSinceCompletion = (Date.now() - contract.completedAt.getTime()) / (1000 * 60 * 60 * 24);
+      const daysSinceCompletion =
+        (Date.now() - contract.completedAt.getTime()) / (1000 * 60 * 60 * 24);
       if (daysSinceCompletion > 7) {
-        throw new Error('Dispute window has expired (7 days from final delivery)');
+        throw new Error(
+          "Dispute window has expired (7 days from final delivery)",
+        );
       }
     }
 
@@ -54,13 +60,16 @@ export class ContractDisputeService {
       where: {
         contractId: data.contractId,
         status: {
-          in: [ContractDisputeStatus.pending, ContractDisputeStatus.under_review]
-        }
-      }
+          in: [
+            ContractDisputeStatus.pending,
+            ContractDisputeStatus.under_review,
+          ],
+        },
+      },
     });
 
     if (existing) {
-      throw new Error('An active dispute already exists for this contract');
+      throw new Error("An active dispute already exists for this contract");
     }
 
     // Calculate review deadline (72 hours)
@@ -77,14 +86,14 @@ export class ContractDisputeService {
         description: data.description,
         evidence: data.evidence || [],
         status: ContractDisputeStatus.pending,
-        reviewDeadline
-      }
+        reviewDeadline,
+      },
     });
 
     // Update contract status
     await this.prisma.contract.update({
       where: { id: data.contractId },
-      data: { status: 'disputed' as any }
+      data: { status: "disputed" as any },
     });
 
     return dispute;
@@ -95,20 +104,23 @@ export class ContractDisputeService {
    */
   async submitEvidence(disputeId: string, userId: string, evidence: any[]) {
     const dispute = await this.prisma.contractDispute.findUnique({
-      where: { id: disputeId }
+      where: { id: disputeId },
     });
 
     if (!dispute) {
-      throw new Error('Dispute not found');
+      throw new Error("Dispute not found");
     }
 
     // Check authorization
     if (dispute.raisedBy !== userId && dispute.againstUserId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
-    if (dispute.status !== ContractDisputeStatus.pending && dispute.status !== ContractDisputeStatus.under_review) {
-      throw new Error('Cannot submit evidence for resolved dispute');
+    if (
+      dispute.status !== ContractDisputeStatus.pending &&
+      dispute.status !== ContractDisputeStatus.under_review
+    ) {
+      throw new Error("Cannot submit evidence for resolved dispute");
     }
 
     // Append evidence
@@ -118,8 +130,8 @@ export class ContractDisputeService {
     return await this.prisma.contractDispute.update({
       where: { id: disputeId },
       data: {
-        evidence: updatedEvidence
-      }
+        evidence: updatedEvidence,
+      },
     });
   }
 
@@ -133,14 +145,14 @@ export class ContractDisputeService {
       include: {
         contract: {
           include: {
-            milestonePayments: true
-          }
-        }
-      }
+            milestonePayments: true,
+          },
+        },
+      },
     });
 
     if (!dispute) {
-      throw new Error('Dispute not found');
+      throw new Error("Dispute not found");
     }
 
     // Update status to under review
@@ -148,8 +160,8 @@ export class ContractDisputeService {
       where: { id: disputeId },
       data: {
         status: ContractDisputeStatus.under_review,
-        reviewStartedAt: new Date()
-      }
+        reviewStartedAt: new Date(),
+      },
     });
 
     // Prepare context for AI
@@ -163,8 +175,8 @@ export class ContractDisputeService {
       where: { id: disputeId },
       data: {
         aiAuditSummary: aiAnalysis.summary,
-        aiRecommendation: aiAnalysis.recommendation
-      }
+        aiRecommendation: aiAnalysis.recommendation,
+      },
     });
 
     return aiAnalysis;
@@ -175,13 +187,13 @@ export class ContractDisputeService {
    */
   private prepareAuditContext(dispute: any): string {
     const contract = dispute.contract;
-    
+
     let context = `# Contract Dispute Analysis\n\n`;
     context += `## Contract Details\n`;
     context += `- Type: ${contract.type}\n`;
     context += `- Total Amount: ₹${contract.totalAmount}\n`;
     context += `- Start Date: ${contract.startDate}\n`;
-    context += `- End Date: ${contract.endDate || 'Ongoing'}\n`;
+    context += `- End Date: ${contract.endDate || "Ongoing"}\n`;
     context += `- Status: ${contract.status}\n\n`;
 
     context += `## Dispute Details\n`;
@@ -215,11 +227,11 @@ export class ContractDisputeService {
   }> {
     try {
       const message = await this.anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 2000,
         messages: [
           {
-            role: 'user',
+            role: "user",
             content: `${context}\n\nAnalyze this contract dispute and provide:
 1. A summary of the key issues
 2. Assessment of deliverable quality vs stated scope
@@ -238,41 +250,40 @@ Format your response as JSON:
     "companyPercentage": 40,
     "reasoning": "Explanation"
   }
-}`
-          }
-        ]
+}`,
+          },
+        ],
       });
 
-      const responseText = message.content[0].type === 'text' 
-        ? message.content[0].text 
-        : '';
+      const responseText =
+        message.content[0].type === "text" ? message.content[0].text : "";
 
       // Parse JSON response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('Failed to parse AI response');
+        throw new Error("Failed to parse AI response");
       }
 
       const analysis = JSON.parse(jsonMatch[0]);
 
       return {
         summary: analysis.summary,
-        recommendation: analysis
+        recommendation: analysis,
       };
     } catch (error: any) {
-      console.error('AI audit error:', error);
-      
+      console.error("AI audit error:", error);
+
       // Fallback to default 50-50 split
       return {
-        summary: 'AI audit failed. Manual review required.',
+        summary: "AI audit failed. Manual review required.",
         recommendation: {
-          summary: 'AI audit failed',
+          summary: "AI audit failed",
           recommendedSplit: {
             engineerPercentage: 50,
             companyPercentage: 50,
-            reasoning: 'Default 50-50 split due to AI audit failure'
-          }
-        }
+            reasoning: "Default 50-50 split due to AI audit failure",
+          },
+        },
       };
     }
   }
@@ -290,33 +301,36 @@ Format your response as JSON:
   }) {
     const dispute = await this.prisma.contractDispute.findUnique({
       where: { id: data.disputeId },
-      include: { contract: true }
+      include: { contract: true },
     });
 
     if (!dispute) {
-      throw new Error('Dispute not found');
+      throw new Error("Dispute not found");
     }
 
     if (dispute.status === ContractDisputeStatus.resolved) {
-      throw new Error('Dispute already resolved');
+      throw new Error("Dispute already resolved");
     }
 
     // Validate percentages
     if (data.engineerPercentage + data.companyPercentage !== 100) {
-      throw new Error('Percentages must sum to 100');
+      throw new Error("Percentages must sum to 100");
     }
 
     // Get escrow account
-    const escrow = await this.escrowService.getEscrowAccount(dispute.contractId);
+    const escrow = await this.escrowService.getEscrowAccount(
+      dispute.contractId,
+    );
 
     if (!escrow) {
-      throw new Error('Escrow account not found');
+      throw new Error("Escrow account not found");
     }
 
     // Calculate amounts
-    const availableBalance = parseFloat(escrow.lockedAmount.toString()) - 
-                            parseFloat(escrow.releasedAmount.toString()) -
-                            parseFloat(escrow.refundedAmount.toString());
+    const availableBalance =
+      parseFloat(escrow.lockedAmount.toString()) -
+      parseFloat(escrow.releasedAmount.toString()) -
+      parseFloat(escrow.refundedAmount.toString());
 
     const engineerAmount = (availableBalance * data.engineerPercentage) / 100;
     const companyRefund = (availableBalance * data.companyPercentage) / 100;
@@ -330,8 +344,8 @@ Format your response as JSON:
         resolution: data.resolution,
         engineerAmount,
         companyRefund,
-        resolvedAt: new Date()
-      }
+        resolvedAt: new Date(),
+      },
     });
 
     // Process partial release to engineer
@@ -341,7 +355,7 @@ Format your response as JSON:
         milestoneId: `dispute_${dispute.id}`,
         amount: engineerAmount,
         recipientUserId: dispute.contract.engineerUserId,
-        approvedBy: data.resolvedBy
+        approvedBy: data.resolvedBy,
       });
     }
 
@@ -351,7 +365,7 @@ Format your response as JSON:
         escrowAccountId: escrow.id,
         amount: companyRefund,
         recipientUserId: dispute.contract.companyUserId,
-        reason: `Dispute resolution - ${data.resolution}`
+        reason: `Dispute resolution - ${data.resolution}`,
       });
     }
 
@@ -359,8 +373,8 @@ Format your response as JSON:
     await this.prisma.contract.update({
       where: { id: dispute.contractId },
       data: {
-        status: 'terminated'
-      }
+        status: "terminated",
+      },
     });
 
     return resolved;
@@ -371,18 +385,18 @@ Format your response as JSON:
    */
   async escalateDispute(disputeId: string, _escalatedBy: string) {
     const dispute = await this.prisma.contractDispute.findUnique({
-      where: { id: disputeId }
+      where: { id: disputeId },
     });
 
     if (!dispute) {
-      throw new Error('Dispute not found');
+      throw new Error("Dispute not found");
     }
 
     return await this.prisma.contractDispute.update({
       where: { id: disputeId },
       data: {
-        status: ContractDisputeStatus.escalated
-      }
+        status: ContractDisputeStatus.escalated,
+      },
     });
   }
 
@@ -392,26 +406,28 @@ Format your response as JSON:
   async getDispute(disputeId: string, userId: string) {
     const dispute = await this.prisma.contractDispute.findUnique({
       where: { id: disputeId },
-      include: { contract: true }
+      include: { contract: true },
     });
 
     if (!dispute) {
-      throw new Error('Dispute not found');
+      throw new Error("Dispute not found");
     }
 
     // Check authorization
     const user = await this.prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
 
-    if (user.role !== 'admin' && 
-        dispute.raisedBy !== userId && 
-        dispute.againstUserId !== userId) {
-      throw new Error('Unauthorized');
+    if (
+      user.role !== "admin" &&
+      dispute.raisedBy !== userId &&
+      dispute.againstUserId !== userId
+    ) {
+      throw new Error("Unauthorized");
     }
 
     return dispute;
@@ -423,21 +439,18 @@ Format your response as JSON:
   async getUserDisputes(userId: string) {
     return await this.prisma.contractDispute.findMany({
       where: {
-        OR: [
-          { raisedBy: userId },
-          { againstUserId: userId }
-        ]
+        OR: [{ raisedBy: userId }, { againstUserId: userId }],
       },
       include: {
         contract: {
           select: {
             hiringMode: true,
             totalAmount: true,
-            status: true
-          }
-        }
+            status: true,
+          },
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
   }
 
@@ -448,19 +461,23 @@ Format your response as JSON:
     return await this.prisma.contractDispute.findMany({
       where: {
         status: {
-          in: [ContractDisputeStatus.pending, ContractDisputeStatus.under_review, ContractDisputeStatus.escalated]
-        }
+          in: [
+            ContractDisputeStatus.pending,
+            ContractDisputeStatus.under_review,
+            ContractDisputeStatus.escalated,
+          ],
+        },
       },
       include: {
         contract: {
           select: {
             hiringMode: true,
             totalAmount: true,
-            status: true
-          }
-        }
+            status: true,
+          },
+        },
       },
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: "asc" },
     });
   }
 
@@ -470,16 +487,16 @@ Format your response as JSON:
   async getDisputeStats() {
     const total = await this.prisma.contractDispute.count();
     const pending = await this.prisma.contractDispute.count({
-      where: { status: ContractDisputeStatus.pending }
+      where: { status: ContractDisputeStatus.pending },
     });
     const underReview = await this.prisma.contractDispute.count({
-      where: { status: ContractDisputeStatus.under_review }
+      where: { status: ContractDisputeStatus.under_review },
     });
     const resolved = await this.prisma.contractDispute.count({
-      where: { status: ContractDisputeStatus.resolved }
+      where: { status: ContractDisputeStatus.resolved },
     });
     const escalated = await this.prisma.contractDispute.count({
-      where: { status: ContractDisputeStatus.escalated }
+      where: { status: ContractDisputeStatus.escalated },
     });
 
     return {
@@ -487,7 +504,7 @@ Format your response as JSON:
       pending,
       underReview,
       resolved,
-      escalated
+      escalated,
     };
   }
 }

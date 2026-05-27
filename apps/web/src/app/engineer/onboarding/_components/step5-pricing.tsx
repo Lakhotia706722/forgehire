@@ -1,5 +1,4 @@
 'use client';
-
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import type { OnboardingState, AvailabilityState } from '@/lib/onboarding-store';
@@ -91,7 +90,7 @@ export function Step5Pricing({ state, onChange }: Step5Props) {
               key={opt.value}
               type="button"
               role="radio"
-              aria-checked={state.availability === opt.value}
+              aria-checked={state.availability === opt.value ? "true" : "false"}
               onClick={() => onChange({ availability: opt.value })}
               className={cn(
                 'w-full flex items-center gap-4 px-4 py-3.5 rounded-xl border text-left transition-all duration-200',

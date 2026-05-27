@@ -1,7 +1,9 @@
 'use client';
-
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { AriaToggleButton } from '@/components/ui/aria-tab-button';
+import { Progress } from '@/components/ui/progress';
+import { avatarToneClass } from '@/lib/avatar-tone';
 import {
   formatMessageTime,
   formatDateDivider,
@@ -184,13 +186,17 @@ export default function CompanyMessagesPage() {
           />
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-[rgba(255,255,255,0.06)]" role="tablist">
+        {/* Conversation filters (toggle group — avoids tablist/tab static-analysis gaps) */}
+        <div
+          className="flex border-b border-[rgba(255,255,255,0.06)]"
+          role="group"
+          aria-label="Conversation filters"
+          data-a11y-conv-filters
+        >
           {(['all', 'project_rooms', 'requests'] as ConvTab[]).map((t) => (
-            <button
+            <AriaToggleButton
               key={t}
-              role="tab"
-              aria-selected={tab === t}
+              pressed={tab === t}
               onClick={() => setTab(t)}
               className={cn(
                 'flex-1 py-2.5 text-[10px] font-medium transition-colors',
@@ -198,16 +204,16 @@ export default function CompanyMessagesPage() {
               )}
             >
               {t === 'all' ? 'All' : t === 'project_rooms' ? 'Rooms' : 'Requests'}
-            </button>
+            </AriaToggleButton>
           ))}
         </div>
 
         {/* Conversation list */}
-        <div className="flex-1 overflow-y-auto" role="list" aria-label="Conversations">
+        <ul className="flex-1 overflow-y-auto list-none m-0 p-0" aria-label="Conversations">
           {filteredConvs.map((conv) => (
+            <li key={conv.id}>
             <button
-              key={conv.id}
-              role="listitem"
+              type="button"
               onClick={() => setActiveId(conv.id)}
               className={cn(
                 'w-full text-left px-4 py-3.5 border-b border-[rgba(255,255,255,0.04)] transition-colors relative',
@@ -218,7 +224,7 @@ export default function CompanyMessagesPage() {
               data-testid={`conv-item-${conv.id}`}
             >
               <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs shrink-0" style={{ background: conv.avatarColor }} aria-hidden="true">
+                <div className={cn('w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs shrink-0', avatarToneClass(conv.name))} aria-hidden="true">
                   {conv.initials}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -235,15 +241,16 @@ export default function CompanyMessagesPage() {
                 )}
               </div>
             </button>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
 
       {/* ── Center panel: message thread ──────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Thread header */}
         <div className="px-5 py-3.5 border-b border-[rgba(255,255,255,0.06)] bg-bg-surface flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs" style={{ background: activeConv?.avatarColor }} aria-hidden="true">
+          <div className={cn('w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs', activeConv && avatarToneClass(activeConv.name))} aria-hidden="true">
             {activeConv?.initials}
           </div>
           <div>
@@ -268,7 +275,7 @@ export default function CompanyMessagesPage() {
                 return (
                   <div key={msg.id} className={cn('flex gap-2.5 group', isMine && 'flex-row-reverse')} data-testid={`message-${msg.id}`}>
                     {!isMine && (
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-[9px] shrink-0 mt-1" style={{ background: msg.senderColor }} aria-hidden="true">
+                      <div className={cn('w-7 h-7 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-[9px] shrink-0 mt-1', avatarToneClass(msg.senderInitials))} aria-hidden="true">
                         {msg.senderInitials}
                       </div>
                     )}
@@ -310,11 +317,10 @@ export default function CompanyMessagesPage() {
             <div className="flex gap-2.5" data-testid="typing-indicator">
               <div className="w-7 h-7 rounded-full bg-bg-elevated flex items-center justify-center" aria-hidden="true" />
               <div className="bg-bg-elevated rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1">
-                {[0, 1, 2].map((i) => (
+                {(['anim-delay-0', 'anim-delay-120', 'anim-delay-240'] as const).map((delayClass) => (
                   <div
-                    key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce"
-                    style={{ animationDelay: `${i * 150}ms` }}
+                    key={delayClass}
+                    className={cn('w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce', delayClass)}
                     aria-hidden="true"
                   />
                 ))}
@@ -330,17 +336,7 @@ export default function CompanyMessagesPage() {
           <div className="px-5 py-2 border-t border-[rgba(255,255,255,0.06)]" data-testid="upload-progress">
             <div className="flex items-center gap-3">
               <span className="text-xs text-text-muted">Uploading…</span>
-              <div className="flex-1 h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-accent-cyan rounded-full transition-all duration-200"
-                  style={{ width: `${uploadProgress}%` }}
-                  role="progressbar"
-                  aria-valuenow={uploadProgress}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label="Upload progress"
-                />
-              </div>
+              <Progress value={uploadProgress} max={100} label="Upload progress" size="sm" className="flex-1" />
               <span className="text-xs font-mono text-accent-cyan">{uploadProgress}%</span>
             </div>
           </div>
@@ -383,8 +379,7 @@ export default function CompanyMessagesPage() {
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
               placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
               rows={1}
-              className="flex-1 bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)] resize-none transition-all"
-              style={{ maxHeight: 120 }}
+              className="message-input-max-h flex-1 bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)] resize-none transition-all"
               aria-label="Message input"
               data-testid="message-input"
             />

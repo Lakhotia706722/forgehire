@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { AriaNavButton } from '@/components/ui/aria-tab-button';
 
 interface TabsContextValue {
   active: string;
@@ -37,19 +38,21 @@ export function Tabs({ defaultValue, value, onValueChange, children, className }
 interface TabsListProps {
   children: React.ReactNode;
   className?: string;
+  /** Accessible name for the tab navigation region */
+  'aria-label'?: string;
 }
 
-export function TabsList({ children, className }: TabsListProps) {
+export function TabsList({ children, className, 'aria-label': ariaLabel }: TabsListProps) {
   return (
-    <div
-      role="tablist"
+    <nav
+      aria-label={ariaLabel ?? 'Sections'}
       className={cn(
         'flex items-center gap-1 border-b border-[rgba(255,255,255,0.06)]',
         className
       )}
     >
       {children}
-    </div>
+    </nav>
   );
 }
 
@@ -65,10 +68,8 @@ export function TabsTrigger({ value, children, className, disabled }: TabsTrigge
   const isActive = active === value;
 
   return (
-    <button
-      role="tab"
-      aria-selected={isActive}
-      aria-controls={`tabpanel-${value}`}
+    <AriaNavButton
+      current={isActive}
       id={`tab-${value}`}
       disabled={disabled}
       onClick={() => setActive(value)}
@@ -83,14 +84,13 @@ export function TabsTrigger({ value, children, className, disabled }: TabsTrigge
       )}
     >
       {children}
-      {/* Sliding underline */}
       {isActive && (
         <span
           className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-cyan rounded-full animate-fade-up"
           aria-hidden="true"
         />
       )}
-    </button>
+    </AriaNavButton>
   );
 }
 
@@ -106,7 +106,6 @@ export function TabsContent({ value, children, className }: TabsContentProps) {
 
   return (
     <div
-      role="tabpanel"
       id={`tabpanel-${value}`}
       aria-labelledby={`tab-${value}`}
       className={cn('animate-fade-up', className)}

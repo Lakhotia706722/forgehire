@@ -1,5 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { getEnv } from '../config/env';
+import Anthropic from "@anthropic-ai/sdk";
+import { getEnv } from "../config/env";
 
 export class AISuggestionsService {
   private anthropic: Anthropic;
@@ -7,7 +7,7 @@ export class AISuggestionsService {
   constructor() {
     const env = getEnv();
     this.anthropic = new Anthropic({
-      apiKey: env.ANTHROPIC_API_KEY
+      apiKey: env.ANTHROPIC_API_KEY,
     });
   }
 
@@ -16,16 +16,16 @@ export class AISuggestionsService {
    */
   async generateProfileSuggestions(
     missingFields: string[],
-    existingData: any
+    existingData: any,
   ): Promise<string[]> {
     if (missingFields.length === 0) {
-      return ['Your profile is complete! Great job!'];
+      return ["Your profile is complete! Great job!"];
     }
 
     const prompt = `You are a career advisor helping AI engineers improve their profiles on NeuronHire, an AI talent marketplace.
 
 Current profile status:
-- Missing sections: ${missingFields.join(', ')}
+- Missing sections: ${missingFields.join(", ")}
 - Existing data: ${JSON.stringify(existingData, null, 2)}
 
 Generate 3-5 specific, actionable tips to help this engineer complete their profile. Focus on:
@@ -37,18 +37,18 @@ Keep each tip concise (1-2 sentences) and practical. Return only the tips as a J
 
     try {
       const message = await this.anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 1024,
         messages: [
           {
-            role: 'user',
-            content: prompt
-          }
-        ]
+            role: "user",
+            content: prompt,
+          },
+        ],
       });
 
       const content = message.content[0];
-      if (content.type === 'text') {
+      if (content.type === "text") {
         // Extract JSON array from the response
         const jsonMatch = content.text.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
@@ -59,7 +59,7 @@ Keep each tip concise (1-2 sentences) and practical. Return only the tips as a J
       // Fallback suggestions
       return this.getFallbackSuggestions(missingFields);
     } catch (error) {
-      console.error('AI suggestions error:', error);
+      console.error("AI suggestions error:", error);
       return this.getFallbackSuggestions(missingFields);
     }
   }
@@ -69,9 +69,9 @@ Keep each tip concise (1-2 sentences) and practical. Return only the tips as a J
    */
   async generateProjectSuggestions(
     projectTitle: string,
-    techStack: string[]
+    techStack: string[],
   ): Promise<string> {
-    const prompt = `Generate a compelling project description template for an AI engineering project titled "${projectTitle}" using technologies: ${techStack.join(', ')}.
+    const prompt = `Generate a compelling project description template for an AI engineering project titled "${projectTitle}" using technologies: ${techStack.join(", ")}.
 
 Include sections for:
 1. What the project does
@@ -82,25 +82,25 @@ Keep it professional and concise (3-4 sentences). Return only the description te
 
     try {
       const message = await this.anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 512,
         messages: [
           {
-            role: 'user',
-            content: prompt
-          }
-        ]
+            role: "user",
+            content: prompt,
+          },
+        ],
       });
 
       const content = message.content[0];
-      if (content.type === 'text') {
+      if (content.type === "text") {
         return content.text.trim();
       }
 
-      return '';
+      return "";
     } catch (error) {
-      console.error('Project suggestion error:', error);
-      return '';
+      console.error("Project suggestion error:", error);
+      return "";
     }
   }
 
@@ -110,32 +110,52 @@ Keep it professional and concise (3-4 sentences). Return only the description te
   private getFallbackSuggestions(missingFields: string[]): string[] {
     const suggestions: string[] = [];
 
-    if (missingFields.includes('Basic Information')) {
-      suggestions.push('Add a compelling bio that highlights your AI expertise and what makes you unique');
+    if (missingFields.includes("Basic Information")) {
+      suggestions.push(
+        "Add a compelling bio that highlights your AI expertise and what makes you unique",
+      );
     }
 
-    if (missingFields.includes('Skills') || missingFields.includes('More Skills')) {
-      suggestions.push('List your top AI/ML skills with honest proficiency levels - companies value transparency');
+    if (
+      missingFields.includes("Skills") ||
+      missingFields.includes("More Skills")
+    ) {
+      suggestions.push(
+        "List your top AI/ML skills with honest proficiency levels - companies value transparency",
+      );
     }
 
-    if (missingFields.includes('Work Experience')) {
-      suggestions.push('Add your work experience, focusing on AI-related projects and measurable achievements');
+    if (missingFields.includes("Work Experience")) {
+      suggestions.push(
+        "Add your work experience, focusing on AI-related projects and measurable achievements",
+      );
     }
 
-    if (missingFields.includes('Projects') || missingFields.includes('More Projects')) {
-      suggestions.push('Showcase projects with live demos and GitHub links - visual proof builds trust');
+    if (
+      missingFields.includes("Projects") ||
+      missingFields.includes("More Projects")
+    ) {
+      suggestions.push(
+        "Showcase projects with live demos and GitHub links - visual proof builds trust",
+      );
     }
 
-    if (missingFields.includes('Pricing')) {
-      suggestions.push('Research market rates for your skill level and set competitive pricing');
+    if (missingFields.includes("Pricing")) {
+      suggestions.push(
+        "Research market rates for your skill level and set competitive pricing",
+      );
     }
 
-    if (missingFields.includes('Payment Details')) {
-      suggestions.push('Add your UPI ID to enable seamless payments from companies');
+    if (missingFields.includes("Payment Details")) {
+      suggestions.push(
+        "Add your UPI ID to enable seamless payments from companies",
+      );
     }
 
-    if (missingFields.includes('KYC Verification')) {
-      suggestions.push('Complete KYC verification to unlock premium opportunities and build credibility');
+    if (missingFields.includes("KYC Verification")) {
+      suggestions.push(
+        "Complete KYC verification to unlock premium opportunities and build credibility",
+      );
     }
 
     return suggestions;

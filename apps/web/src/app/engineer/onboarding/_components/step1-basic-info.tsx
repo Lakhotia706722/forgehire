@@ -1,5 +1,4 @@
 'use client';
-
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -154,7 +153,7 @@ export function Step1BasicInfo({ state, onChange }: Step1Props) {
               key={mode.value}
               type="button"
               role="radio"
-              aria-checked={state.workMode === mode.value}
+              aria-checked={state.workMode === mode.value ? "true" : "false"}
               onClick={() => onChange({ workMode: mode.value })}
               className={cn(
                 'flex flex-col items-center gap-2 p-4 rounded-xl border text-center transition-all duration-200',

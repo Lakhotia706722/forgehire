@@ -1,6 +1,7 @@
 'use client';
-
 import * as React from 'react';
+import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
@@ -24,11 +25,11 @@ const ACTIVITY_ICONS: Record<string, string> = {
   assessment_completed:'✅',
 };
 
-const ACTIVITY_COLORS: Record<string, string> = {
-  signup:              '#00D4FF',
-  assessment_pass:     '#10B981',
-  payment_processed:   '#F59E0B',
-  dispute_raised:      '#EF4444',
+const ACTIVITY_COLOR_CLASS: Record<string, string> = {
+  signup: 'text-accent-cyan',
+  assessment_pass: 'text-accent-green',
+  payment_processed: 'text-accent-amber',
+  dispute_raised: 'text-accent-red',
 };
 
 export default function AdminDashboardPage() {
@@ -84,7 +85,7 @@ export default function AdminDashboardPage() {
             ].map((stat) => (
               <div key={stat.label} className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-5">
                 <p className="text-xs text-text-muted uppercase tracking-wider mb-2">{stat.label}</p>
-                <p className={`font-display text-3xl font-bold font-mono ${stat.color}`}>{stat.value}</p>
+                <p className={cn('text-3xl font-bold font-mono', stat.color)}>{stat.value}</p>
                 <p className="text-xs text-text-muted mt-1">{stat.sub}</p>
               </div>
             ))
@@ -175,8 +176,7 @@ export default function AdminDashboardPage() {
                       {ACTIVITY_ICONS[item.type] || '📌'}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium ${ACTIVITY_COLORS[item.type] ? '' : 'text-text-secondary'}`}
-                         style={{ color: ACTIVITY_COLORS[item.type] }}>
+                      <p className={cn('text-xs font-medium', ACTIVITY_COLOR_CLASS[item.type] ?? 'text-text-secondary')}>
                         {item.message}
                       </p>
                     </div>
@@ -251,19 +251,13 @@ function ConversionFunnel({ totalEngineers, assessmentPassRate }: { totalEnginee
                 <span className="text-sm text-text-secondary">{step.label}</span>
                 <span className="text-sm font-mono font-semibold text-text-primary">{step.count.toLocaleString()}</span>
               </div>
-              <div
-                className="h-2 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden"
-                role="progressbar"
-                aria-valuenow={step.percentage}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={`${step.label}: ${step.percentage}%`}
-              >
-                <div
-                  className="h-full bg-gradient-to-r from-accent-cyan to-[rgba(0,212,255,0.5)] rounded-full transition-all duration-700"
-                  style={{ width: `${step.percentage}%` }}
-                />
-              </div>
+              <Progress
+                value={step.percentage}
+                max={100}
+                label={`${step.label}: ${step.percentage}%`}
+                size="md"
+                className="flex-1"
+              />
             </div>
             <span className="text-xs font-mono text-text-muted w-12 text-right shrink-0">{step.percentage}%</span>
           </div>

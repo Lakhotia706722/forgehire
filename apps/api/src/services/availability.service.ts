@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 export class AvailabilityService {
   private prisma: PrismaClient;
@@ -15,32 +15,33 @@ export class AvailabilityService {
     slots: Array<{
       startTime: Date;
       endTime: Date;
-    }>
+    }>,
   ) {
     // Validate slots
     for (const slot of slots) {
       if (slot.startTime >= slot.endTime) {
-        throw new Error('Start time must be before end time');
+        throw new Error("Start time must be before end time");
       }
 
-      const duration = (slot.endTime.getTime() - slot.startTime.getTime()) / (1000 * 60);
+      const duration =
+        (slot.endTime.getTime() - slot.startTime.getTime()) / (1000 * 60);
       if (duration !== 30) {
-        throw new Error('Slots must be exactly 30 minutes');
+        throw new Error("Slots must be exactly 30 minutes");
       }
     }
 
     // Create slots
     const createdSlots = await Promise.all(
-      slots.map(slot =>
+      slots.map((slot) =>
         this.prisma.availabilitySlot.create({
           data: {
             engineerProfileId,
             startTime: slot.startTime,
             endTime: slot.endTime,
-            booked: false
-          }
-        })
-      )
+            booked: false,
+          },
+        }),
+      ),
     );
 
     return createdSlots;
@@ -52,11 +53,11 @@ export class AvailabilityService {
   async getAvailableSlots(
     engineerProfileId: string,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
   ) {
     const where: any = {
       engineerProfileId,
-      booked: false
+      booked: false,
     };
 
     if (startDate || endDate) {
@@ -71,7 +72,7 @@ export class AvailabilityService {
 
     return await this.prisma.availabilitySlot.findMany({
       where,
-      orderBy: { startTime: 'asc' }
+      orderBy: { startTime: "asc" },
     });
   }
 
@@ -82,23 +83,23 @@ export class AvailabilityService {
     slotId: string,
     companyUserId: string,
     meetingLink?: string,
-    meetingNotes?: string
+    meetingNotes?: string,
   ) {
     const slot = await this.prisma.availabilitySlot.findUnique({
-      where: { id: slotId }
+      where: { id: slotId },
     });
 
     if (!slot) {
-      throw new Error('Slot not found');
+      throw new Error("Slot not found");
     }
 
     if (slot.booked) {
-      throw new Error('Slot is already booked');
+      throw new Error("Slot is already booked");
     }
 
     // Check if slot is in the past
     if (slot.startTime < new Date()) {
-      throw new Error('Cannot book past slots');
+      throw new Error("Cannot book past slots");
     }
 
     return await this.prisma.availabilitySlot.update({
@@ -107,8 +108,8 @@ export class AvailabilityService {
         booked: true,
         bookedBy: companyUserId,
         meetingLink,
-        meetingNotes
-      }
+        meetingNotes,
+      },
     });
   }
 
@@ -121,23 +122,23 @@ export class AvailabilityService {
       include: {
         engineerProfile: {
           select: {
-            userId: true
-          }
-        }
-      }
+            userId: true,
+          },
+        },
+      },
     });
 
     if (!slot) {
-      throw new Error('Slot not found');
+      throw new Error("Slot not found");
     }
 
     if (!slot.booked) {
-      throw new Error('Slot is not booked');
+      throw new Error("Slot is not booked");
     }
 
     // Check authorization (either booker or engineer can cancel)
     if (slot.bookedBy !== userId && slot.engineerProfile.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     return await this.prisma.availabilitySlot.update({
@@ -146,8 +147,8 @@ export class AvailabilityService {
         booked: false,
         bookedBy: null,
         meetingLink: null,
-        meetingNotes: null
-      }
+        meetingNotes: null,
+      },
     });
   }
 
@@ -158,9 +159,9 @@ export class AvailabilityService {
     return await this.prisma.availabilitySlot.findMany({
       where: {
         engineerProfileId,
-        booked: true
+        booked: true,
       },
-      orderBy: { startTime: 'asc' }
+      orderBy: { startTime: "asc" },
     });
   }
 
@@ -170,17 +171,17 @@ export class AvailabilityService {
   async getCompanyBookedSlots(companyUserId: string) {
     return await this.prisma.availabilitySlot.findMany({
       where: {
-        bookedBy: companyUserId
+        bookedBy: companyUserId,
       },
       include: {
         engineerProfile: {
           select: {
             fullName: true,
-            neuronScore: true
-          }
-        }
+            neuronScore: true,
+          },
+        },
       },
-      orderBy: { startTime: 'asc' }
+      orderBy: { startTime: "asc" },
     });
   }
 
@@ -193,26 +194,26 @@ export class AvailabilityService {
       include: {
         engineerProfile: {
           select: {
-            userId: true
-          }
-        }
-      }
+            userId: true,
+          },
+        },
+      },
     });
 
     if (!slot) {
-      throw new Error('Slot not found');
+      throw new Error("Slot not found");
     }
 
     if (slot.engineerProfile.userId !== engineerUserId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     if (slot.booked) {
-      throw new Error('Cannot delete booked slot. Cancel it first.');
+      throw new Error("Cannot delete booked slot. Cancel it first.");
     }
 
     await this.prisma.availabilitySlot.delete({
-      where: { id: slotId }
+      where: { id: slotId },
     });
 
     return { success: true };
@@ -228,7 +229,7 @@ export class AvailabilityService {
       dayOfWeek: number; // 0 = Sunday, 1 = Monday, etc.
       startHour: number;
       startMinute: number;
-    }>
+    }>,
   ) {
     const slots: Array<{ startTime: Date; endTime: Date }> = [];
 
@@ -238,7 +239,7 @@ export class AvailabilityService {
 
       const dayOfWeek = currentDate.getDay();
 
-      const daySlots = timeSlots.filter(ts => ts.dayOfWeek === dayOfWeek);
+      const daySlots = timeSlots.filter((ts) => ts.dayOfWeek === dayOfWeek);
 
       for (const timeSlot of daySlots) {
         const startTime = new Date(currentDate);

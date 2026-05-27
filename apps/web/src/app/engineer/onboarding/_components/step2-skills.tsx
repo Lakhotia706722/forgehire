@@ -1,5 +1,4 @@
 'use client';
-
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import type { OnboardingState, SkillEntry } from '@/lib/onboarding-store';
@@ -106,7 +105,7 @@ export function Step2Skills({ state, onChange }: Step2Props) {
               <button
                 key={s}
                 role="option"
-                aria-selected={false}
+                aria-selected="false"
                 onClick={() => addSkill(s)}
                 className="w-full text-left px-4 py-2.5 text-sm text-text-secondary hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)] transition-colors"
               >
@@ -199,7 +198,7 @@ function SkillChip({
         onClick={() => setExpanded((e) => !e)}
         className="flex items-center gap-1.5 group"
         aria-label={`Proficiency: ${PROFICIENCY_LABELS[skill.proficiency]}`}
-        aria-expanded={expanded}
+        aria-expanded={expanded ? "true" : "false"}
       >
         {([1, 2, 3] as const).map((d) => (
           <div

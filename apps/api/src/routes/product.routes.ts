@@ -1,16 +1,16 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { ProductService } from '../services/product.service';
-import { MarketplacePurchaseService } from '../services/marketplace-purchase.service';
-import { MarketplacePayoutService } from '../services/marketplace-payout.service';
-import { SubscriptionService } from '../services/subscription.service';
-import { DisputeService } from '../services/dispute.service';
-import { BundleService } from '../services/bundle.service';
-import { ReferralService } from '../services/referral.service';
-import { ProductAnalyticsService } from '../services/product-analytics.service';
-import { ProductRecommendationService } from '../services/product-recommendation.service';
-import { ProductReviewService } from '../services/product-review.service';
-import { authenticate, requireRole } from '../middleware/auth';
-import { UserRole } from '@prisma/client';
+import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import { ProductService } from "../services/product.service";
+import { MarketplacePurchaseService } from "../services/marketplace-purchase.service";
+import { MarketplacePayoutService } from "../services/marketplace-payout.service";
+import { SubscriptionService } from "../services/subscription.service";
+import { DisputeService } from "../services/dispute.service";
+import { BundleService } from "../services/bundle.service";
+import { ReferralService } from "../services/referral.service";
+import { ProductAnalyticsService } from "../services/product-analytics.service";
+import { ProductRecommendationService } from "../services/product-recommendation.service";
+import { ProductReviewService } from "../services/product-review.service";
+import { authenticate, requireRole } from "../middleware/auth";
+import { UserRole } from "@prisma/client";
 import {
   createProductSchema,
   updateProductSchema,
@@ -24,8 +24,8 @@ import {
   createSubscriptionSchema,
   cancelSubscriptionSchema,
   productSearchSchema,
-  analyticsQuerySchema
-} from '@neuronhire/shared';
+  analyticsQuerySchema,
+} from "@neuronhire/shared";
 
 export async function productRoutes(fastify: FastifyInstance) {
   const productService = new ProductService();
@@ -43,92 +43,101 @@ export async function productRoutes(fastify: FastifyInstance) {
 
   // Create product
   fastify.post(
-    '/products',
+    "/products",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const data = createProductSchema.parse((request.body as any));
+        const data = createProductSchema.parse(request.body as any);
 
         const product = await productService.createProduct(userId, data);
 
         return reply.code(201).send({
           success: true,
           data: product,
-          message: 'Product created successfully in draft status'
+          message: "Product created successfully in draft status",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Update product
   fastify.put(
-    '/products/:id',
+    "/products/:id",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const data = updateProductSchema.parse((request.body as any));
+        const { id } = request.params as any;
+        const data = updateProductSchema.parse(request.body as any);
 
         const product = await productService.updateProduct(id, userId, data);
 
         return reply.code(200).send({
           success: true,
           data: product,
-          message: 'Product updated successfully'
+          message: "Product updated successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Publish product (submit for moderation)
   fastify.post(
-    '/products/:id/publish',
+    "/products/:id/publish",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
+        const { id } = request.params as any;
 
-        const product = await productService.publishProduct(id, userId, { productId: id });
+        const product = await productService.publishProduct(id, userId, {
+          productId: id,
+        });
 
         return reply.code(200).send({
           success: true,
           data: product,
-          message: 'Product published successfully'
+          message: "Product published successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get product feed
   fastify.get(
-    '/products',
+    "/products",
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const filters = productSearchSchema.parse((request.query as any));
+        const rawQuery = request.query as Record<string, unknown>;
+        const filters = productSearchSchema.parse({
+          ...rawQuery,
+          limit: rawQuery.limit != null ? Number(rawQuery.limit) : undefined,
+          minPrice: rawQuery.minPrice != null ? Number(rawQuery.minPrice) : undefined,
+          maxPrice: rawQuery.maxPrice != null ? Number(rawQuery.maxPrice) : undefined,
+          minRating: rawQuery.minRating != null ? Number(rawQuery.minRating) : undefined,
+        });
         const result = await productService.getProductFeed(filters);
 
         return reply.code(200).send({
@@ -136,54 +145,149 @@ export async function productRoutes(fastify: FastifyInstance) {
           data: result.items,
           meta: {
             nextCursor: result.nextCursor,
-            hasMore: result.hasMore
-          }
+            hasMore: result.hasMore,
+          },
         });
       } catch (error: any) {
+        const message = error?.message ?? 'Failed to load products';
+        const isDbMissing =
+          message.includes('does not exist') ||
+          message.includes('P2021') ||
+          message.includes('P1001');
+        if (isDbMissing) {
+          return reply.code(200).send({
+            success: true,
+            data: [],
+            meta: { nextCursor: null, hasMore: false },
+          });
+        }
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: message,
         });
       }
-    }
+    },
+  );
+
+  // Trending products (must be before /products/:identifier)
+  fastify.get(
+    "/products/trending",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const limit = Number((request.query as { limit?: string }).limit) || 10;
+        const trending = await recommendationService.getTrendingProducts(limit);
+        return reply.code(200).send({ success: true, data: trending });
+      } catch (error: any) {
+        return reply.code(400).send({ success: false, error: error.message });
+      }
+    },
+  );
+
+  // Engineer's own products
+  fastify.get(
+    "/products/me",
+    {
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (request as any).user.userId;
+        const profile = await productService.getEngineerProfileByUserId(userId);
+        if (!profile) {
+          return reply.code(200).send({ success: true, data: [] });
+        }
+
+        const products = await productService.getEngineerProducts(profile.id);
+        const revenueByProduct = await productService.getRevenueByProductIds(
+          products.map((p) => p.id),
+        );
+
+        const data = products.map((p) => ({
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          category: p.category,
+          status: p.status,
+          priceINR: Number(p.priceINR ?? 0),
+          pricingModel: p.pricingModel,
+          purchaseCount: p.purchaseCount ?? p._count?.purchases ?? 0,
+          rating: p.rating != null ? Number(p.rating) : null,
+          reviewCount: p.reviewCount ?? p._count?.reviews ?? 0,
+          revenue: revenueByProduct[p.id] ?? 0,
+          publishedAt: p.publishedAt?.toISOString() ?? null,
+        }));
+
+        return reply.code(200).send({ success: true, data });
+      } catch (error: any) {
+        return reply.code(400).send({ success: false, error: error.message });
+      }
+    },
+  );
+
+  // Buyer's purchases (alias used by web app)
+  fastify.get(
+    "/products/purchases/me",
+    {
+      preHandler: [authenticate],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (request as any).user.userId;
+        const purchases = await purchaseService.getBuyerPurchases(userId);
+        const data = purchases.map((purchase) => ({
+          id: purchase.id,
+          productId: purchase.productId,
+          productName: purchase.product.name,
+          productSlug: purchase.product.slug,
+          engineerName: purchase.product.engineerProfile?.fullName ?? "Engineer",
+          priceINR: Number(purchase.priceINR),
+          licenseKey: purchase.licenseKey,
+          purchasedAt: purchase.purchasedAt?.toISOString() ?? purchase.createdAt.toISOString(),
+          status: purchase.status,
+        }));
+        return reply.code(200).send({ success: true, data });
+      } catch (error: any) {
+        return reply.code(400).send({ success: false, error: error.message });
+      }
+    },
   );
 
   // Get product by ID or slug
   fastify.get(
-    '/products/:identifier',
+    "/products/:identifier",
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { identifier } = (request.params as any);
+        const { identifier } = request.params as any;
         const userId = (request as any).user?.userId;
 
         const product = await productService.getProduct(identifier, userId);
 
         return reply.code(200).send({
           success: true,
-          data: product
+          data: product,
         });
       } catch (error: any) {
         return reply.code(404).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // ========== PURCHASE & ACCESS ==========
 
   // Create purchase order
   fastify.post(
-    '/products/:id/purchase',
+    "/products/:id/purchase",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const body = (request.body as any) as any;
+        const { id } = request.params as any;
+        const body = request.body as any as any;
         const data = purchaseProductSchema.parse({ ...body, productId: id });
 
         const order = await purchaseService.createPurchaseOrder(userId, data);
@@ -191,53 +295,53 @@ export async function productRoutes(fastify: FastifyInstance) {
         return reply.code(200).send({
           success: true,
           data: order,
-          message: 'Purchase order created. Complete payment to get access.'
+          message: "Purchase order created. Complete payment to get access.",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Complete purchase
   fastify.post(
-    '/purchases/:id/complete',
+    "/purchases/:id/complete",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { id } = (request.params as any);
-        const body = (request.body as any) as any;
+        const { id } = request.params as any;
+        const body = request.body as any as any;
         const data = completePurchaseSchema.parse({ ...body, purchaseId: id });
 
         const purchase = await purchaseService.completePurchase(id, {
           paymentId: data.paymentId,
-          signature: data.signature
+          signature: data.signature,
         });
 
         return reply.code(200).send({
           success: true,
           data: purchase,
-          message: 'Purchase completed successfully. Access granted!'
+          message: "Purchase completed successfully. Access granted!",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get buyer's purchases
   fastify.get(
-    '/purchases/my',
+    "/purchases/my",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -246,191 +350,199 @@ export async function productRoutes(fastify: FastifyInstance) {
 
         return reply.code(200).send({
           success: true,
-          data: purchases
+          data: purchases,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get purchase by ID
   fastify.get(
-    '/purchases/:id',
+    "/purchases/:id",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
+        const { id } = request.params as any;
 
         const purchase = await purchaseService.getPurchase(id, userId);
 
         return reply.code(200).send({
           success: true,
-          data: purchase
+          data: purchase,
         });
       } catch (error: any) {
         return reply.code(404).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Revoke license
   fastify.post(
-    '/purchases/:id/revoke',
+    "/purchases/:id/revoke",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
+        const { id } = request.params as any;
 
         const purchase = await purchaseService.revokeLicense(id, userId);
 
         return reply.code(200).send({
           success: true,
           data: purchase,
-          message: 'License revoked successfully'
+          message: "License revoked successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // ========== SUBSCRIPTIONS ==========
 
   // Create subscription
   fastify.post(
-    '/subscriptions',
+    "/subscriptions",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const data = createSubscriptionSchema.parse((request.body as any));
+        const data = createSubscriptionSchema.parse(request.body as any);
         const subscription = await subscriptionService.createSubscription(
           data.purchaseId,
-          data.billingCycle
+          data.billingCycle,
         );
 
         return reply.code(201).send({
           success: true,
           data: subscription,
-          message: 'Subscription created successfully'
+          message: "Subscription created successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Cancel subscription
   fastify.post(
-    '/subscriptions/:id/cancel',
+    "/subscriptions/:id/cancel",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const body = (request.body as any) as any;
-        const data = cancelSubscriptionSchema.parse({ ...body, subscriptionId: id });
+        const { id } = request.params as any;
+        const body = request.body as any as any;
+        const data = cancelSubscriptionSchema.parse({
+          ...body,
+          subscriptionId: id,
+        });
 
         const subscription = await subscriptionService.cancelSubscription(
           id,
           userId,
-          data.reason || undefined
+          data.reason || undefined,
         );
 
         return reply.code(200).send({
           success: true,
           data: subscription,
-          message: 'Subscription cancelled successfully'
+          message: "Subscription cancelled successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get buyer's subscriptions
   fastify.get(
-    '/subscriptions/my',
+    "/subscriptions/my",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const subscriptions = await subscriptionService.getBuyerSubscriptions(userId);
+        const subscriptions =
+          await subscriptionService.getBuyerSubscriptions(userId);
 
         return reply.code(200).send({
           success: true,
-          data: subscriptions
+          data: subscriptions,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // ========== DISPUTES ==========
 
   // Raise dispute
   fastify.post(
-    '/disputes',
+    "/disputes",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const data = raiseDisputeSchema.parse((request.body as any));
+        const data = raiseDisputeSchema.parse(request.body as any);
 
-        const dispute = await disputeService.raiseDispute(data.purchaseId, userId, data);
+        const dispute = await disputeService.raiseDispute(
+          data.purchaseId,
+          userId,
+          data,
+        );
 
         return reply.code(201).send({
           success: true,
           data: dispute,
-          message: 'Dispute raised successfully. Our team will review it.'
+          message: "Dispute raised successfully. Our team will review it.",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get buyer's disputes
   fastify.get(
-    '/disputes/my',
+    "/disputes/my",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -439,54 +551,54 @@ export async function productRoutes(fastify: FastifyInstance) {
 
         return reply.code(200).send({
           success: true,
-          data: disputes
+          data: disputes,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get dispute by ID
   fastify.get(
-    '/disputes/:id',
+    "/disputes/:id",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
+        const { id } = request.params as any;
 
         const dispute = await disputeService.getDispute(id, userId);
 
         return reply.code(200).send({
           success: true,
-          data: dispute
+          data: dispute,
         });
       } catch (error: any) {
         return reply.code(404).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Resolve dispute (admin only)
   fastify.post(
-    '/disputes/:id/resolve',
+    "/disputes/:id/resolve",
     {
-      preHandler: [authenticate, requireRole(UserRole.admin)]
+      preHandler: [authenticate, requireRole(UserRole.admin)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const body = (request.body as any) as any;
+        const { id } = request.params as any;
+        const body = request.body as any as any;
         const data = resolveDisputeSchema.parse({ ...body, disputeId: id });
 
         const dispute = await disputeService.resolveDispute(id, userId, data);
@@ -494,200 +606,204 @@ export async function productRoutes(fastify: FastifyInstance) {
         return reply.code(200).send({
           success: true,
           data: dispute,
-          message: 'Dispute resolved successfully'
+          message: "Dispute resolved successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // ========== BUNDLES ==========
 
   // Create bundle
   fastify.post(
-    '/bundles',
+    "/bundles",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const data = createBundleSchema.parse((request.body as any));
+        const data = createBundleSchema.parse(request.body as any);
 
         const bundle = await bundleService.createBundle(userId, data);
 
         return reply.code(201).send({
           success: true,
           data: bundle,
-          message: 'Bundle created successfully'
+          message: "Bundle created successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Update bundle
   fastify.put(
-    '/bundles/:id',
+    "/bundles/:id",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const data = updateBundleSchema.parse((request.body as any));
+        const { id } = request.params as any;
+        const data = updateBundleSchema.parse(request.body as any);
 
         const bundle = await bundleService.updateBundle(id, userId, data);
 
         return reply.code(200).send({
           success: true,
           data: bundle,
-          message: 'Bundle updated successfully'
+          message: "Bundle updated successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get bundle by ID
   fastify.get(
-    '/bundles/:id',
+    "/bundles/:id",
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { id } = (request.params as any);
+        const { id } = request.params as any;
         const bundle = await bundleService.getBundle(id);
 
         return reply.code(200).send({
           success: true,
-          data: bundle
+          data: bundle,
         });
       } catch (error: any) {
         return reply.code(404).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get active bundles
   fastify.get(
-    '/bundles',
+    "/bundles",
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const bundles = await bundleService.getActiveBundles();
 
         return reply.code(200).send({
           success: true,
-          data: bundles
+          data: bundles,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Delete bundle
   fastify.delete(
-    '/bundles/:id',
+    "/bundles/:id",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
+        const { id } = request.params as any;
 
         await bundleService.deleteBundle(id, userId);
 
         return reply.code(200).send({
           success: true,
-          message: 'Bundle deleted successfully'
+          message: "Bundle deleted successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // ========== REFERRALS ==========
 
   // Generate referral link
   fastify.post(
-    '/referrals',
+    "/referrals",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const body = (request.body as any) as any;
+        const body = request.body as any as any;
         const productId = body.productId;
 
-        const referralLink = await referralService.generateReferralLink(userId, productId);
+        const referralLink = await referralService.generateReferralLink(
+          userId,
+          productId,
+        );
 
         return reply.code(201).send({
           success: true,
           data: referralLink,
-          message: 'Referral link generated successfully'
+          message: "Referral link generated successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get user's referral links
   fastify.get(
-    '/referrals/my',
+    "/referrals/my",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const referralLinks = await referralService.getUserReferralLinks(userId);
+        const referralLinks =
+          await referralService.getUserReferralLinks(userId);
 
         return reply.code(200).send({
           success: true,
-          data: referralLinks
+          data: referralLinks,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get referral stats
   fastify.get(
-    '/referrals/stats',
+    "/referrals/stats",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -696,53 +812,53 @@ export async function productRoutes(fastify: FastifyInstance) {
 
         return reply.code(200).send({
           success: true,
-          data: stats
+          data: stats,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // ========== REVIEWS ==========
 
   // Create review
   fastify.post(
-    '/reviews',
+    "/reviews",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const data = createReviewSchema.parse((request.body as any));
+        const data = createReviewSchema.parse(request.body as any);
 
         const review = await reviewService.createReview(userId, data);
 
         return reply.code(201).send({
           success: true,
           data: review,
-          message: 'Review submitted successfully'
+          message: "Review submitted successfully",
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get product reviews
   fastify.get(
-    '/products/:id/reviews',
+    "/products/:id/reviews",
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { id } = (request.params as any);
-        const filters = (request.query as any);
+        const { id } = request.params as any;
+        const filters = request.query as any;
 
         const result = await reviewService.getProductReviews(id, filters);
 
@@ -751,99 +867,106 @@ export async function productRoutes(fastify: FastifyInstance) {
           data: result.items,
           meta: {
             nextCursor: result.nextCursor,
-            hasMore: result.hasMore
-          }
+            hasMore: result.hasMore,
+          },
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get rating summary
   fastify.get(
-    '/products/:id/rating-summary',
+    "/products/:id/rating-summary",
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { id } = (request.params as any);
+        const { id } = request.params as any;
         const summary = await reviewService.getRatingSummary(id);
 
         return reply.code(200).send({
           success: true,
-          data: summary
+          data: summary,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Mark review as helpful
   fastify.post(
-    '/reviews/:id/helpful',
+    "/reviews/:id/helpful",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
+        const { id } = request.params as any;
 
         const review = await reviewService.markHelpful(id, userId);
 
         return reply.code(200).send({
           success: true,
-          data: review
+          data: review,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // ========== ANALYTICS ==========
 
   // Get product analytics
   fastify.get(
-    '/products/:id/analytics',
+    "/products/:id/analytics",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { id } = (request.params as any);
-        const query = analyticsQuerySchema.parse({ ...(request.query as any), productId: id });
+        const { id } = request.params as any;
+        const query = analyticsQuerySchema.parse({
+          ...(request.query as any),
+          productId: id,
+        });
 
-        const analytics = await analyticsService.getProductAnalytics(id, userId, query.period);
+        const analytics = await analyticsService.getProductAnalytics(
+          id,
+          userId,
+          query.period,
+        );
 
         return reply.code(200).send({
           success: true,
-          data: analytics
+          data: analytics,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get engineer dashboard
   fastify.get(
-    '/analytics/dashboard',
+    "/analytics/dashboard",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -852,22 +975,22 @@ export async function productRoutes(fastify: FastifyInstance) {
 
         return reply.code(200).send({
           success: true,
-          data: dashboard
+          data: dashboard,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get engineer earnings
   fastify.get(
-    '/analytics/earnings',
+    "/analytics/earnings",
     {
-      preHandler: [authenticate, requireRole(UserRole.engineer)]
+      preHandler: [authenticate, requireRole(UserRole.engineer)],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -876,89 +999,72 @@ export async function productRoutes(fastify: FastifyInstance) {
 
         return reply.code(200).send({
           success: true,
-          data: earnings
+          data: earnings,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // ========== RECOMMENDATIONS ==========
 
   // Get AI recommendations
   fastify.get(
-    '/recommendations',
+    "/recommendations",
     {
-      preHandler: [authenticate]
+      preHandler: [authenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
         const limit = (request.query as any).limit || 10;
 
-        const recommendations = await recommendationService.getRecommendations(userId, limit);
+        const recommendations = await recommendationService.getRecommendations(
+          userId,
+          limit,
+        );
 
         return reply.code(200).send({
           success: true,
-          data: recommendations
+          data: recommendations,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
   // Get similar products
   fastify.get(
-    '/products/:id/similar',
+    "/products/:id/similar",
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { id } = (request.params as any);
+        const { id } = request.params as any;
         const limit = (request.query as any).limit || 5;
 
-        const similar = await recommendationService.getSimilarProducts(id, limit);
+        const similar = await recommendationService.getSimilarProducts(
+          id,
+          limit,
+        );
 
         return reply.code(200).send({
           success: true,
-          data: similar
+          data: similar,
         });
       } catch (error: any) {
         return reply.code(400).send({
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
-    }
+    },
   );
 
-  // Get trending products
-  fastify.get(
-    '/products/trending',
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      try {
-        const limit = (request.query as any).limit || 10;
-        const trending = await recommendationService.getTrendingProducts(limit);
-
-        return reply.code(200).send({
-          success: true,
-          data: trending
-        });
-      } catch (error: any) {
-        return reply.code(400).send({
-          success: false,
-          error: error.message
-        });
-      }
-    }
-  );
 }
-
-
-

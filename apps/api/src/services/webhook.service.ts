@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
-import crypto from 'crypto';
-import { getEnv } from '../config/env';
-import { PayoutService } from './payout.service';
-import { PlatformSubscriptionService } from './platform-subscription.service';
-import { EscrowService } from './escrow.service';
+import { PrismaClient } from "@prisma/client";
+import crypto from "crypto";
+import { getEnv } from "../config/env";
+import { PayoutService } from "./payout.service";
+import { PlatformSubscriptionService } from "./platform-subscription.service";
+import { EscrowService } from "./escrow.service";
 
 export class WebhookService {
   private prisma: PrismaClient;
@@ -14,7 +14,7 @@ export class WebhookService {
 
   constructor() {
     this.prisma = new PrismaClient();
-    this.razorpayWebhookSecret = getEnv('RAZORPAY_WEBHOOK_SECRET') ?? '';
+    this.razorpayWebhookSecret = getEnv("RAZORPAY_WEBHOOK_SECRET") ?? "";
     this.payoutService = new PayoutService();
     this.subscriptionService = new PlatformSubscriptionService();
     this.escrowService = new EscrowService();
@@ -24,18 +24,15 @@ export class WebhookService {
    * Handle Razorpay webhook
    * Verifies HMAC signature and processes event
    */
-  async handleRazorpayWebhook(data: {
-    payload: any;
-    signature: string;
-  }) {
+  async handleRazorpayWebhook(data: { payload: any; signature: string }) {
     // Verify HMAC signature
     const isValid = this.verifyRazorpaySignature(
       JSON.stringify(data.payload),
-      data.signature
+      data.signature,
     );
 
     if (!isValid) {
-      throw new Error('Invalid webhook signature');
+      throw new Error("Invalid webhook signature");
     }
 
     const event = data.payload.event;
@@ -46,25 +43,27 @@ export class WebhookService {
 
     // Check if event already processed
     const existing = await this.prisma.webhookEvent.findUnique({
-      where: { idempotencyKey }
+      where: { idempotencyKey },
     });
 
     if (existing && existing.processed) {
       console.log(`Event ${idempotencyKey} already processed`);
-      return { success: true, message: 'Event already processed' };
+      return { success: true, message: "Event already processed" };
     }
 
     // Store webhook event
-    const webhookEvent = existing || await this.prisma.webhookEvent.create({
-      data: {
-        provider: 'razorpay',
-        eventType: event,
-        payload: eventData,
-        signature: data.signature,
-        verified: true,
-        idempotencyKey
-      }
-    });
+    const webhookEvent =
+      existing ||
+      (await this.prisma.webhookEvent.create({
+        data: {
+          provider: "razorpay",
+          eventType: event,
+          payload: eventData,
+          signature: data.signature,
+          verified: true,
+          idempotencyKey,
+        },
+      }));
 
     try {
       // Process event based on type
@@ -75,13 +74,13 @@ export class WebhookService {
         where: { id: webhookEvent.id },
         data: {
           processed: true,
-          processedAt: new Date()
-        }
+          processedAt: new Date(),
+        },
       });
 
       return { success: true, eventType: event };
     } catch (error: any) {
-      console.error('Webhook processing error:', error);
+      console.error("Webhook processing error:", error);
 
       // Mark as failed
       await this.prisma.webhookEvent.update({
@@ -89,8 +88,8 @@ export class WebhookService {
         data: {
           failedAt: new Date(),
           failureReason: error.message,
-          retryCount: { increment: 1 }
-        }
+          retryCount: { increment: 1 },
+        },
       });
 
       throw error;
@@ -102,13 +101,13 @@ export class WebhookService {
    */
   private verifyRazorpaySignature(payload: string, signature: string): boolean {
     const expectedSignature = crypto
-      .createHmac('sha256', this.razorpayWebhookSecret)
+      .createHmac("sha256", this.razorpayWebhookSecret)
       .update(payload)
-      .digest('hex');
+      .digest("hex");
 
     return crypto.timingSafeEqual(
       Buffer.from(signature),
-      Buffer.from(expectedSignature)
+      Buffer.from(expectedSignature),
     );
   }
 
@@ -116,12 +115,13 @@ export class WebhookService {
    * Generate idempotency key for event
    */
   private generateIdempotencyKey(event: string, data: any): string {
-    const entityId = data.payment?.entity?.id || 
-                     data.payout?.entity?.id || 
-                     data.subscription?.entity?.id ||
-                     data.order?.entity?.id ||
-                     'unknown';
-    
+    const entityId =
+      data.payment?.entity?.id ||
+      data.payout?.entity?.id ||
+      data.subscription?.entity?.id ||
+      data.order?.entity?.id ||
+      "unknown";
+
     return `razorpay_${event}_${entityId}`;
   }
 
@@ -131,50 +131,50 @@ export class WebhookService {
   private async processRazorpayEvent(event: string, data: any) {
     switch (event) {
       // Payment events
-      case 'payment.captured':
+      case "payment.captured":
         await this.handlePaymentCaptured(data.payment.entity);
         break;
 
-      case 'payment.failed':
+      case "payment.failed":
         await this.handlePaymentFailed(data.payment.entity);
         break;
 
       // Payout events
-      case 'payout.processed':
+      case "payout.processed":
         await this.handlePayoutProcessed(data.payout.entity);
         break;
 
-      case 'payout.failed':
+      case "payout.failed":
         await this.handlePayoutFailed(data.payout.entity);
         break;
 
-      case 'payout.reversed':
+      case "payout.reversed":
         await this.handlePayoutReversed(data.payout.entity);
         break;
 
       // Subscription events
-      case 'subscription.charged':
+      case "subscription.charged":
         await this.handleSubscriptionCharged(data.subscription.entity);
         break;
 
-      case 'subscription.cancelled':
+      case "subscription.cancelled":
         await this.handleSubscriptionCancelled(data.subscription.entity);
         break;
 
-      case 'subscription.completed':
+      case "subscription.completed":
         await this.handleSubscriptionCompleted(data.subscription.entity);
         break;
 
-      case 'subscription.paused':
+      case "subscription.paused":
         await this.handleSubscriptionPaused(data.subscription.entity);
         break;
 
-      case 'subscription.resumed':
+      case "subscription.resumed":
         await this.handleSubscriptionResumed(data.subscription.entity);
         break;
 
       // Order events
-      case 'order.paid':
+      case "order.paid":
         await this.handleOrderPaid(data.order.entity);
         break;
 
@@ -191,16 +191,16 @@ export class WebhookService {
 
     // Find payment record
     const paymentRecord = await this.prisma.payment.findFirst({
-      where: { razorpayPaymentId }
+      where: { razorpayPaymentId },
     });
 
     if (paymentRecord) {
       await this.prisma.payment.update({
         where: { id: paymentRecord.id },
         data: {
-          status: 'completed',
-          completedAt: new Date()
-        }
+          status: "completed",
+          completedAt: new Date(),
+        },
       });
     }
   }
@@ -212,17 +212,17 @@ export class WebhookService {
     const razorpayPaymentId = payment.id;
 
     const paymentRecord = await this.prisma.payment.findFirst({
-      where: { razorpayPaymentId }
+      where: { razorpayPaymentId },
     });
 
     if (paymentRecord) {
       await this.prisma.payment.update({
         where: { id: paymentRecord.id },
         data: {
-          status: 'failed',
+          status: "failed",
           failedAt: new Date(),
-          failureReason: payment.error_description || 'Payment failed'
-        }
+          failureReason: payment.error_description || "Payment failed",
+        },
       });
     }
   }
@@ -243,17 +243,17 @@ export class WebhookService {
     const razorpayPayoutId = payout.id;
 
     const payoutRecord = await this.prisma.payout.findFirst({
-      where: { razorpayPayoutId }
+      where: { razorpayPayoutId },
     });
 
     if (payoutRecord) {
       await this.prisma.payout.update({
         where: { id: payoutRecord.id },
         data: {
-          status: 'failed',
+          status: "failed",
           failedAt: new Date(),
-          failureReason: payout.status_details?.description || 'Payout failed'
-        }
+          failureReason: payout.status_details?.description || "Payout failed",
+        },
       });
     }
   }
@@ -265,17 +265,17 @@ export class WebhookService {
     const razorpayPayoutId = payout.id;
 
     const payoutRecord = await this.prisma.payout.findFirst({
-      where: { razorpayPayoutId }
+      where: { razorpayPayoutId },
     });
 
     if (payoutRecord) {
       await this.prisma.payout.update({
         where: { id: payoutRecord.id },
         data: {
-          status: 'reversed',
+          status: "reversed",
           failedAt: new Date(),
-          failureReason: 'Payout reversed'
-        }
+          failureReason: "Payout reversed",
+        },
       });
     }
   }
@@ -295,17 +295,19 @@ export class WebhookService {
   private async handleSubscriptionCancelled(subscription: any) {
     const razorpaySubscriptionId = subscription.id;
 
-    const subscriptionRecord = await this.prisma.platformSubscription.findFirst({
-      where: { razorpaySubscriptionId }
-    });
+    const subscriptionRecord = await this.prisma.platformSubscription.findFirst(
+      {
+        where: { razorpaySubscriptionId },
+      },
+    );
 
     if (subscriptionRecord) {
       await this.prisma.platformSubscription.update({
         where: { id: subscriptionRecord.id },
         data: {
-          status: 'cancelled',
-          cancelledAt: new Date()
-        }
+          status: "cancelled",
+          cancelledAt: new Date(),
+        },
       });
     }
   }
@@ -316,16 +318,18 @@ export class WebhookService {
   private async handleSubscriptionCompleted(subscription: any) {
     const razorpaySubscriptionId = subscription.id;
 
-    const subscriptionRecord = await this.prisma.platformSubscription.findFirst({
-      where: { razorpaySubscriptionId }
-    });
+    const subscriptionRecord = await this.prisma.platformSubscription.findFirst(
+      {
+        where: { razorpaySubscriptionId },
+      },
+    );
 
     if (subscriptionRecord) {
       await this.prisma.platformSubscription.update({
         where: { id: subscriptionRecord.id },
         data: {
-          status: 'expired'
-        }
+          status: "expired",
+        },
       });
     }
   }
@@ -336,16 +340,18 @@ export class WebhookService {
   private async handleSubscriptionPaused(subscription: any) {
     const razorpaySubscriptionId = subscription.id;
 
-    const subscriptionRecord = await this.prisma.platformSubscription.findFirst({
-      where: { razorpaySubscriptionId }
-    });
+    const subscriptionRecord = await this.prisma.platformSubscription.findFirst(
+      {
+        where: { razorpaySubscriptionId },
+      },
+    );
 
     if (subscriptionRecord) {
       await this.prisma.platformSubscription.update({
         where: { id: subscriptionRecord.id },
         data: {
-          status: 'past_due'
-        }
+          status: "past_due",
+        },
       });
     }
   }
@@ -356,7 +362,9 @@ export class WebhookService {
   private async handleSubscriptionResumed(subscription: any) {
     const razorpaySubscriptionId = subscription.id;
 
-    await this.subscriptionService.reactivateSubscription(razorpaySubscriptionId);
+    await this.subscriptionService.reactivateSubscription(
+      razorpaySubscriptionId,
+    );
   }
 
   /**
@@ -367,10 +375,10 @@ export class WebhookService {
 
     // Find payment record
     const paymentRecord = await this.prisma.payment.findFirst({
-      where: { razorpayOrderId }
+      where: { razorpayOrderId },
     });
 
-    if (paymentRecord && paymentRecord.type === 'escrow_deposit') {
+    if (paymentRecord && paymentRecord.type === "escrow_deposit") {
       // Verify and mark escrow as funded
       // This should be handled by the escrow service after payment verification
       console.log(`Order ${razorpayOrderId} paid - escrow deposit`);
@@ -380,10 +388,7 @@ export class WebhookService {
   /**
    * Handle ClearTax webhook
    */
-  async handleClearTaxWebhook(data: {
-    payload: any;
-    signature?: string;
-  }) {
+  async handleClearTaxWebhook(data: { payload: any; signature?: string }) {
     const event = data.payload.event;
     const eventData = data.payload.data;
 
@@ -392,24 +397,26 @@ export class WebhookService {
 
     // Check if event already processed
     const existing = await this.prisma.webhookEvent.findUnique({
-      where: { idempotencyKey }
+      where: { idempotencyKey },
     });
 
     if (existing && existing.processed) {
-      return { success: true, message: 'Event already processed' };
+      return { success: true, message: "Event already processed" };
     }
 
     // Store webhook event
-    const webhookEvent = existing || await this.prisma.webhookEvent.create({
-      data: {
-        provider: 'cleartax',
-        eventType: event,
-        payload: eventData,
-        signature: data.signature,
-        verified: true,
-        idempotencyKey
-      }
-    });
+    const webhookEvent =
+      existing ||
+      (await this.prisma.webhookEvent.create({
+        data: {
+          provider: "cleartax",
+          eventType: event,
+          payload: eventData,
+          signature: data.signature,
+          verified: true,
+          idempotencyKey,
+        },
+      }));
 
     try {
       // Process ClearTax event
@@ -420,21 +427,21 @@ export class WebhookService {
         where: { id: webhookEvent.id },
         data: {
           processed: true,
-          processedAt: new Date()
-        }
+          processedAt: new Date(),
+        },
       });
 
       return { success: true, eventType: event };
     } catch (error: any) {
-      console.error('ClearTax webhook processing error:', error);
+      console.error("ClearTax webhook processing error:", error);
 
       await this.prisma.webhookEvent.update({
         where: { id: webhookEvent.id },
         data: {
           failedAt: new Date(),
           failureReason: error.message,
-          retryCount: { increment: 1 }
-        }
+          retryCount: { increment: 1 },
+        },
       });
 
       throw error;
@@ -446,11 +453,11 @@ export class WebhookService {
    */
   private async processClearTaxEvent(event: string, data: any) {
     switch (event) {
-      case 'invoice.generated':
+      case "invoice.generated":
         await this.handleInvoiceGenerated(data);
         break;
 
-      case 'invoice.failed':
+      case "invoice.failed":
         await this.handleInvoiceFailed(data);
         break;
 
@@ -467,16 +474,16 @@ export class WebhookService {
 
     // Find invoice by ClearTax ID
     const invoice = await this.prisma.invoice.findFirst({
-      where: { clearTaxId }
+      where: { clearTaxId },
     });
 
     if (invoice) {
       await this.prisma.invoice.update({
         where: { id: invoice.id },
         data: {
-          clearTaxStatus: 'generated',
-          pdfUrl: data.pdf_url
-        }
+          clearTaxStatus: "generated",
+          pdfUrl: data.pdf_url,
+        },
       });
     }
   }
@@ -488,15 +495,15 @@ export class WebhookService {
     const clearTaxId = data.invoice_id;
 
     const invoice = await this.prisma.invoice.findFirst({
-      where: { clearTaxId }
+      where: { clearTaxId },
     });
 
     if (invoice) {
       await this.prisma.invoice.update({
         where: { id: invoice.id },
         data: {
-          clearTaxStatus: 'failed'
-        }
+          clearTaxStatus: "failed",
+        },
       });
     }
   }
@@ -509,11 +516,11 @@ export class WebhookService {
       where: {
         processed: false,
         retryCount: {
-          lt: maxRetries
-        }
+          lt: maxRetries,
+        },
       },
-      orderBy: { createdAt: 'asc' },
-      take: 100
+      orderBy: { createdAt: "asc" },
+      take: 100,
     });
 
     const results = [];
@@ -526,8 +533,8 @@ export class WebhookService {
           where: { id: event.id },
           data: {
             processed: true,
-            processedAt: new Date()
-          }
+            processedAt: new Date(),
+          },
         });
 
         results.push({ eventId: event.id, success: true });
@@ -536,11 +543,15 @@ export class WebhookService {
           where: { id: event.id },
           data: {
             retryCount: { increment: 1 },
-            failureReason: error.message
-          }
+            failureReason: error.message,
+          },
         });
 
-        results.push({ eventId: event.id, success: false, error: error.message });
+        results.push({
+          eventId: event.id,
+          success: false,
+          error: error.message,
+        });
       }
     }
 
@@ -552,7 +563,7 @@ export class WebhookService {
    */
   async getWebhookEvent(eventId: string) {
     return await this.prisma.webhookEvent.findUnique({
-      where: { id: eventId }
+      where: { id: eventId },
     });
   }
 
@@ -571,10 +582,10 @@ export class WebhookService {
       where: {
         provider: filters?.provider,
         eventType: filters?.eventType,
-        processed: filters?.processed
+        processed: filters?.processed,
       },
-      orderBy: { createdAt: 'desc' },
-      take: limit
+      orderBy: { createdAt: "desc" },
+      take: limit,
     });
   }
 }

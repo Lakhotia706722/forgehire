@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 export class AnalyticsService {
   private prisma: PrismaClient;
@@ -10,29 +10,43 @@ export class AnalyticsService {
   /**
    * Get engineer analytics
    */
-  async getEngineerAnalytics(engineerProfileId: string, startDate: Date, endDate: Date) {
+  async getEngineerAnalytics(
+    engineerProfileId: string,
+    startDate: Date,
+    endDate: Date,
+  ) {
     const analytics = await this.prisma.engineerAnalytics.findMany({
       where: {
         engineerProfileId,
         date: {
           gte: startDate,
-          lte: endDate
-        }
+          lte: endDate,
+        },
       },
-      orderBy: { date: 'asc' }
+      orderBy: { date: "asc" },
     });
 
     // Calculate aggregates
     const totalViews = analytics.reduce((sum, a) => sum + a.profileViews, 0);
-    const totalProposals = analytics.reduce((sum, a) => sum + a.proposalsSent, 0);
-    const totalAccepted = analytics.reduce((sum, a) => sum + a.proposalsAccepted, 0);
-    const totalEarnings = analytics.reduce((sum, a) => sum + parseFloat(a.earnings.toString()), 0);
+    const totalProposals = analytics.reduce(
+      (sum, a) => sum + a.proposalsSent,
+      0,
+    );
+    const totalAccepted = analytics.reduce(
+      (sum, a) => sum + a.proposalsAccepted,
+      0,
+    );
+    const totalEarnings = analytics.reduce(
+      (sum, a) => sum + parseFloat(a.earnings.toString()),
+      0,
+    );
 
-    const acceptanceRate = totalProposals > 0 ? (totalAccepted / totalProposals) * 100 : 0;
+    const acceptanceRate =
+      totalProposals > 0 ? (totalAccepted / totalProposals) * 100 : 0;
 
     // Get top keywords
     const allKeywords: Record<string, number> = {};
-    analytics.forEach(a => {
+    analytics.forEach((a) => {
       if (a.topKeywords) {
         const keywords = a.topKeywords as any[];
         keywords.forEach((kw: any) => {
@@ -48,7 +62,7 @@ export class AnalyticsService {
 
     // Get top skills
     const allSkills: Record<string, number> = {};
-    analytics.forEach(a => {
+    analytics.forEach((a) => {
       if (a.topSkills) {
         const skills = a.topSkills as any[];
         skills.forEach((skill: any) => {
@@ -64,9 +78,10 @@ export class AnalyticsService {
 
     // Earnings by month
     const earningsByMonth: Record<string, number> = {};
-    analytics.forEach(a => {
+    analytics.forEach((a) => {
       const month = new Date(a.date).toISOString().substring(0, 7); // YYYY-MM
-      earningsByMonth[month] = (earningsByMonth[month] || 0) + parseFloat(a.earnings.toString());
+      earningsByMonth[month] =
+        (earningsByMonth[month] || 0) + parseFloat(a.earnings.toString());
     });
 
     return {
@@ -75,16 +90,28 @@ export class AnalyticsService {
         totalProposals,
         totalAccepted,
         acceptanceRate: acceptanceRate.toFixed(2),
-        totalEarnings
+        totalEarnings,
       },
       trends: {
-        profileViews: analytics.map(a => ({ date: a.date, value: a.profileViews })),
-        proposals: analytics.map(a => ({ date: a.date, sent: a.proposalsSent, accepted: a.proposalsAccepted })),
-        earnings: analytics.map(a => ({ date: a.date, value: parseFloat(a.earnings.toString()) }))
+        profileViews: analytics.map((a) => ({
+          date: a.date,
+          value: a.profileViews,
+        })),
+        proposals: analytics.map((a) => ({
+          date: a.date,
+          sent: a.proposalsSent,
+          accepted: a.proposalsAccepted,
+        })),
+        earnings: analytics.map((a) => ({
+          date: a.date,
+          value: parseFloat(a.earnings.toString()),
+        })),
       },
       topKeywords,
       topSkills,
-      earningsByMonth: Object.entries(earningsByMonth).map(([month, earnings]) => ({ month, earnings }))
+      earningsByMonth: Object.entries(earningsByMonth).map(
+        ([month, earnings]) => ({ month, earnings }),
+      ),
     };
   }
 
@@ -99,25 +126,27 @@ export class AnalyticsService {
       where: {
         engineerProfileId_date: {
           engineerProfileId,
-          date: today
-        }
+          date: today,
+        },
       },
       create: {
         engineerProfileId,
         date: today,
         profileViews: 1,
-        topKeywords: searchKeyword ? [{ keyword: searchKeyword, count: 1 }] : undefined
+        topKeywords: searchKeyword
+          ? [{ keyword: searchKeyword, count: 1 }]
+          : undefined,
       },
       update: {
-        profileViews: { increment: 1 }
-      }
+        profileViews: { increment: 1 },
+      },
     });
 
     // Update keyword if provided
     if (searchKeyword && analytics.topKeywords) {
       const keywords = analytics.topKeywords as any[];
       const existing = keywords.find((k: any) => k.keyword === searchKeyword);
-      
+
       if (existing) {
         existing.count++;
       } else {
@@ -126,7 +155,7 @@ export class AnalyticsService {
 
       await this.prisma.engineerAnalytics.update({
         where: { id: analytics.id },
-        data: { topKeywords: keywords }
+        data: { topKeywords: keywords },
       });
     }
 
@@ -144,17 +173,17 @@ export class AnalyticsService {
       where: {
         engineerProfileId_date: {
           engineerProfileId,
-          date: today
-        }
+          date: today,
+        },
       },
       create: {
         engineerProfileId,
         date: today,
-        proposalsSent: 1
+        proposalsSent: 1,
       },
       update: {
-        proposalsSent: { increment: 1 }
-      }
+        proposalsSent: { increment: 1 },
+      },
     });
   }
 
@@ -169,17 +198,17 @@ export class AnalyticsService {
       where: {
         engineerProfileId_date: {
           engineerProfileId,
-          date: today
-        }
+          date: today,
+        },
       },
       create: {
         engineerProfileId,
         date: today,
-        proposalsAccepted: 1
+        proposalsAccepted: 1,
       },
       update: {
-        proposalsAccepted: { increment: 1 }
-      }
+        proposalsAccepted: { increment: 1 },
+      },
     });
   }
 
@@ -194,56 +223,68 @@ export class AnalyticsService {
       where: {
         engineerProfileId_date: {
           engineerProfileId,
-          date: targetDate
-        }
+          date: targetDate,
+        },
       },
       create: {
         engineerProfileId,
         date: targetDate,
-        earnings: amount
+        earnings: amount,
       },
       update: {
-        earnings: { increment: amount }
-      }
+        earnings: { increment: amount },
+      },
     });
   }
 
   /**
    * Get company analytics
    */
-  async getCompanyAnalytics(companyProfileId: string, startDate: Date, endDate: Date) {
+  async getCompanyAnalytics(
+    companyProfileId: string,
+    startDate: Date,
+    endDate: Date,
+  ) {
     const analytics = await this.prisma.companyAnalytics.findMany({
       where: {
         companyProfileId,
         date: {
           gte: startDate,
-          lte: endDate
-        }
+          lte: endDate,
+        },
       },
-      orderBy: { date: 'asc' }
+      orderBy: { date: "asc" },
     });
 
     // Calculate aggregates
     const totalJobsPosted = analytics.reduce((sum, a) => sum + a.jobsPosted, 0);
-    const totalApplications = analytics.reduce((sum, a) => sum + a.applicationsReceived, 0);
+    const totalApplications = analytics.reduce(
+      (sum, a) => sum + a.applicationsReceived,
+      0,
+    );
     const totalHires = analytics.reduce((sum, a) => sum + a.hiresMade, 0);
-    const totalSpent = analytics.reduce((sum, a) => sum + parseFloat(a.totalSpent.toString()), 0);
+    const totalSpent = analytics.reduce(
+      (sum, a) => sum + parseFloat(a.totalSpent.toString()),
+      0,
+    );
 
     // Calculate average time to hire
     const timeToHireValues = analytics
-      .filter(a => a.avgTimeToHire)
-      .map(a => parseFloat(a.avgTimeToHire!.toString()));
-    
-    const avgTimeToHire = timeToHireValues.length > 0
-      ? timeToHireValues.reduce((sum, val) => sum + val, 0) / timeToHireValues.length
-      : 0;
+      .filter((a) => a.avgTimeToHire)
+      .map((a) => parseFloat(a.avgTimeToHire!.toString()));
+
+    const avgTimeToHire =
+      timeToHireValues.length > 0
+        ? timeToHireValues.reduce((sum, val) => sum + val, 0) /
+          timeToHireValues.length
+        : 0;
 
     // Cost per hire
     const costPerHire = totalHires > 0 ? totalSpent / totalHires : 0;
 
     // Get engineer performance data
     const performanceData: any[] = [];
-    analytics.forEach(a => {
+    analytics.forEach((a) => {
       if (a.engineerPerformance) {
         const perf = a.engineerPerformance as any[];
         performanceData.push(...perf);
@@ -252,7 +293,7 @@ export class AnalyticsService {
 
     // Get market rate benchmarks
     const marketRates: any[] = [];
-    analytics.forEach(a => {
+    analytics.forEach((a) => {
       if (a.marketRateBenchmark) {
         const rates = a.marketRateBenchmark as any[];
         marketRates.push(...rates);
@@ -266,16 +307,25 @@ export class AnalyticsService {
         totalHires,
         avgTimeToHire: avgTimeToHire.toFixed(1),
         totalSpent,
-        costPerHire: costPerHire.toFixed(2)
+        costPerHire: costPerHire.toFixed(2),
       },
       trends: {
-        jobsPosted: analytics.map(a => ({ date: a.date, value: a.jobsPosted })),
-        applications: analytics.map(a => ({ date: a.date, value: a.applicationsReceived })),
-        hires: analytics.map(a => ({ date: a.date, value: a.hiresMade })),
-        spending: analytics.map(a => ({ date: a.date, value: parseFloat(a.totalSpent.toString()) }))
+        jobsPosted: analytics.map((a) => ({
+          date: a.date,
+          value: a.jobsPosted,
+        })),
+        applications: analytics.map((a) => ({
+          date: a.date,
+          value: a.applicationsReceived,
+        })),
+        hires: analytics.map((a) => ({ date: a.date, value: a.hiresMade })),
+        spending: analytics.map((a) => ({
+          date: a.date,
+          value: parseFloat(a.totalSpent.toString()),
+        })),
       },
       engineerPerformance: performanceData,
-      marketRateBenchmark: marketRates
+      marketRateBenchmark: marketRates,
     };
   }
 
@@ -290,17 +340,17 @@ export class AnalyticsService {
       where: {
         companyProfileId_date: {
           companyProfileId,
-          date: today
-        }
+          date: today,
+        },
       },
       create: {
         companyProfileId,
         date: today,
-        jobsPosted: 1
+        jobsPosted: 1,
       },
       update: {
-        jobsPosted: { increment: 1 }
-      }
+        jobsPosted: { increment: 1 },
+      },
     });
   }
 
@@ -315,24 +365,28 @@ export class AnalyticsService {
       where: {
         companyProfileId_date: {
           companyProfileId,
-          date: today
-        }
+          date: today,
+        },
       },
       create: {
         companyProfileId,
         date: today,
-        applicationsReceived: 1
+        applicationsReceived: 1,
       },
       update: {
-        applicationsReceived: { increment: 1 }
-      }
+        applicationsReceived: { increment: 1 },
+      },
     });
   }
 
   /**
    * Track hire made
    */
-  async trackHireMade(companyProfileId: string, timeToHire: number, amount: number) {
+  async trackHireMade(
+    companyProfileId: string,
+    timeToHire: number,
+    amount: number,
+  ) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -340,14 +394,16 @@ export class AnalyticsService {
       where: {
         companyProfileId_date: {
           companyProfileId,
-          date: today
-        }
-      }
+          date: today,
+        },
+      },
     });
 
     if (existing) {
       // Calculate new average time to hire
-      const currentTotal = parseFloat(existing.avgTimeToHire?.toString() || '0') * existing.hiresMade;
+      const currentTotal =
+        parseFloat(existing.avgTimeToHire?.toString() || "0") *
+        existing.hiresMade;
       const newTotal = currentTotal + timeToHire;
       const newAvg = newTotal / (existing.hiresMade + 1);
 
@@ -356,8 +412,8 @@ export class AnalyticsService {
         data: {
           hiresMade: { increment: 1 },
           avgTimeToHire: newAvg,
-          totalSpent: { increment: amount }
-        }
+          totalSpent: { increment: amount },
+        },
       });
     } else {
       return await this.prisma.companyAnalytics.create({
@@ -366,8 +422,8 @@ export class AnalyticsService {
           date: today,
           hiresMade: 1,
           avgTimeToHire: timeToHire,
-          totalSpent: amount
-        }
+          totalSpent: amount,
+        },
       });
     }
   }

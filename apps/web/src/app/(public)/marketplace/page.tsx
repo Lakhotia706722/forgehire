@@ -1,20 +1,16 @@
 'use client';
 
 import * as React from 'react';
-import type { Metadata } from 'next';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MarketplaceFilters, DEFAULT_MARKET_FILTERS, type MarketplaceFilterState } from './_components/marketplace-filters';
 import { ProductCard } from './_components/product-card';
 import { ComparisonBar } from './_components/comparison-bar';
-import { allProducts, CATEGORIES, type ProductCategory, type ProductListing } from '@/lib/marketplace-data';
+import { CATEGORIES, type ProductCategory, type ProductListing } from '@/lib/marketplace-data';
 import { useQuery } from '@tanstack/react-query';
-
-async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}${path}`, { credentials: 'include' });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+import { apiFetchList } from '@/lib/api-fetch';
+import { mapApiProductToListing } from '@/lib/map-api-product';
+import { AriaNavButton } from '@/components/ui/aria-tab-button';
 
 const RECOMMENDED_REASONS: Record<string, string> = {
   'prod-1': 'Matches your tech stack (LangChain, FastAPI)',
@@ -31,29 +27,47 @@ export default function MarketplacePage() {
 
   const { data: productsData, isLoading: loading } = useQuery({
     queryKey: ['products', 'marketplace', applied, activeCategory, search],
-    queryFn: () => apiFetch<{ products: ProductListing[] }>(`/api/products?status=published&limit=50`),
+    queryFn: async () => {
+      const items = await apiFetchList<Record<string, unknown>>(
+        `/api/products?status=published&limit=50`,
+      );
+      return items.map((item, i) => mapApiProductToListing(item, i));
+    },
     staleTime: 60_000,
   });
 
-  const allProducts: ProductListing[] = productsData?.products ?? allProducts;
+  const products = React.useMemo(
+    () => productsData ?? [],
+    [productsData],
+  );
 
   // Filter products
   const filtered = React.useMemo(() => {
-    return allProducts.filter((p) => {
+    return products.filter((p) => {
       if (activeCategory !== 'All' && p.category !== activeCategory) return false;
-      if (search && !p.name.toLowerCase().includes(search.toLowerCase()) &&
-          !p.tagline.toLowerCase().includes(search.toLowerCase())) return false;
-      if (p.priceINR < applied.priceRange[0] || p.priceINR > applied.priceRange[1]) return false;
-      if (applied.aiModels.length && !applied.aiModels.includes(p.aiModel)) return false;
-      if (applied.minRating > 0 && p.rating < applied.minRating) return false;
-      if (applied.minNeuronScore > 0 && p.engineerScore < applied.minNeuronScore) return false;
+      if (
+        search &&
+        !(p.name ?? '').toLowerCase().includes(search.toLowerCase()) &&
+        !(p.tagline ?? '').toLowerCase().includes(search.toLowerCase())
+      ) {
+        return false;
+      }
+      const price = p.priceINR ?? 0;
+      if (price < applied.priceRange[0] || price > applied.priceRange[1]) return false;
+      if (applied.aiModels.length && p.aiModel && !applied.aiModels.includes(p.aiModel)) {
+        return false;
+      }
+      if (applied.minRating > 0 && (p.rating ?? 0) < applied.minRating) return false;
+      if (applied.minNeuronScore > 0 && (p.engineerScore ?? 0) < applied.minNeuronScore) {
+        return false;
+      }
       if (applied.tryBeforeBuy && !p.hasTryBeforeBuy) return false;
       if (applied.pricingModels.length && !applied.pricingModels.includes(p.pricingModel)) return false;
       return true;
     });
-  }, [allProducts, activeCategory, search, applied]);
+  }, [products, activeCategory, search, applied]);
 
-  const selectedProducts = allProducts.filter((p) => comparing.includes(p.id));
+  const selectedProducts = products.filter((p) => comparing.includes(p.id));
 
   function toggleCompare(id: string) {
     setComparing((prev) =>
@@ -66,10 +80,10 @@ export default function MarketplacePage() {
   return (
     <div className="min-h-screen bg-bg-base">
       {/* Hero banner */}
-      <div className="relative bg-bg-surface border-b border-[rgba(255,255,255,0.06)] overflow-hidden" style={{ height: 280 }}>
+      <div className="relative marketplace-hero-banner bg-bg-surface border-b border-[rgba(255,255,255,0.06)] overflow-hidden">
         <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-          <div className="absolute w-96 h-96 rounded-full animate-blob-1" style={{ background: 'radial-gradient(circle, rgba(0,212,255,0.08) 0%, transparent 70%)', top: '-20%', left: '10%' }} />
-          <div className="absolute w-80 h-80 rounded-full animate-blob-2" style={{ background: 'radial-gradient(circle, rgba(123,94,167,0.1) 0%, transparent 70%)', top: '10%', right: '15%' }} />
+          <div className="absolute w-96 h-96 rounded-full animate-blob-1 marketplace-hero-blob-1" />
+          <div className="absolute w-80 h-80 rounded-full animate-blob-2 marketplace-hero-blob-2" />
         </div>
         <div className="relative z-10 flex flex-col items-center justify-center h-full px-6 text-center">
           <h1 className="font-display text-3xl md:text-4xl font-bold text-text-primary mb-3">
@@ -115,12 +129,11 @@ export default function MarketplacePage() {
       {/* Category nav (sticky) */}
       <div className="sticky top-16 z-30 bg-bg-base/90 backdrop-blur-sm border-b border-[rgba(255,255,255,0.06)]">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex gap-0 overflow-x-auto scrollbar-none" role="tablist" aria-label="Product categories">
-            {[{ id: 'All' as const, icon: '🌐', count: allProducts.length }, ...CATEGORIES].map((cat) => (
-              <button
+          <nav className="flex gap-0 overflow-x-auto scrollbar-none" aria-label="Product categories">
+            {[{ id: 'All' as const, icon: '🌐', count: products.length }, ...CATEGORIES].map((cat) => (
+              <AriaNavButton
                 key={cat.id}
-                role="tab"
-                aria-selected={activeCategory === cat.id}
+                current={activeCategory === cat.id}
                 onClick={() => setActiveCategory(cat.id as ProductCategory | 'All')}
                 className={cn(
                   'flex items-center gap-1.5 px-4 py-3.5 text-sm font-medium whitespace-nowrap transition-colors relative',
@@ -142,9 +155,9 @@ export default function MarketplacePage() {
                 {activeCategory === cat.id && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-cyan rounded-full" aria-hidden="true" />
                 )}
-              </button>
+              </AriaNavButton>
             ))}
-          </div>
+          </nav>
         </div>
       </div>
 
@@ -159,7 +172,7 @@ export default function MarketplacePage() {
             <span className="text-sm font-medium text-accent-violet">Recommended for Sarvam AI</span>
           </div>
           <div className="grid sm:grid-cols-3 gap-4">
-            {allProducts.filter((p) => RECOMMENDED_REASONS[p.id]).map((p) => (
+            {products.filter((p) => RECOMMENDED_REASONS[p.id]).map((p) => (
               <ProductCard
                 key={p.id}
                 product={p}

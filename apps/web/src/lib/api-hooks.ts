@@ -4,28 +4,13 @@
  * Uses the existing apiClient from api.ts.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@clerk/nextjs';
+import { useApiAuth } from '@/components/providers/api-auth-provider';
 import { apiClient } from './api';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
-// ── Generic fetcher ───────────────────────────────────────────
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-  const res = await fetch(`${API}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err.message || `API error ${res.status}`);
-  }
-  return res.json();
-}
+import { apiFetch, apiFetchList } from './api-fetch';
+import { mapApiProductToListing } from './map-api-product';
+import { EMPTY_PLATFORM_STATS } from './api-safe';
 
 // ── Query Keys ────────────────────────────────────────────────
 export const QUERY_KEYS = {
@@ -87,7 +72,13 @@ export interface PlatformStats {
 export function usePlatformStats() {
   return useQuery<PlatformStats>({
     queryKey: QUERY_KEYS.platformStats,
-    queryFn: () => apiFetch('/api/stats/platform'),
+    queryFn: async () => {
+      try {
+        return await apiFetch<PlatformStats>('/api/stats/platform');
+      } catch {
+        return { ...EMPTY_PLATFORM_STATS };
+      }
+    },
     staleTime: 5 * 60_000, // 5 minutes
   });
 }
@@ -112,7 +103,7 @@ export interface FeaturedEngineer {
 export function useFeaturedEngineers() {
   return useQuery<FeaturedEngineer[]>({
     queryKey: QUERY_KEYS.featuredEngineers,
-    queryFn: () => apiFetch('/api/featured/engineers'),
+    queryFn: () => apiFetchList<FeaturedEngineer>('/api/featured/engineers'),
     staleTime: 10 * 60_000, // 10 minutes
   });
 }
@@ -136,7 +127,7 @@ export interface FeaturedProduct {
 export function useFeaturedProducts() {
   return useQuery<FeaturedProduct[]>({
     queryKey: QUERY_KEYS.featuredProducts,
-    queryFn: () => apiFetch('/api/featured/products'),
+    queryFn: () => apiFetchList<FeaturedProduct>('/api/featured/products'),
     staleTime: 10 * 60_000,
   });
 }
@@ -158,7 +149,7 @@ export interface FeaturedBounty {
 export function useFeaturedBounties() {
   return useQuery<FeaturedBounty[]>({
     queryKey: QUERY_KEYS.featuredBounties,
-    queryFn: () => apiFetch('/api/featured/bounties'),
+    queryFn: () => apiFetchList<FeaturedBounty>('/api/featured/bounties'),
     staleTime: 10 * 60_000,
   });
 }
@@ -525,10 +516,14 @@ export interface EngineerSettings {
 }
 
 export function useEngineerSettings() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const { status: apiAuthStatus } = useApiAuth();
+
   return useQuery<EngineerSettings>({
     queryKey: QUERY_KEYS.settings,
     queryFn: () => apiFetch('/api/engineer/settings'),
     staleTime: 5 * 60_000,
+    enabled: isLoaded && isSignedIn && apiAuthStatus === 'ready',
   });
 }
 
@@ -687,28 +682,62 @@ export function useRevokeSession() {
 }
 
 // ── Engineer Profile ──────────────────────────────────────────
+export interface EngineerSkill {
+  id: string;
+  skillName: string;
+  proficiencyLevel: string;
+}
+
 export interface EngineerProfileData {
   id: string;
   fullName: string;
-  headline: string;
-  bio: string;
-  location: string;
-  hourlyRate: number;
+  headline?: string | null;
+  bio: string | null;
+  location: string | null;
+  hourlyRate: number | string | null;
   availabilityStatus: string;
   neuronScore: number;
   neuronTier: string;
   completenessScore: number;
-  githubUrl: string;
-  linkedinUrl: string;
-  portfolioUrl: string;
-  upiId: string;
+  githubUrl: string | null;
+  linkedinUrl: string | null;
+  portfolioUrl: string | null;
+  upiId: string | null;
+  updatedAt?: string;
+  completeness?: { score: number };
+  skills?: EngineerSkill[];
 }
 
 export function useMyEngineerProfile() {
-  return useQuery<EngineerProfileData>({
+  const { isLoaded, isSignedIn } = useAuth();
+  const { status: apiAuthStatus } = useApiAuth();
+
+  return useQuery<EngineerProfileData | null>({
     queryKey: ['engineer', 'me'],
-    queryFn: () => apiFetch('/api/engineer/profile/me'),
+    queryFn: () => apiFetch<EngineerProfileData | null>('/api/engineer/profile'),
     staleTime: 5 * 60_000,
+    enabled: isLoaded && isSignedIn && apiAuthStatus === 'ready',
+    retry: (failureCount, err) => {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('401') && failureCount < 3) return true;
+      return failureCount < 1;
+    },
+    retryDelay: 800,
+  });
+}
+
+export function useUpdateEngineerProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiFetch<EngineerProfileData>('/api/engineer/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (updated) => {
+      qc.setQueryData(['engineer', 'me'], updated);
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.settings });
+    },
   });
 }
 
@@ -727,10 +756,119 @@ export interface ContractSummary {
 }
 
 export function useMyContracts(filter?: string) {
+  const params = filter && filter !== 'all' ? `?status=${filter}` : '';
   return useQuery<ContractSummary[]>({
     queryKey: ['contracts', 'me', filter],
-    queryFn: () => apiFetch(`/api/contracts/me${filter ? `?status=${filter}` : ''}`),
+    queryFn: () => apiFetch(`/api/contracts${params}`),
     staleTime: 60_000,
+  });
+}
+
+// ── Company Tasks ───────────────────────────────────────────────
+export interface CompanyTaskItem {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  rewardAmount: number;
+  deadline: string;
+  participantCount: number;
+  submissionCount: number;
+  difficulty: string;
+  ndaRequired?: boolean;
+  problemStatement?: string;
+  expectedOutcome?: string;
+  techRequirements?: string[];
+  minNeuronScore?: number;
+}
+
+export function useCompanyTasks(status?: string) {
+  const params = status && status !== 'all' ? `?status=${status}` : '';
+  return useQuery<CompanyTaskItem[]>({
+    queryKey: QUERY_KEYS.tasks({ mine: true, status }),
+    queryFn: () => apiFetchList<CompanyTaskItem>(`/api/tasks/mine${params}`),
+    staleTime: 60_000,
+  });
+}
+
+export function useTaskDetail(taskId: string) {
+  return useQuery<CompanyTaskItem>({
+    queryKey: QUERY_KEYS.task(taskId),
+    queryFn: () => apiFetch(`/api/tasks/${taskId}`),
+    staleTime: 30_000,
+    enabled: !!taskId,
+  });
+}
+
+export function useSubmitTask(taskId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiFetch(`/api/tasks/${taskId}/submit`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.task(taskId) });
+      qc.invalidateQueries({ queryKey: ['tasks', 'my-submissions'] });
+    },
+  });
+}
+
+// ── Company Analytics ───────────────────────────────────────────
+export interface CompanyAnalyticsData {
+  summary: {
+    totalJobsPosted: number;
+    totalApplications: number;
+    totalHires: number;
+    avgTimeToHire: string;
+    totalSpent: number;
+    costPerHire: string;
+  };
+  trends: {
+    jobsPosted: { date: string; value: number }[];
+    applications: { date: string; value: number }[];
+    hires: { date: string; value: number }[];
+    spending: { date: string; value: number }[];
+  };
+}
+
+export function useCompanyAnalytics() {
+  return useQuery<CompanyAnalyticsData>({
+    queryKey: QUERY_KEYS.companyAnalytics,
+    queryFn: () => apiFetch('/api/analytics/company/me'),
+    staleTime: 5 * 60_000,
+  });
+}
+
+// ── Market Rates (public) ─────────────────────────────────────
+export interface MarketRateSkill {
+  skill: string;
+  p10: number;
+  p25: number;
+  median: number;
+  p75: number;
+  p90: number;
+  sampleSize: number;
+  tierBreakdown: { tier: string; avgRate: number }[];
+  relatedSkills: string[];
+}
+
+export function useMarketRates() {
+  return useQuery<{ bySkill: MarketRateSkill[] }>({
+    queryKey: ['analytics', 'market-rates'],
+    queryFn: async () => {
+      try {
+        const data = await apiFetch<{ bySkill?: MarketRateSkill[] } | MarketRateSkill[]>(
+          '/api/analytics/market-rates',
+        );
+        const bySkill = Array.isArray(data) ? data : (data?.bySkill ?? []);
+        return { bySkill };
+      } catch {
+        return { bySkill: [] };
+      }
+    },
+    staleTime: 60 * 60_000,
   });
 }
 
@@ -871,10 +1009,45 @@ export interface MyProduct {
 }
 
 export function useMyProducts() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const { status: apiAuthStatus } = useApiAuth();
+
   return useQuery<MyProduct[]>({
     queryKey: ['products', 'me'],
-    queryFn: () => apiFetch('/api/products/me'),
+    queryFn: () => apiFetchList<MyProduct>('/api/products/me'),
     staleTime: 60_000,
+    enabled: isLoaded && isSignedIn && apiAuthStatus === 'ready',
+  });
+}
+
+export function useMarketplaceCatalog(params?: {
+  limit?: number;
+  query?: string;
+}) {
+  return useQuery({
+    queryKey: ['products', 'catalog', params],
+    queryFn: async () => {
+      const q = new URLSearchParams();
+      q.set('status', 'published');
+      q.set('limit', String(params?.limit ?? 50));
+      if (params?.query) q.set('query', params.query);
+      const items = await apiFetchList<Record<string, unknown>>(`/api/products?${q.toString()}`);
+      return items.map((item, i) => mapApiProductToListing(item, i));
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function useTrendingProducts(limit = 6) {
+  return useQuery({
+    queryKey: ['products', 'trending', limit],
+    queryFn: async () => {
+      const items = await apiFetchList<Record<string, unknown>>(
+        `/api/products/trending?limit=${limit}`,
+      );
+      return items.map((item, i) => mapApiProductToListing(item, i));
+    },
+    staleTime: 120_000,
   });
 }
 
@@ -892,10 +1065,14 @@ export interface MyPurchase {
 }
 
 export function useMyPurchases() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const { status: apiAuthStatus } = useApiAuth();
+
   return useQuery<MyPurchase[]>({
     queryKey: ['purchases', 'me'],
-    queryFn: () => apiFetch('/api/products/purchases/me'),
+    queryFn: () => apiFetchList<MyPurchase>('/api/products/purchases/me'),
     staleTime: 60_000,
+    enabled: isLoaded && isSignedIn && apiAuthStatus === 'ready',
   });
 }
 
@@ -982,5 +1159,198 @@ export function useAdminDisputes(status?: string) {
     queryKey: ['admin', 'disputes', status],
     queryFn: () => apiFetch(`/api/admin/disputes${status && status !== 'all' ? `?status=${status}` : ''}`),
     staleTime: 60_000,
+  });
+}
+
+// ── Engineer Search (company browse) ──────────────────────────
+export function useEngineerSearch(params: {
+  query?: string;
+  skills?: string[];
+  minNeuronScore?: number;
+  maxNeuronScore?: number;
+  availabilityStatus?: string;
+  minHourlyRate?: number;
+  maxHourlyRate?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params.query) q.set('query', params.query);
+  if (params.skills?.length) q.set('skills', params.skills.join(','));
+  if (params.minNeuronScore != null) q.set('minNeuronScore', String(params.minNeuronScore));
+  if (params.maxNeuronScore != null) q.set('maxNeuronScore', String(params.maxNeuronScore));
+  if (params.availabilityStatus && params.availabilityStatus !== 'any') {
+    q.set('availabilityStatus', params.availabilityStatus);
+  }
+  if (params.minHourlyRate != null) q.set('minHourlyRate', String(params.minHourlyRate));
+  if (params.maxHourlyRate != null) q.set('maxHourlyRate', String(params.maxHourlyRate));
+  q.set('limit', '50');
+
+  return useQuery<unknown[]>({
+    queryKey: ['search', 'engineers', params],
+    queryFn: () => apiFetchList(`/api/search/engineers?${q.toString()}`),
+    staleTime: 60_000,
+  });
+}
+
+// ── Engineer Analytics ────────────────────────────────────────
+export interface EngineerAnalyticsApi {
+  summary: {
+    totalViews: number;
+    totalProposals: number;
+    totalAccepted: number;
+    acceptanceRate: string;
+    totalEarnings: number;
+  };
+  trends: {
+    profileViews: { date: string; value: number }[];
+    proposals: { date: string; sent: number; accepted: number }[];
+    earnings: { date: string; value: number }[];
+  };
+  topKeywords: { keyword: string; count: number }[];
+  topSkills: { name: string; views: number }[];
+}
+
+export function useEngineerAnalytics() {
+  return useQuery<EngineerAnalyticsApi>({
+    queryKey: QUERY_KEYS.engineerAnalytics,
+    queryFn: () => apiFetch('/api/analytics/engineer/me'),
+    staleTime: 5 * 60_000,
+  });
+}
+
+// ── My Bounty Submissions ─────────────────────────────────────
+export interface MyBountySubmission {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  companyName: string;
+  reward: number;
+  taskStatus: string;
+  taskType: string;
+  status: string;
+  submittedAt: string;
+  payoutAmount: number | null;
+  score: number | null;
+}
+
+export function useMyBountySubmissions() {
+  return useQuery<MyBountySubmission[]>({
+    queryKey: ['tasks', 'my-submissions'],
+    queryFn: () => apiFetchList('/api/tasks/my-submissions'),
+    staleTime: 60_000,
+  });
+}
+
+// ── Company Profile ───────────────────────────────────────────
+export interface CompanyProfileData {
+  id: string;
+  companyName: string;
+  description: string | null;
+  website: string | null;
+  location: string | null;
+  industry: string | null;
+  size: string | null;
+  gstNumber: string | null;
+  isHiring: boolean;
+  hiringIntents: string[];
+  aiRequirements: string[];
+  trustScore: number;
+  websiteVerified: boolean;
+  gstVerified: boolean;
+}
+
+export function useCompanyProfile() {
+  return useQuery<CompanyProfileData | null>({
+    queryKey: ['company', 'profile'],
+    queryFn: () => apiFetch('/api/company/profile'),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useUpdateCompanyProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<CompanyProfileData>) =>
+      apiFetch('/api/company/profile', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['company', 'profile'] });
+    },
+  });
+}
+
+// ── Admin Moderation Queue ────────────────────────────────────
+export interface ModerationQueueProduct {
+  id: string;
+  name: string;
+  tagline: string;
+  category: string;
+  status: string;
+  engineerProfile: { fullName: string };
+  user: { email: string };
+  createdAt: string;
+}
+
+export function useAdminModerationQueue() {
+  return useQuery<{ products: ModerationQueueProduct[]; total: number }>({
+    queryKey: QUERY_KEYS.adminModeration,
+    queryFn: () => apiFetch('/api/admin/moderation/queue'),
+    staleTime: 30_000,
+  });
+}
+
+export interface AdminDisputeDetail {
+  id: string;
+  productName: string;
+  productId: string;
+  buyerName: string;
+  sellerName: string;
+  amount: number;
+  reason: string;
+  status: string;
+  createdAt: string;
+  resolution: string | null;
+}
+
+export function useAdminDisputeDetail(id: string) {
+  return useQuery<AdminDisputeDetail>({
+    queryKey: ['admin', 'dispute', id],
+    queryFn: () => apiFetch(`/api/admin/disputes/${id}`),
+    enabled: !!id,
+    staleTime: 60_000,
+  });
+}
+
+export interface AdminCompanyDetail {
+  id: string;
+  companyName: string;
+  email: string;
+  industry: string | null;
+  size: string | null;
+  location: string | null;
+  websiteVerified: boolean;
+  gstVerified: boolean;
+  trustScore: number;
+  taskCount: number;
+  contractCount: number;
+  totalSpend: number;
+}
+
+export function useAdminCompanyDetail(id: string) {
+  return useQuery<AdminCompanyDetail>({
+    queryKey: ['admin', 'company', id],
+    queryFn: () => apiFetch(`/api/admin/companies/${id}`),
+    enabled: !!id,
+    staleTime: 60_000,
+  });
+}
+
+export function usePublicEngineerProfile(id: string) {
+  return useQuery<Record<string, unknown>>({
+    queryKey: ['engineer', 'public', id],
+    queryFn: () => apiFetch(`/api/engineer/profiles/${id}`),
+    enabled: !!id,
+    staleTime: 5 * 60_000,
   });
 }

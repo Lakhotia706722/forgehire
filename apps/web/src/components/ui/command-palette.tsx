@@ -198,7 +198,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       key={item.id}
                       id={`cmd-${item.id}`}
                       role="option"
-                      aria-selected={isSelected}
+                      aria-selected={isSelected ? "true" : "false"}
                       data-index={idx}
                       onClick={item.action}
                       onMouseEnter={() => setSelectedIndex(idx)}

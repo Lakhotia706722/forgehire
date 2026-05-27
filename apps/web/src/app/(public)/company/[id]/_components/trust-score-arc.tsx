@@ -1,10 +1,20 @@
 'use client';
 
 import * as React from 'react';
+import { cn } from '@/lib/utils';
 import { useIntersection } from '@/hooks/use-intersection';
 
 interface TrustScoreArcProps {
   score: number; // 0–100
+}
+
+type ScoreTone = 'green' | 'cyan' | 'amber' | 'red';
+
+function scoreTone(score: number): ScoreTone {
+  if (score >= 80) return 'green';
+  if (score >= 60) return 'cyan';
+  if (score >= 40) return 'amber';
+  return 'red';
 }
 
 /**
@@ -43,6 +53,7 @@ export function TrustScoreArc({ score }: TrustScoreArcProps) {
   const fillRatio = Math.min(score / 100, 1);
   const fillLength = fillRatio * arcLength;
   const dashOffset = arcLength - fillLength;
+  const tone = scoreTone(score);
 
   // Animate on intersection
   React.useEffect(() => {
@@ -60,9 +71,6 @@ export function TrustScoreArc({ score }: TrustScoreArcProps) {
 
     return () => cancelAnimationFrame(raf);
   }, [visible, animated, score]);
-
-  // Color based on score
-  const color = score >= 80 ? '#10B981' : score >= 60 ? '#00D4FF' : score >= 40 ? '#F59E0B' : '#EF4444';
 
   return (
     <div
@@ -83,21 +91,17 @@ export function TrustScoreArc({ score }: TrustScoreArcProps) {
         <path
           d={trackPath}
           fill="none"
-          stroke={color}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={arcLength}
           strokeDashoffset={animated ? dashOffset : arcLength}
-          style={{
-            transition: animated ? 'none' : undefined,
-            filter: `drop-shadow(0 0 4px ${color}80)`,
-          }}
+          className={cn(`trust-arc-fill-${tone}`, animated && 'trust-arc-no-transition')}
         />
       </svg>
 
       {/* Score label */}
       <div className="-mt-4 text-center">
-        <p className="font-mono font-bold text-2xl leading-none" style={{ color }}>
+        <p className={cn('font-mono font-bold text-2xl leading-none', `trust-score-text-${tone}`)}>
           {displayScore}
         </p>
         <p className="text-xs text-text-muted mt-0.5">Trust Score</p>

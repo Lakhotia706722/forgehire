@@ -2,15 +2,17 @@
 
 import * as React from 'react';
 import { NeuronScoreRing } from '@/components/ui/neuron-score-ring';
+import { Progress } from '@/components/ui/progress';
 import { useIntersection } from '@/hooks/use-intersection';
+import { cn } from '@/lib/utils';
 
 const DIMENSIONS = [
-  { label: 'Assessment Score',  pct: 88, color: '#00D4FF' },
-  { label: 'Client Ratings',    pct: 92, color: '#10B981' },
-  { label: 'Portfolio Depth',   pct: 75, color: '#7B5EA7' },
-  { label: 'Work Delivery',     pct: 95, color: '#F59E0B' },
-  { label: 'Marketplace',       pct: 60, color: '#00D4FF' },
-  { label: 'Community',         pct: 70, color: '#7B5EA7' },
+  { label: 'Assessment Score', pct: 88, pctClass: 'dim-pct-cyan', color: 'cyan' as const },
+  { label: 'Client Ratings', pct: 92, pctClass: 'dim-pct-green', color: 'green' as const },
+  { label: 'Portfolio Depth', pct: 75, pctClass: 'dim-pct-violet', color: 'violet' as const },
+  { label: 'Work Delivery', pct: 95, pctClass: 'dim-pct-amber', color: 'amber' as const },
+  { label: 'Marketplace', pct: 60, pctClass: 'dim-pct-cyan', color: 'cyan' as const },
+  { label: 'Community', pct: 70, pctClass: 'dim-pct-violet', color: 'violet' as const },
 ];
 
 export function NeuronScoreExplainerSection() {
@@ -19,12 +21,10 @@ export function NeuronScoreExplainerSection() {
   return (
     <section
       ref={sectionRef as React.RefObject<HTMLElement>}
-      className="py-24 px-6"
-      style={{ background: 'linear-gradient(180deg, rgba(123,94,167,0.04) 0%, transparent 100%)' }}
+      className="section-neuron-gradient py-24 px-6"
       aria-labelledby="neuron-score-heading"
     >
       <div className="max-w-5xl mx-auto">
-        {/* Section label */}
         <div className="text-center mb-12">
           <span className="text-xs font-mono text-accent-violet uppercase tracking-widest">
             The NeuronScore System
@@ -37,7 +37,6 @@ export function NeuronScoreExplainerSection() {
         </div>
 
         <div className="bg-bg-surface border border-[rgba(123,94,167,0.2)] rounded-2xl p-8 md:p-12 flex flex-col md:flex-row items-center gap-12">
-          {/* Left: Ring */}
           <div className="flex flex-col items-center gap-4 shrink-0">
             <NeuronScoreRing score={820} size={160} strokeWidth={8} animate={visible} />
             <div className="text-center">
@@ -46,35 +45,23 @@ export function NeuronScoreExplainerSection() {
             </div>
           </div>
 
-          {/* Right: Dimension bars */}
           <div className="flex-1 w-full space-y-5">
             <p className="text-text-secondary text-sm mb-6">
               NeuronScore is a composite of 6 dimensions, updated in real-time as you work, deliver, and grow on the platform.
             </p>
-            {DIMENSIONS.map((dim, i) => (
+            {DIMENSIONS.map((dim) => (
               <div key={dim.label}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-sm text-text-secondary">{dim.label}</span>
-                  <span className="text-xs font-mono" style={{ color: dim.color }}>
-                    {dim.pct}%
-                  </span>
+                  <span className={cn('text-xs font-mono', dim.pctClass)}>{dim.pct}%</span>
                 </div>
-                <div className="dimension-bar">
-                  <div
-                    className="dimension-bar-fill"
-                    style={{
-                      '--bar-width': `${dim.pct}%`,
-                      background: `linear-gradient(90deg, ${dim.color}80, ${dim.color})`,
-                      width: visible ? `${dim.pct}%` : '0%',
-                      transition: `width 1s cubic-bezier(0.16,1,0.3,1) ${i * 100}ms`,
-                    } as React.CSSProperties}
-                    role="progressbar"
-                    aria-valuenow={dim.pct}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={dim.label}
-                  />
-                </div>
+                <Progress
+                  value={visible ? dim.pct : 0}
+                  max={100}
+                  color={dim.color}
+                  size="sm"
+                  label={dim.label}
+                />
               </div>
             ))}
           </div>

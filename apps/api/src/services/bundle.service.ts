@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-import { CreateBundleInput, UpdateBundleInput } from '@neuronhire/shared';
+import { PrismaClient } from "@prisma/client";
+import { CreateBundleInput, UpdateBundleInput } from "@neuronhire/shared";
 
 export class BundleService {
   private prisma: PrismaClient;
@@ -14,27 +14,27 @@ export class BundleService {
   async createBundle(userId: string, data: CreateBundleInput) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { engineerProfile: true }
+      include: { engineerProfile: true },
     });
 
     if (!user || !user.engineerProfile) {
-      throw new Error('Engineer profile not found');
+      throw new Error("Engineer profile not found");
     }
 
-    if (user.role !== 'engineer') {
-      throw new Error('Only engineers can create bundles');
+    if (user.role !== "engineer") {
+      throw new Error("Only engineers can create bundles");
     }
 
     // Validate products belong to engineer
     const products = await this.prisma.product.findMany({
       where: {
         id: { in: data.productIds },
-        userId
-      }
+        userId,
+      },
     });
 
     if (products.length !== data.productIds.length) {
-      throw new Error('Some products not found or do not belong to you');
+      throw new Error("Some products not found or do not belong to you");
     }
 
     // Calculate original price
@@ -44,11 +44,12 @@ export class BundleService {
 
     // Validate bundle price
     if (data.bundlePrice >= originalPrice) {
-      throw new Error('Bundle price must be less than original price');
+      throw new Error("Bundle price must be less than original price");
     }
 
     // Calculate discount percentage
-    const discountPercent = ((originalPrice - data.bundlePrice) / originalPrice) * 100;
+    const discountPercent =
+      ((originalPrice - data.bundlePrice) / originalPrice) * 100;
 
     // Create bundle
     const bundle = await this.prisma.bundle.create({
@@ -62,8 +63,8 @@ export class BundleService {
         bundlePrice: data.bundlePrice,
         discountPercent,
         currency: data.currency,
-        active: true
-      }
+        active: true,
+      },
     });
 
     // Add products to bundle
@@ -73,10 +74,10 @@ export class BundleService {
           data: {
             bundleId: bundle.id,
             productId,
-            displayOrder: index
-          }
-        })
-      )
+            displayOrder: index,
+          },
+        }),
+      ),
     );
 
     return await this.getBundle(bundle.id);
@@ -85,17 +86,21 @@ export class BundleService {
   /**
    * Update bundle
    */
-  async updateBundle(bundleId: string, userId: string, data: UpdateBundleInput) {
+  async updateBundle(
+    bundleId: string,
+    userId: string,
+    data: UpdateBundleInput,
+  ) {
     const bundle = await this.prisma.bundle.findUnique({
-      where: { id: bundleId }
+      where: { id: bundleId },
     });
 
     if (!bundle) {
-      throw new Error('Bundle not found');
+      throw new Error("Bundle not found");
     }
 
     if (bundle.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     // If updating products, recalculate prices
@@ -103,12 +108,12 @@ export class BundleService {
       const products = await this.prisma.product.findMany({
         where: {
           id: { in: data.productIds },
-          userId
-        }
+          userId,
+        },
       });
 
       if (products.length !== data.productIds.length) {
-        throw new Error('Some products not found or do not belong to you');
+        throw new Error("Some products not found or do not belong to you");
       }
 
       const originalPrice = products.reduce((sum, p) => {
@@ -116,11 +121,12 @@ export class BundleService {
       }, 0);
 
       const bundlePrice = data.bundlePrice || bundle.bundlePrice;
-      const discountPercent = ((originalPrice - Number(bundlePrice)) / originalPrice) * 100;
+      const discountPercent =
+        ((originalPrice - Number(bundlePrice)) / originalPrice) * 100;
 
       // Delete existing bundle products
       await this.prisma.bundleProduct.deleteMany({
-        where: { bundleId }
+        where: { bundleId },
       });
 
       // Add new products
@@ -130,10 +136,10 @@ export class BundleService {
             data: {
               bundleId,
               productId,
-              displayOrder: index
-            }
-          })
-        )
+              displayOrder: index,
+            },
+          }),
+        ),
       );
 
       // Update bundle
@@ -146,8 +152,8 @@ export class BundleService {
           originalPrice,
           bundlePrice,
           discountPercent,
-          active: data.active
-        }
+          active: data.active,
+        },
       });
     }
 
@@ -159,8 +165,8 @@ export class BundleService {
         description: data.description,
         thumbnailUrl: data.thumbnailUrl,
         bundlePrice: data.bundlePrice,
-        active: data.active
-      }
+        active: data.active,
+      },
     });
   }
 
@@ -182,26 +188,26 @@ export class BundleService {
                 category: true,
                 priceINR: true,
                 rating: true,
-                reviewCount: true
-              }
-            }
+                reviewCount: true,
+              },
+            },
           },
           orderBy: {
-            displayOrder: 'asc'
-          }
+            displayOrder: "asc",
+          },
         },
         engineerProfile: {
           select: {
             fullName: true,
             neuronScore: true,
-            neuronTier: true
-          }
-        }
-      }
+            neuronTier: true,
+          },
+        },
+      },
     });
 
     if (!bundle) {
-      throw new Error('Bundle not found');
+      throw new Error("Bundle not found");
     }
 
     return bundle;
@@ -213,7 +219,7 @@ export class BundleService {
   async getEngineerBundles(engineerProfileId: string, limit = 50) {
     return await this.prisma.bundle.findMany({
       where: { engineerProfileId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: limit,
       include: {
         products: {
@@ -222,12 +228,12 @@ export class BundleService {
               select: {
                 id: true,
                 name: true,
-                thumbnailUrl: true
-              }
-            }
-          }
-        }
-      }
+                thumbnailUrl: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -237,7 +243,7 @@ export class BundleService {
   async getActiveBundles(limit = 50) {
     return await this.prisma.bundle.findMany({
       where: { active: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: limit,
       include: {
         products: {
@@ -250,21 +256,21 @@ export class BundleService {
                 thumbnailUrl: true,
                 category: true,
                 priceINR: true,
-                rating: true
-              }
-            }
+                rating: true,
+              },
+            },
           },
           orderBy: {
-            displayOrder: 'asc'
-          }
+            displayOrder: "asc",
+          },
         },
         engineerProfile: {
           select: {
             fullName: true,
-            neuronScore: true
-          }
-        }
-      }
+            neuronScore: true,
+          },
+        },
+      },
     });
   }
 
@@ -273,25 +279,25 @@ export class BundleService {
    */
   async deleteBundle(bundleId: string, userId: string) {
     const bundle = await this.prisma.bundle.findUnique({
-      where: { id: bundleId }
+      where: { id: bundleId },
     });
 
     if (!bundle) {
-      throw new Error('Bundle not found');
+      throw new Error("Bundle not found");
     }
 
     if (bundle.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     // Delete bundle products first
     await this.prisma.bundleProduct.deleteMany({
-      where: { bundleId }
+      where: { bundleId },
     });
 
     // Delete bundle
     await this.prisma.bundle.delete({
-      where: { id: bundleId }
+      where: { id: bundleId },
     });
 
     return { success: true };
@@ -302,22 +308,22 @@ export class BundleService {
    */
   async toggleBundleStatus(bundleId: string, userId: string) {
     const bundle = await this.prisma.bundle.findUnique({
-      where: { id: bundleId }
+      where: { id: bundleId },
     });
 
     if (!bundle) {
-      throw new Error('Bundle not found');
+      throw new Error("Bundle not found");
     }
 
     if (bundle.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     return await this.prisma.bundle.update({
       where: { id: bundleId },
       data: {
-        active: !bundle.active
-      }
+        active: !bundle.active,
+      },
     });
   }
 }

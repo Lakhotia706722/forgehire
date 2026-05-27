@@ -1,5 +1,5 @@
-import { PrismaClient, DisputeStatus, PurchaseStatus } from '@prisma/client';
-import { RaiseDisputeInput, ResolveDisputeInput } from '@neuronhire/shared';
+import { PrismaClient, DisputeStatus, PurchaseStatus } from "@prisma/client";
+import { RaiseDisputeInput, ResolveDisputeInput } from "@neuronhire/shared";
 
 export class DisputeService {
   private prisma: PrismaClient;
@@ -11,38 +11,42 @@ export class DisputeService {
   /**
    * Raise dispute
    */
-  async raiseDispute(purchaseId: string, userId: string, data: RaiseDisputeInput) {
+  async raiseDispute(
+    purchaseId: string,
+    userId: string,
+    data: RaiseDisputeInput,
+  ) {
     const purchase = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },
       include: {
-        product: true
-      }
+        product: true,
+      },
     });
 
     if (!purchase) {
-      throw new Error('Purchase not found');
+      throw new Error("Purchase not found");
     }
 
     if (purchase.buyerId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     if (purchase.status !== PurchaseStatus.completed) {
-      throw new Error('Can only dispute completed purchases');
+      throw new Error("Can only dispute completed purchases");
     }
 
     // Check if within 30-day dispute window
     if (!purchase.disputeEligible || new Date() > purchase.disputeDeadline) {
-      throw new Error('Dispute window has expired (30 days from purchase)');
+      throw new Error("Dispute window has expired (30 days from purchase)");
     }
 
     // Check if dispute already exists
     const existing = await this.prisma.dispute.findUnique({
-      where: { purchaseId }
+      where: { purchaseId },
     });
 
     if (existing) {
-      throw new Error('Dispute already exists for this purchase');
+      throw new Error("Dispute already exists for this purchase");
     }
 
     // Create dispute
@@ -54,16 +58,16 @@ export class DisputeService {
         sellerId: purchase.product.userId,
         reason: data.reason,
         evidence: data.evidence ?? [],
-        status: DisputeStatus.open
-      }
+        status: DisputeStatus.open,
+      },
     });
 
     // Update purchase status
     await this.prisma.purchase.update({
       where: { id: purchaseId },
       data: {
-        status: PurchaseStatus.disputed
-      }
+        status: PurchaseStatus.disputed,
+      },
     });
 
     return dispute;
@@ -72,40 +76,50 @@ export class DisputeService {
   /**
    * Resolve dispute (admin only)
    */
-  async resolveDispute(disputeId: string, adminId: string, data: ResolveDisputeInput) {
+  async resolveDispute(
+    disputeId: string,
+    adminId: string,
+    data: ResolveDisputeInput,
+  ) {
     const dispute = await this.prisma.dispute.findUnique({
       where: { id: disputeId },
       include: {
         purchase: {
           include: {
-            product: true
-          }
-        }
-      }
+            product: true,
+          },
+        },
+      },
     });
 
     if (!dispute) {
-      throw new Error('Dispute not found');
+      throw new Error("Dispute not found");
     }
 
-    if (dispute.status !== DisputeStatus.open && dispute.status !== DisputeStatus.under_review) {
-      throw new Error('Dispute already resolved');
+    if (
+      dispute.status !== DisputeStatus.open &&
+      dispute.status !== DisputeStatus.under_review
+    ) {
+      throw new Error("Dispute already resolved");
     }
 
     // Update dispute
     const resolved = await this.prisma.dispute.update({
       where: { id: disputeId },
       data: {
-        status: data.resolution === 'buyer' ? DisputeStatus.resolved_buyer : DisputeStatus.resolved_seller,
+        status:
+          data.resolution === "buyer"
+            ? DisputeStatus.resolved_buyer
+            : DisputeStatus.resolved_seller,
         resolution: data.resolutionNotes,
         resolvedBy: adminId,
         resolvedAt: new Date(),
-        refundAmount: data.refundAmount
-      }
+        refundAmount: data.refundAmount,
+      },
     });
 
     // If resolved in favor of buyer, process refund
-    if (data.resolution === 'buyer' && data.refundAmount) {
+    if (data.resolution === "buyer" && data.refundAmount) {
       await this.processRefund(disputeId, data.refundAmount);
     }
 
@@ -113,8 +127,11 @@ export class DisputeService {
     await this.prisma.purchase.update({
       where: { id: dispute.purchaseId },
       data: {
-        status: data.resolution === 'buyer' ? PurchaseStatus.refunded : PurchaseStatus.completed
-      }
+        status:
+          data.resolution === "buyer"
+            ? PurchaseStatus.refunded
+            : PurchaseStatus.completed,
+      },
     });
 
     return resolved;
@@ -127,18 +144,18 @@ export class DisputeService {
     const dispute = await this.prisma.dispute.findUnique({
       where: { id: disputeId },
       include: {
-        purchase: true
-      }
+        purchase: true,
+      },
     });
 
     if (!dispute) {
-      throw new Error('Dispute not found');
+      throw new Error("Dispute not found");
     }
 
     try {
       // TODO: Implement actual Razorpay refund
       const refundId = `refund_${Date.now()}_${disputeId}`;
-      
+
       console.log(`Processing refund: ${refundId} for ₹${amount}`);
 
       // Update dispute with refund info
@@ -146,8 +163,8 @@ export class DisputeService {
         where: { id: disputeId },
         data: {
           refundProcessed: true,
-          refundId
-        }
+          refundId,
+        },
       });
 
       // Revoke license
@@ -155,8 +172,8 @@ export class DisputeService {
         where: { id: dispute.purchaseId },
         data: {
           licenseActive: false,
-          licenseRevokedAt: new Date()
-        }
+          licenseRevokedAt: new Date(),
+        },
       });
 
       // Update analytics
@@ -164,11 +181,11 @@ export class DisputeService {
 
       return {
         success: true,
-        refundId
+        refundId,
       };
     } catch (error) {
-      console.error('Refund error:', error);
-      throw new Error('Failed to process refund');
+      console.error("Refund error:", error);
+      throw new Error("Failed to process refund");
     }
   }
 
@@ -184,29 +201,33 @@ export class DisputeService {
             product: {
               select: {
                 name: true,
-                thumbnailUrl: true
-              }
-            }
-          }
-        }
-      }
+                thumbnailUrl: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!dispute) {
-      throw new Error('Dispute not found');
+      throw new Error("Dispute not found");
     }
 
     // Check authorization
     const user = await this.prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
 
-    if (user.role !== 'admin' && dispute.buyerId !== userId && dispute.sellerId !== userId) {
-      throw new Error('Unauthorized');
+    if (
+      user.role !== "admin" &&
+      dispute.buyerId !== userId &&
+      dispute.sellerId !== userId
+    ) {
+      throw new Error("Unauthorized");
     }
 
     return dispute;
@@ -218,19 +239,19 @@ export class DisputeService {
   async getBuyerDisputes(buyerId: string) {
     return await this.prisma.dispute.findMany({
       where: { buyerId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
         purchase: {
           include: {
             product: {
               select: {
                 name: true,
-                thumbnailUrl: true
-              }
-            }
-          }
-        }
-      }
+                thumbnailUrl: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -240,19 +261,19 @@ export class DisputeService {
   async getSellerDisputes(sellerId: string) {
     return await this.prisma.dispute.findMany({
       where: { sellerId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
         purchase: {
           include: {
             product: {
               select: {
                 name: true,
-                thumbnailUrl: true
-              }
-            }
-          }
-        }
-      }
+                thumbnailUrl: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -263,22 +284,22 @@ export class DisputeService {
     return await this.prisma.dispute.findMany({
       where: {
         status: {
-          in: [DisputeStatus.open, DisputeStatus.under_review]
-        }
+          in: [DisputeStatus.open, DisputeStatus.under_review],
+        },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
       include: {
         purchase: {
           include: {
             product: {
               select: {
                 name: true,
-                thumbnailUrl: true
-              }
-            }
-          }
-        }
-      }
+                thumbnailUrl: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -287,22 +308,22 @@ export class DisputeService {
    */
   async markUnderReview(disputeId: string, _adminId: string) {
     const dispute = await this.prisma.dispute.findUnique({
-      where: { id: disputeId }
+      where: { id: disputeId },
     });
 
     if (!dispute) {
-      throw new Error('Dispute not found');
+      throw new Error("Dispute not found");
     }
 
     if (dispute.status !== DisputeStatus.open) {
-      throw new Error('Dispute is not open');
+      throw new Error("Dispute is not open");
     }
 
     return await this.prisma.dispute.update({
       where: { id: disputeId },
       data: {
-        status: DisputeStatus.under_review
-      }
+        status: DisputeStatus.under_review,
+      },
     });
   }
 
@@ -317,17 +338,17 @@ export class DisputeService {
       where: {
         productId_date: {
           productId,
-          date: today
-        }
+          date: today,
+        },
       },
       create: {
         productId,
         date: today,
-        refunds: 1
+        refunds: 1,
       },
       update: {
-        refunds: { increment: 1 }
-      }
+        refunds: { increment: 1 },
+      },
     });
   }
 }

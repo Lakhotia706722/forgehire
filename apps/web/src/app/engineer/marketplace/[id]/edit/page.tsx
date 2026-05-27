@@ -7,21 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+import { apiFetch } from '@/lib/api-fetch';
 
 export default function EditProductPage({ params }: { params: { id: string } }) {
   const qc = useQueryClient();
@@ -111,8 +97,10 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           <Input label="Product Name" value={form.name} onChange={(e) => patch({ name: e.target.value })} />
           <Input label="Tagline" value={form.tagline} onChange={(e) => patch({ tagline: e.target.value })} hint="One-line description shown in listings" />
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
+            <label htmlFor="product-description" className="block text-sm font-medium text-text-secondary mb-2">Description</label>
             <textarea
+              id="product-description"
+              name="description"
               value={form.description}
               onChange={(e) => patch({ description: e.target.value })}
               rows={5}
@@ -124,10 +112,12 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6 space-y-5">
           <h2 className="font-display font-semibold text-text-primary text-lg">Pricing &amp; Links</h2>
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">Price (₹)</label>
+            <label htmlFor="product-price" className="block text-sm font-medium text-text-secondary mb-2">Price (₹)</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-mono pointer-events-none">₹</span>
               <input
+                id="product-price"
+                name="priceINR"
                 type="number"
                 value={form.priceINR}
                 onChange={(e) => patch({ priceINR: parseInt(e.target.value) || 0 })}

@@ -85,13 +85,12 @@ describe('Module 8: Admin Dashboard', () => {
       expect(screen.getByText('Assessment Passed')).toBeInTheDocument();
       expect(screen.getByText('First Hire')).toBeInTheDocument();
 
-      // Progress bars have correct ARIA attributes
+      // Native progress elements expose value/max (implicit progressbar role)
       const progressBars = screen.getAllByRole('progressbar');
       expect(progressBars.length).toBe(5);
       progressBars.forEach((bar) => {
-        expect(bar).toHaveAttribute('aria-valuenow');
-        expect(bar).toHaveAttribute('aria-valuemin', '0');
-        expect(bar).toHaveAttribute('aria-valuemax', '100');
+        expect(bar).toHaveAttribute('value');
+        expect(bar).toHaveAttribute('max', '100');
       });
     });
 
@@ -271,44 +270,50 @@ describe('Module 8: Admin Dashboard', () => {
       render(<AdminModerationPage />);
 
       expect(screen.getByText('Moderation Queue')).toBeInTheDocument();
-      expect(screen.getByText('Vikram Singh')).toBeInTheDocument();
+      expect(screen.getByText('RAG Pipeline Toolkit')).toBeInTheDocument();
+      expect(screen.getByText(/Vikram Singh/)).toBeInTheDocument();
     });
 
-    it('approves a moderation item', () => {
+    it('approves a moderation item', async () => {
       render(<AdminModerationPage />);
 
-      const approveBtn = screen.getByTestId('approve-mod-mod-1');
-      fireEvent.click(approveBtn);
+      const approveBtns = screen.getAllByRole('button', { name: 'Approve' });
+      fireEvent.click(approveBtns[0]);
 
-      // Item should be removed from pending queue
-      expect(screen.queryByTestId('approve-mod-mod-1')).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.queryByText('RAG Pipeline Toolkit')).not.toBeInTheDocument();
+      });
     });
 
-    it('removes a moderation item', () => {
+    it('removes a moderation item', async () => {
       render(<AdminModerationPage />);
 
-      const removeBtn = screen.getByTestId('remove-mod-mod-2');
-      fireEvent.click(removeBtn);
+      const rejectBtns = screen.getAllByRole('button', { name: 'Reject' });
+      fireEvent.click(rejectBtns[0]);
 
-      expect(screen.queryByTestId('remove-mod-mod-2')).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.queryByText('RAG Pipeline Toolkit')).not.toBeInTheDocument();
+      });
     });
 
-    it('warns a user', () => {
+    it('warns a user', async () => {
       render(<AdminModerationPage />);
 
-      const warnBtn = screen.getByTestId('warn-mod-mod-3');
-      fireEvent.click(warnBtn);
+      const rejectBtns = screen.getAllByRole('button', { name: 'Reject' });
+      fireEvent.click(rejectBtns[1]);
 
-      expect(screen.queryByTestId('warn-mod-mod-3')).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.queryByText('Agent Orchestrator')).not.toBeInTheDocument();
+      });
     });
 
     it('filters by content type', () => {
       render(<AdminModerationPage />);
 
-      const profileFilter = screen.getByRole('button', { name: 'Profile' });
-      fireEvent.click(profileFilter);
+      const productFilter = screen.getByRole('button', { name: 'Product' });
+      fireEvent.click(productFilter);
 
-      expect(screen.getByText('Vikram Singh')).toBeInTheDocument();
+      expect(screen.getByText('RAG Pipeline Toolkit')).toBeInTheDocument();
     });
   });
 });

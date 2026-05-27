@@ -1,8 +1,8 @@
-import { PrismaClient, PurchaseStatus } from '@prisma/client';
-import Razorpay from 'razorpay';
-import { getEnv } from '../config/env';
-import { randomBytes } from 'crypto';
-import { PurchaseProductInput } from '@neuronhire/shared';
+import { PrismaClient, PurchaseStatus } from "@prisma/client";
+import Razorpay from "razorpay";
+import { getEnv } from "../config/env";
+import { randomBytes } from "crypto";
+import { PurchaseProductInput } from "@neuronhire/shared";
 
 export class MarketplacePurchaseService {
   private prisma: PrismaClient;
@@ -13,7 +13,7 @@ export class MarketplacePurchaseService {
     const env = getEnv();
     this.razorpay = new Razorpay({
       key_id: env.RAZORPAY_KEY_ID,
-      key_secret: env.RAZORPAY_KEY_SECRET
+      key_secret: env.RAZORPAY_KEY_SECRET,
     });
   }
 
@@ -23,19 +23,19 @@ export class MarketplacePurchaseService {
   async createPurchaseOrder(userId: string, data: PurchaseProductInput) {
     const product = await this.prisma.product.findUnique({
       where: { id: data.productId },
-      include: { engineerProfile: true }
+      include: { engineerProfile: true },
     });
 
     if (!product) {
-      throw new Error('Product not found');
+      throw new Error("Product not found");
     }
 
-    if (product.status !== 'published') {
-      throw new Error('Product is not available for purchase');
+    if (product.status !== "published") {
+      throw new Error("Product is not available for purchase");
     }
 
     if (product.userId === userId) {
-      throw new Error('Cannot purchase your own product');
+      throw new Error("Cannot purchase your own product");
     }
 
     // Check if already purchased
@@ -43,26 +43,27 @@ export class MarketplacePurchaseService {
       where: {
         productId: data.productId,
         buyerId: userId,
-        status: PurchaseStatus.completed
-      }
+        status: PurchaseStatus.completed,
+      },
     });
 
     if (existing) {
-      throw new Error('Product already purchased');
+      throw new Error("Product already purchased");
     }
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { companyProfile: true }
+      include: { companyProfile: true },
     });
 
     // Determine price based on currency
-    const amount = data.currency === 'USD' && product.priceUSD
-      ? product.priceUSD
-      : product.priceINR;
+    const amount =
+      data.currency === "USD" && product.priceUSD
+        ? product.priceUSD
+        : product.priceINR;
 
     if (!amount) {
-      throw new Error('Product price not set');
+      throw new Error("Product price not set");
     }
 
     // Create Razorpay order
@@ -73,8 +74,8 @@ export class MarketplacePurchaseService {
       notes: {
         productId: product.id,
         buyerId: userId,
-        referralCode: data.referralCode || ''
-      }
+        referralCode: data.referralCode || "",
+      },
     });
 
     // Generate license key
@@ -90,15 +91,16 @@ export class MarketplacePurchaseService {
         productId: product.id,
         buyerId: userId,
         companyProfileId: user?.companyProfile?.id,
-        priceINR: data.currency === 'INR' ? amount : product.priceINR ?? amount,
-        priceUSD: data.currency === 'USD' ? amount : undefined,
+        priceINR:
+          data.currency === "INR" ? amount : (product.priceINR ?? amount),
+        priceUSD: data.currency === "USD" ? amount : undefined,
         currency: data.currency,
         razorpayOrderId: (order as any).id,
         licenseKey,
         status: PurchaseStatus.pending,
         referralCode: data.referralCode,
-        disputeDeadline
-      }
+        disputeDeadline,
+      },
     });
 
     return {
@@ -106,54 +108,58 @@ export class MarketplacePurchaseService {
       orderId: order.id,
       amount: Number(amount),
       currency: data.currency,
-      licenseKey
+      licenseKey,
     };
   }
 
   /**
    * Complete purchase after payment
    */
-  async completePurchase(purchaseId: string, data: {
-    paymentId: string;
-    signature: string;
-  }) {
+  async completePurchase(
+    purchaseId: string,
+    data: {
+      paymentId: string;
+      signature: string;
+    },
+  ) {
     const purchase = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },
       include: {
         product: {
-          include: { engineerProfile: true }
-        }
-      }
+          include: { engineerProfile: true },
+        },
+      },
     });
 
     if (!purchase) {
-      throw new Error('Purchase not found');
+      throw new Error("Purchase not found");
     }
 
     if (purchase.status !== PurchaseStatus.pending) {
-      throw new Error('Purchase already processed');
+      throw new Error("Purchase already processed");
     }
 
     // Verify payment signature
     const isValid = this.verifyPaymentSignature(
       purchase.razorpayOrderId!,
       data.paymentId,
-      data.signature
+      data.signature,
     );
 
     if (!isValid) {
       await this.prisma.purchase.update({
         where: { id: purchaseId },
-        data: { status: PurchaseStatus.failed }
+        data: { status: PurchaseStatus.failed },
       });
-      throw new Error('Payment verification failed');
+      throw new Error("Payment verification failed");
     }
 
     // Calculate platform commission
-    const amount = purchase.currency === 'INR' ? purchase.priceINR : purchase.priceUSD;
+    const amount =
+      purchase.currency === "INR" ? purchase.priceINR : purchase.priceUSD;
     const commission = this.calculateCommission(
       Number(amount),
-      purchase.product.pricingModel
+      purchase.product.pricingModel,
     );
     const engineerPayout = Number(amount) - commission;
 
@@ -178,16 +184,16 @@ export class MarketplacePurchaseService {
         platformCommission: commission,
         engineerPayout,
         referralCommission: referralCommission > 0 ? referralCommission : null,
-        purchasedAt: new Date()
-      }
+        purchasedAt: new Date(),
+      },
     });
 
     // Update product stats
     await this.prisma.product.update({
       where: { id: purchase.productId },
       data: {
-        purchaseCount: { increment: 1 }
-      }
+        purchaseCount: { increment: 1 },
+      },
     });
 
     // Track analytics
@@ -212,14 +218,17 @@ export class MarketplacePurchaseService {
     const accessDetails: any = {
       licenseType: product.pricingModel,
       grantedAt: new Date(),
-      expiresAt: product.pricingModel === 'subscription' ? this.getSubscriptionExpiry() : null
+      expiresAt:
+        product.pricingModel === "subscription"
+          ? this.getSubscriptionExpiry()
+          : null,
     };
 
     // Add download links, API keys, or other access credentials
     // This would be customized based on product delivery type
-    if (product.deliveryType === 'instant') {
+    if (product.deliveryType === "instant") {
       accessDetails.downloadUrl = `https://neuronhire.s3.amazonaws.com/products/${product.id}/download`;
-      accessDetails.accessInstructions = 'Download link is valid for 30 days';
+      accessDetails.accessInstructions = "Download link is valid for 30 days";
     }
 
     return accessDetails;
@@ -229,33 +238,37 @@ export class MarketplacePurchaseService {
    * Calculate platform commission
    */
   private calculateCommission(amount: number, pricingModel: string): number {
-    if (pricingModel === 'subscription') {
-      return amount * 0.20; // 20% for subscriptions
+    if (pricingModel === "subscription") {
+      return amount * 0.2; // 20% for subscriptions
     }
 
     if (amount < 10000) {
       return amount * 0.15; // 15% for products < ₹10K
     }
 
-    return amount * 0.20; // 20% for high-value products
+    return amount * 0.2; // 20% for high-value products
   }
 
   /**
    * Verify Razorpay payment signature
    */
-  private verifyPaymentSignature(orderId: string, paymentId: string, signature: string): boolean {
+  private verifyPaymentSignature(
+    orderId: string,
+    paymentId: string,
+    signature: string,
+  ): boolean {
     try {
-      const crypto = require('crypto');
+      const crypto = require("crypto");
       const env = getEnv();
 
       const generatedSignature = crypto
-        .createHmac('sha256', env.RAZORPAY_KEY_SECRET)
+        .createHmac("sha256", env.RAZORPAY_KEY_SECRET)
         .update(`${orderId}|${paymentId}`)
-        .digest('hex');
+        .digest("hex");
 
       return generatedSignature === signature;
     } catch (error) {
-      console.error('Signature verification error:', error);
+      console.error("Signature verification error:", error);
       return false;
     }
   }
@@ -264,8 +277,8 @@ export class MarketplacePurchaseService {
    * Generate unique license key
    */
   private generateLicenseKey(): string {
-    const prefix = 'NH';
-    const random = randomBytes(16).toString('hex').toUpperCase();
+    const prefix = "NH";
+    const random = randomBytes(16).toString("hex").toUpperCase();
     return `${prefix}-${random.substring(0, 4)}-${random.substring(4, 8)}-${random.substring(8, 12)}-${random.substring(12, 16)}`;
   }
 
@@ -288,19 +301,19 @@ export class MarketplacePurchaseService {
       where: {
         productId_date: {
           productId,
-          date: today
-        }
+          date: today,
+        },
       },
       create: {
         productId,
         date: today,
         purchases: 1,
-        revenue: amount
+        revenue: amount,
       },
       update: {
         purchases: { increment: 1 },
-        revenue: { increment: amount }
-      }
+        revenue: { increment: amount },
+      },
     });
   }
 
@@ -312,8 +325,8 @@ export class MarketplacePurchaseService {
       where: { referralCode },
       data: {
         purchaseCount: { increment: 1 },
-        totalCommission: { increment: commission }
-      }
+        totalCommission: { increment: commission },
+      },
     });
   }
 
@@ -332,23 +345,23 @@ export class MarketplacePurchaseService {
   async revokeLicense(purchaseId: string, engineerId: string) {
     const purchase = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },
-      include: { product: true }
+      include: { product: true },
     });
 
     if (!purchase) {
-      throw new Error('Purchase not found');
+      throw new Error("Purchase not found");
     }
 
     if (purchase.product.userId !== engineerId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     return await this.prisma.purchase.update({
       where: { id: purchaseId },
       data: {
         licenseActive: false,
-        licenseRevokedAt: new Date()
-      }
+        licenseRevokedAt: new Date(),
+      },
     });
   }
 
@@ -358,7 +371,7 @@ export class MarketplacePurchaseService {
   async getBuyerPurchases(buyerId: string) {
     return await this.prisma.purchase.findMany({
       where: { buyerId },
-      orderBy: { purchasedAt: 'desc' },
+      orderBy: { purchasedAt: "desc" },
       include: {
         product: {
           select: {
@@ -366,10 +379,13 @@ export class MarketplacePurchaseService {
             slug: true,
             thumbnailUrl: true,
             category: true,
-            currentVersion: true
-          }
-        }
-      }
+            currentVersion: true,
+            engineerProfile: {
+              select: { fullName: true },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -384,20 +400,20 @@ export class MarketplacePurchaseService {
           include: {
             engineerProfile: {
               select: {
-                fullName: true
-              }
-            }
-          }
-        }
-      }
+                fullName: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!purchase) {
-      throw new Error('Purchase not found');
+      throw new Error("Purchase not found");
     }
 
     if (purchase.buyerId !== userId && purchase.product.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     return purchase;

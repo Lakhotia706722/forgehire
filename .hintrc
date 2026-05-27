@@ -1,0 +1,15 @@
+{
+  "extends": ["development"],
+  "hints": {
+    "no-inline-styles": [
+      "warning",
+      {
+        "include": ["**/*"],
+        "exclude": [
+          "**/apps/web/src/app/api/og/**",
+          "**/src/app/api/og/**"
+        ]
+      }
+    ]
+  }
+}

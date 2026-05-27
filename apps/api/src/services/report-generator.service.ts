@@ -1,7 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { getEnv } from '../config/env';
-import { S3UploadService } from './s3-upload.service';
-import PDFDocument from 'pdfkit';
+import Anthropic from "@anthropic-ai/sdk";
+import { getEnv } from "../config/env";
+import { S3UploadService } from "./s3-upload.service";
+import PDFDocument from "pdfkit";
 
 export interface AssessmentReport {
   overallScore: number;
@@ -17,7 +17,7 @@ export interface AssessmentReport {
   skillGapAnalysis: string[];
   improvementRoadmap: Array<{
     area: string;
-    priority: 'high' | 'medium' | 'low';
+    priority: "high" | "medium" | "low";
     recommendations: string[];
   }>;
   strengths: string[];
@@ -32,7 +32,7 @@ export class ReportGeneratorService {
   constructor() {
     const env = getEnv();
     this.anthropic = new Anthropic({
-      apiKey: env.ANTHROPIC_API_KEY
+      apiKey: env.ANTHROPIC_API_KEY,
     });
     this.s3Service = new S3UploadService();
   }
@@ -42,14 +42,14 @@ export class ReportGeneratorService {
    */
   async generateReport(
     assessmentData: any,
-    engineerProfile: any
+    engineerProfile: any,
   ): Promise<AssessmentReport> {
     const prompt = `You are an AI assessment evaluator. Generate a comprehensive assessment report for an AI/ML engineer.
 
 Engineer Profile:
 - Name: ${engineerProfile.fullName}
 - Experience: ${engineerProfile.yearsOfExperience} years
-- Skills: ${engineerProfile.skills.map((s: any) => s.skillName).join(', ')}
+- Skills: ${engineerProfile.skills.map((s: any) => s.skillName).join(", ")}
 
 Assessment Results:
 - MCQ Score: ${assessmentData.mcqScore}/100
@@ -89,17 +89,17 @@ Return as JSON:
 
     try {
       const message = await this.anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 2048,
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{ role: "user", content: prompt }],
       });
 
       const content = message.content[0];
-      if (content.type === 'text') {
+      if (content.type === "text") {
         const jsonMatch = content.text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const analysis = JSON.parse(jsonMatch[0]);
-          
+
           return {
             overallScore: assessmentData.totalScore,
             tier: this.determineTier(assessmentData.totalScore),
@@ -109,16 +109,16 @@ Return as JSON:
               systemDesign: assessmentData.systemDesign,
               codingQuality: assessmentData.codingQuality,
               practicalApp: assessmentData.practicalApp,
-              communication: assessmentData.communication
+              communication: assessmentData.communication,
             },
-            ...analysis
+            ...analysis,
           };
         }
       }
 
       return this.getFallbackReport(assessmentData);
     } catch (error) {
-      console.error('Report generation error:', error);
+      console.error("Report generation error:", error);
       return this.getFallbackReport(assessmentData);
     }
   }
@@ -128,23 +128,23 @@ Return as JSON:
    */
   async generatePDFReport(
     report: AssessmentReport,
-    engineerProfile: any
+    engineerProfile: any,
   ): Promise<string> {
     return new Promise(async (resolve, reject) => {
       try {
         const doc = new PDFDocument({ margin: 50 });
         const chunks: Buffer[] = [];
 
-        doc.on('data', (chunk) => chunks.push(chunk));
-        doc.on('end', async () => {
+        doc.on("data", (chunk) => chunks.push(chunk));
+        doc.on("end", async () => {
           const pdfBuffer = Buffer.concat(chunks);
-          
+
           // Upload to S3
           const url = await this.s3Service.uploadFile(
             pdfBuffer,
             `assessment-report-${Date.now()}.pdf`,
-            'application/pdf',
-            'assessment-reports'
+            "application/pdf",
+            "assessment-reports",
           );
 
           resolve(url);
@@ -166,20 +166,20 @@ Return as JSON:
   private generatePDFContent(
     doc: PDFKit.PDFDocument,
     report: AssessmentReport,
-    engineerProfile: any
+    engineerProfile: any,
   ): void {
     // Header
     doc
       .fontSize(24)
-      .font('Helvetica-Bold')
-      .text('NeuronHire Assessment Report', { align: 'center' });
+      .font("Helvetica-Bold")
+      .text("NeuronHire Assessment Report", { align: "center" });
 
     doc.moveDown();
 
     // Engineer Info
     doc
       .fontSize(14)
-      .font('Helvetica')
+      .font("Helvetica")
       .text(`Engineer: ${engineerProfile.fullName}`)
       .text(`Date: ${new Date().toLocaleDateString()}`)
       .text(`Overall Score: ${report.overallScore}/100`)
@@ -188,21 +188,21 @@ Return as JSON:
     doc.moveDown(2);
 
     // Dimension Scores
-    doc.fontSize(16).font('Helvetica-Bold').text('Dimension Scores');
+    doc.fontSize(16).font("Helvetica-Bold").text("Dimension Scores");
     doc.moveDown();
 
-    doc.fontSize(12).font('Helvetica');
+    doc.fontSize(12).font("Helvetica");
     Object.entries(report.dimensionScores).forEach(([key, value]) => {
-      const label = key.replace(/([A-Z])/g, ' $1').trim();
+      const label = key.replace(/([A-Z])/g, " $1").trim();
       doc.text(`${label}: ${value}/100`);
     });
 
     doc.moveDown(2);
 
     // Strengths
-    doc.fontSize(16).font('Helvetica-Bold').text('Key Strengths');
+    doc.fontSize(16).font("Helvetica-Bold").text("Key Strengths");
     doc.moveDown();
-    doc.fontSize(12).font('Helvetica');
+    doc.fontSize(12).font("Helvetica");
     report.strengths.forEach((strength, i) => {
       doc.text(`${i + 1}. ${strength}`);
     });
@@ -210,9 +210,9 @@ Return as JSON:
     doc.moveDown(2);
 
     // Areas for Improvement
-    doc.fontSize(16).font('Helvetica-Bold').text('Areas for Improvement');
+    doc.fontSize(16).font("Helvetica-Bold").text("Areas for Improvement");
     doc.moveDown();
-    doc.fontSize(12).font('Helvetica');
+    doc.fontSize(12).font("Helvetica");
     report.weaknesses.forEach((weakness, i) => {
       doc.text(`${i + 1}. ${weakness}`);
     });
@@ -220,9 +220,9 @@ Return as JSON:
     doc.addPage();
 
     // Skill Gap Analysis
-    doc.fontSize(16).font('Helvetica-Bold').text('Skill Gap Analysis');
+    doc.fontSize(16).font("Helvetica-Bold").text("Skill Gap Analysis");
     doc.moveDown();
-    doc.fontSize(12).font('Helvetica');
+    doc.fontSize(12).font("Helvetica");
     report.skillGapAnalysis.forEach((gap, i) => {
       doc.text(`${i + 1}. ${gap}`);
     });
@@ -230,14 +230,16 @@ Return as JSON:
     doc.moveDown(2);
 
     // Improvement Roadmap
-    doc.fontSize(16).font('Helvetica-Bold').text('Improvement Roadmap');
+    doc.fontSize(16).font("Helvetica-Bold").text("Improvement Roadmap");
     doc.moveDown();
-    doc.fontSize(12).font('Helvetica');
+    doc.fontSize(12).font("Helvetica");
     report.improvementRoadmap.forEach((item, i) => {
       doc
-        .font('Helvetica-Bold')
-        .text(`${i + 1}. ${item.area} (Priority: ${item.priority.toUpperCase()})`);
-      doc.font('Helvetica');
+        .font("Helvetica-Bold")
+        .text(
+          `${i + 1}. ${item.area} (Priority: ${item.priority.toUpperCase()})`,
+        );
+      doc.font("Helvetica");
       item.recommendations.forEach((rec) => {
         doc.text(`   • ${rec}`);
       });
@@ -247,9 +249,9 @@ Return as JSON:
     doc.moveDown(2);
 
     // Next Steps
-    doc.fontSize(16).font('Helvetica-Bold').text('Next Steps');
+    doc.fontSize(16).font("Helvetica-Bold").text("Next Steps");
     doc.moveDown();
-    doc.fontSize(12).font('Helvetica');
+    doc.fontSize(12).font("Helvetica");
     report.nextSteps.forEach((step, i) => {
       doc.text(`${i + 1}. ${step}`);
     });
@@ -258,19 +260,19 @@ Return as JSON:
     doc.moveDown(3);
     doc
       .fontSize(10)
-      .font('Helvetica')
-      .text('Generated by NeuronHire Assessment System', { align: 'center' });
+      .font("Helvetica")
+      .text("Generated by NeuronHire Assessment System", { align: "center" });
   }
 
   /**
    * Determine tier from score
    */
   private determineTier(score: number): string {
-    if (score >= 85) return 'elite';
-    if (score >= 70) return 'professional';
-    if (score >= 60) return 'verified';
-    if (score >= 40) return 'conditional';
-    return 'rejected';
+    if (score >= 85) return "elite";
+    if (score >= 70) return "professional";
+    if (score >= 60) return "verified";
+    if (score >= 40) return "conditional";
+    return "rejected";
   }
 
   /**
@@ -286,30 +288,36 @@ Return as JSON:
         systemDesign: assessmentData.systemDesign,
         codingQuality: assessmentData.codingQuality,
         practicalApp: assessmentData.practicalApp,
-        communication: assessmentData.communication
+        communication: assessmentData.communication,
       },
       skillGapAnalysis: [
-        'Review fundamental ML concepts',
-        'Practice system design patterns',
-        'Improve code optimization skills'
+        "Review fundamental ML concepts",
+        "Practice system design patterns",
+        "Improve code optimization skills",
       ],
       improvementRoadmap: [
         {
-          area: 'Technical Knowledge',
-          priority: 'high',
+          area: "Technical Knowledge",
+          priority: "high",
           recommendations: [
-            'Complete advanced ML courses',
-            'Read research papers regularly'
-          ]
-        }
+            "Complete advanced ML courses",
+            "Read research papers regularly",
+          ],
+        },
       ],
-      strengths: ['Strong theoretical foundation', 'Good problem-solving skills'],
-      weaknesses: ['Limited practical experience', 'Code optimization needs work'],
+      strengths: [
+        "Strong theoretical foundation",
+        "Good problem-solving skills",
+      ],
+      weaknesses: [
+        "Limited practical experience",
+        "Code optimization needs work",
+      ],
       nextSteps: [
-        'Build more projects',
-        'Contribute to open source',
-        'Practice coding challenges'
-      ]
+        "Build more projects",
+        "Contribute to open source",
+        "Practice coding challenges",
+      ],
     };
   }
 }

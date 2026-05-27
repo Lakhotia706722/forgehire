@@ -4,7 +4,9 @@ import * as React from 'react';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { MOCK_ANALYTICS, MOCK_PRODUCTS } from '@/lib/marketplace-data';
+import { MOCK_ANALYTICS } from '@/lib/marketplace-data';
+import { useProductAnalytics } from '@/lib/api-hooks';
+import { wPctClass } from '@/lib/pct-classes';
 
 // SSR-safe Recharts imports
 const AreaChart      = dynamic(() => import('recharts').then((m) => m.AreaChart),      { ssr: false });
@@ -20,15 +22,31 @@ const ResponsiveContainer = dynamic(() => import('recharts').then((m) => m.Respo
 type Period = 'daily' | 'weekly' | 'monthly';
 
 export default function ProductAnalyticsPage({ params }: { params: { id: string } }) {
-  const product = MOCK_PRODUCTS.find((p) => p.id === params.id) ?? MOCK_PRODUCTS[0];
-  const analytics = MOCK_ANALYTICS;
+  const { data: apiData, isLoading } = useProductAnalytics(params.id);
   const [period, setPeriod] = React.useState<Period>('daily');
-  const [loading, setLoading] = React.useState(true);
 
-  React.useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 400);
-    return () => clearTimeout(t);
-  }, []);
+  const analytics = React.useMemo(() => {
+    if (!apiData) return MOCK_ANALYTICS;
+    const totalViews = apiData.funnel.views || 1;
+    return {
+      revenue: apiData.revenue,
+      funnel: apiData.funnel,
+      ratingTrend: apiData.ratingTrend.map((r) => ({ month: r.date.slice(5), rating: r.rating })),
+      industryBreakdown: apiData.topIndustries.map((ind) => ({
+        industry: ind.industry,
+        count: ind.count,
+        pct: Math.round((ind.count / totalViews) * 100),
+      })),
+      recentPurchases: [] as { id: string; buyerAnon: string; date: string; plan: string; amount: number }[],
+    };
+  }, [apiData]);
+
+  const product = {
+    name: apiData?.productName ?? 'Product',
+    rating: apiData?.ratingTrend?.[apiData.ratingTrend.length - 1]?.rating ?? 4.8,
+  };
+
+  const loading = isLoading;
 
   // Aggregate revenue data by period
   const revenueData = React.useMemo(() => {
@@ -75,14 +93,14 @@ export default function ProductAnalyticsPage({ params }: { params: { id: string 
         {/* KPI cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Total Revenue',  value: `₹${totalRevenue.toLocaleString('en-IN')}`, color: '#F59E0B' },
-            { label: 'Total Sales',    value: String(totalSales),                          color: '#00D4FF' },
-            { label: 'Total Views',    value: String(funnel.views),                        color: '#7B5EA7' },
-            { label: 'Avg Rating',     value: `${product.rating} ★`,                      color: '#10B981' },
+            { label: 'Total Revenue', value: `₹${totalRevenue.toLocaleString('en-IN')}`, className: 'kpi-value-amber' },
+            { label: 'Total Sales', value: String(totalSales), className: 'kpi-value-cyan' },
+            { label: 'Total Views', value: String(funnel.views), className: 'kpi-value-violet' },
+            { label: 'Avg Rating', value: `${product.rating} ★`, className: 'kpi-value-green' },
           ].map((kpi) => (
             <div key={kpi.label} className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-4">
               <p className="text-xs text-text-muted mb-1">{kpi.label}</p>
-              <p className="font-mono font-bold text-xl" style={{ color: kpi.color }}>{kpi.value}</p>
+              <p className={cn('font-mono font-bold text-xl', kpi.className)}>{kpi.value}</p>
             </div>
           ))}
         </div>
@@ -128,20 +146,20 @@ export default function ProductAnalyticsPage({ params }: { params: { id: string 
           <h2 className="font-display font-semibold text-text-primary mb-5">Sales Funnel</h2>
           <div className="space-y-3">
             {[
-              { label: 'Views',        value: funnel.views,       pct: 100,                                    color: '#7B5EA7' },
-              { label: 'Demo Clicks',  value: funnel.demoClicks,  pct: (funnel.demoClicks / funnel.views) * 100, color: '#00D4FF' },
-              { label: 'Purchases',   value: funnel.purchases,   pct: (funnel.purchases / funnel.views) * 100,  color: '#10B981' },
+              { label: 'Views', value: funnel.views, pct: 100, pctClass: 'dim-pct-violet', barClass: 'funnel-bar-violet' },
+              { label: 'Demo Clicks', value: funnel.demoClicks, pct: (funnel.demoClicks / funnel.views) * 100, pctClass: 'dim-pct-cyan', barClass: 'funnel-bar-cyan' },
+              { label: 'Purchases', value: funnel.purchases, pct: (funnel.purchases / funnel.views) * 100, pctClass: 'dim-pct-green', barClass: 'funnel-bar-green' },
             ].map((stage) => (
               <div key={stage.label}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-sm text-text-secondary">{stage.label}</span>
                   <div className="flex items-center gap-3">
                     <span className="font-mono text-sm text-text-primary">{stage.value.toLocaleString()}</span>
-                    <span className="text-xs font-mono" style={{ color: stage.color }}>{stage.pct.toFixed(1)}%</span>
+                    <span className={cn('text-xs font-mono', stage.pctClass)}>{stage.pct.toFixed(1)}%</span>
                   </div>
                 </div>
                 <div className="h-2 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${stage.pct}%`, background: stage.color }} />
+                  <div className={cn('h-full rounded-full transition-all duration-700', stage.barClass, wPctClass(stage.pct))} />
                 </div>
               </div>
             ))}
@@ -165,7 +183,7 @@ export default function ProductAnalyticsPage({ params }: { params: { id: string 
                     <span className="text-xs font-mono text-text-muted">{ind.count} ({ind.pct}%)</span>
                   </div>
                   <div className="h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
-                    <div className="h-full bg-accent-violet rounded-full" style={{ width: `${ind.pct}%` }} />
+                    <div className={cn('h-full bg-accent-violet rounded-full', wPctClass(ind.pct))} />
                   </div>
                 </div>
               ))}

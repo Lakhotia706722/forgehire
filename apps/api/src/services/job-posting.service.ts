@@ -1,5 +1,5 @@
-import { PrismaClient, HiringMode } from '@prisma/client';
-import { SmartMatchingService } from './smart-matching.service';
+import { PrismaClient, HiringMode } from "@prisma/client";
+import { SmartMatchingService } from "./smart-matching.service";
 
 export class JobPostingService {
   private prisma: PrismaClient;
@@ -13,38 +13,41 @@ export class JobPostingService {
   /**
    * Create job posting
    */
-  async createJobPosting(userId: string, data: {
-    title: string;
-    description: string;
-    hiringMode: HiringMode;
-    requiredSkills: string[];
-    experienceLevel: string;
-    budgetMin?: number;
-    budgetMax?: number;
-    currency?: string;
-    ctcMin?: number;
-    ctcMax?: number;
-    duration?: number;
-    stipend?: number;
-    estimatedHours?: number;
-    isTimeBoxed?: boolean;
-    endDate?: Date;
-    projectScope?: string;
-    milestones?: any[];
-    location?: string;
-    isRemote?: boolean;
-  }) {
+  async createJobPosting(
+    userId: string,
+    data: {
+      title: string;
+      description: string;
+      hiringMode: HiringMode;
+      requiredSkills: string[];
+      experienceLevel: string;
+      budgetMin?: number;
+      budgetMax?: number;
+      currency?: string;
+      ctcMin?: number;
+      ctcMax?: number;
+      duration?: number;
+      stipend?: number;
+      estimatedHours?: number;
+      isTimeBoxed?: boolean;
+      endDate?: Date;
+      projectScope?: string;
+      milestones?: any[];
+      location?: string;
+      isRemote?: boolean;
+    },
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { companyProfile: true }
+      include: { companyProfile: true },
     });
 
     if (!user || !user.companyProfile) {
-      throw new Error('Company profile not found');
+      throw new Error("Company profile not found");
     }
 
-    if (user.role !== 'company') {
-      throw new Error('Only companies can post jobs');
+    if (user.role !== "company") {
+      throw new Error("Only companies can post jobs");
     }
 
     const jobPosting = await this.prisma.jobPosting.create({
@@ -58,7 +61,7 @@ export class JobPostingService {
         experienceLevel: data.experienceLevel,
         budgetMin: data.budgetMin,
         budgetMax: data.budgetMax,
-        currency: data.currency || 'INR',
+        currency: data.currency || "INR",
         ctcMin: data.ctcMin,
         ctcMax: data.ctcMax,
         duration: data.duration,
@@ -70,8 +73,8 @@ export class JobPostingService {
         milestones: data.milestones || undefined,
         location: data.location,
         isRemote: data.isRemote ?? true,
-        status: 'open'
-      }
+        status: "open",
+      },
     });
 
     // Generate smart matches
@@ -93,26 +96,26 @@ export class JobPostingService {
             logoUrl: true,
             location: true,
             trustScore: true,
-            websiteVerified: true
-          }
+            websiteVerified: true,
+          },
         },
         _count: {
           select: {
             applications: true,
-            smartMatches: true
-          }
-        }
-      }
+            smartMatches: true,
+          },
+        },
+      },
     });
 
     if (!jobPosting) {
-      throw new Error('Job posting not found');
+      throw new Error("Job posting not found");
     }
 
     // Increment view count
     await this.prisma.jobPosting.update({
       where: { id: jobPostingId },
-      data: { viewCount: { increment: 1 } }
+      data: { viewCount: { increment: 1 } },
     });
 
     return jobPosting;
@@ -123,15 +126,15 @@ export class JobPostingService {
    */
   async getJobMatches(jobPostingId: string, userId: string) {
     const jobPosting = await this.prisma.jobPosting.findUnique({
-      where: { id: jobPostingId }
+      where: { id: jobPostingId },
     });
 
     if (!jobPosting) {
-      throw new Error('Job posting not found');
+      throw new Error("Job posting not found");
     }
 
     if (jobPosting.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     return await this.matchingService.getJobMatches(jobPostingId);
@@ -147,43 +150,43 @@ export class JobPostingService {
       coverLetter: string;
       proposedRate?: number;
       availability?: string;
-    }
+    },
   ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { engineerProfile: true }
+      include: { engineerProfile: true },
     });
 
     if (!user || !user.engineerProfile) {
-      throw new Error('Engineer profile not found');
+      throw new Error("Engineer profile not found");
     }
 
-    if (user.role !== 'engineer') {
-      throw new Error('Only engineers can apply to jobs');
+    if (user.role !== "engineer") {
+      throw new Error("Only engineers can apply to jobs");
     }
 
     const jobPosting = await this.prisma.jobPosting.findUnique({
-      where: { id: jobPostingId }
+      where: { id: jobPostingId },
     });
 
     if (!jobPosting) {
-      throw new Error('Job posting not found');
+      throw new Error("Job posting not found");
     }
 
-    if (jobPosting.status !== 'open') {
-      throw new Error('Job posting is not open for applications');
+    if (jobPosting.status !== "open") {
+      throw new Error("Job posting is not open for applications");
     }
 
     // Check if already applied
     const existing = await this.prisma.jobApplication.findFirst({
       where: {
         jobPostingId,
-        engineerProfileId: user.engineerProfile.id
-      }
+        engineerProfileId: user.engineerProfile.id,
+      },
     });
 
     if (existing) {
-      throw new Error('Already applied to this job');
+      throw new Error("Already applied to this job");
     }
 
     const application = await this.prisma.jobApplication.create({
@@ -194,14 +197,14 @@ export class JobPostingService {
         coverLetter: data.coverLetter,
         proposedRate: data.proposedRate,
         availability: data.availability,
-        status: 'pending'
-      }
+        status: "pending",
+      },
     });
 
     // Update application count
     await this.prisma.jobPosting.update({
       where: { id: jobPostingId },
-      data: { applicationCount: { increment: 1 } }
+      data: { applicationCount: { increment: 1 } },
     });
 
     return application;
@@ -212,15 +215,15 @@ export class JobPostingService {
    */
   async getJobApplications(jobPostingId: string, userId: string) {
     const jobPosting = await this.prisma.jobPosting.findUnique({
-      where: { id: jobPostingId }
+      where: { id: jobPostingId },
     });
 
     if (!jobPosting) {
-      throw new Error('Job posting not found');
+      throw new Error("Job posting not found");
     }
 
     if (jobPosting.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     return await this.prisma.jobApplication.findMany({
@@ -238,13 +241,13 @@ export class JobPostingService {
             skills: {
               select: {
                 skillName: true,
-                proficiencyLevel: true
-              }
-            }
-          }
-        }
+                proficiencyLevel: true,
+              },
+            },
+          },
+        },
       },
-      orderBy: { appliedAt: 'desc' }
+      orderBy: { appliedAt: "desc" },
     });
   }
 
@@ -254,27 +257,27 @@ export class JobPostingService {
   async updateApplicationStatus(
     applicationId: string,
     userId: string,
-    status: 'shortlisted' | 'rejected' | 'accepted'
+    status: "shortlisted" | "rejected" | "accepted",
   ) {
     const application = await this.prisma.jobApplication.findUnique({
       where: { id: applicationId },
-      include: { jobPosting: true }
+      include: { jobPosting: true },
     });
 
     if (!application) {
-      throw new Error('Application not found');
+      throw new Error("Application not found");
     }
 
     if (application.jobPosting.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     return await this.prisma.jobApplication.update({
       where: { id: applicationId },
       data: {
         status,
-        reviewedAt: new Date()
-      }
+        reviewedAt: new Date(),
+      },
     });
   }
 
@@ -294,7 +297,7 @@ export class JobPostingService {
     cursor?: string;
   }) {
     const where: any = {
-      status: 'open'
+      status: "open",
     };
 
     if (filters.hiringMode) {
@@ -303,7 +306,7 @@ export class JobPostingService {
 
     if (filters.skills && filters.skills.length > 0) {
       where.requiredSkills = {
-        hasSome: filters.skills
+        hasSome: filters.skills,
       };
     }
 
@@ -328,14 +331,14 @@ export class JobPostingService {
     if (filters.location) {
       where.location = {
         contains: filters.location,
-        mode: 'insensitive'
+        mode: "insensitive",
       };
     }
 
     if (filters.query) {
       where.OR = [
-        { title: { contains: filters.query, mode: 'insensitive' } },
-        { description: { contains: filters.query, mode: 'insensitive' } }
+        { title: { contains: filters.query, mode: "insensitive" } },
+        { description: { contains: filters.query, mode: "insensitive" } },
       ];
     }
 
@@ -352,16 +355,16 @@ export class JobPostingService {
           select: {
             companyName: true,
             logoUrl: true,
-            trustScore: true
-          }
+            trustScore: true,
+          },
         },
         _count: {
           select: {
-            applications: true
-          }
-        }
+            applications: true,
+          },
+        },
       },
-      orderBy: { postedAt: 'desc' }
+      orderBy: { postedAt: "desc" },
     });
 
     const hasMore = jobs.length > limit;
@@ -371,7 +374,7 @@ export class JobPostingService {
     return {
       items,
       nextCursor,
-      hasMore
+      hasMore,
     };
   }
 
@@ -380,23 +383,23 @@ export class JobPostingService {
    */
   async closeJobPosting(jobPostingId: string, userId: string) {
     const jobPosting = await this.prisma.jobPosting.findUnique({
-      where: { id: jobPostingId }
+      where: { id: jobPostingId },
     });
 
     if (!jobPosting) {
-      throw new Error('Job posting not found');
+      throw new Error("Job posting not found");
     }
 
     if (jobPosting.userId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     return await this.prisma.jobPosting.update({
       where: { id: jobPostingId },
       data: {
-        status: 'closed',
-        closedAt: new Date()
-      }
+        status: "closed",
+        closedAt: new Date(),
+      },
     });
   }
 
@@ -406,11 +409,11 @@ export class JobPostingService {
   async getCompanyJobPostings(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { companyProfile: true }
+      include: { companyProfile: true },
     });
 
     if (!user || !user.companyProfile) {
-      throw new Error('Company profile not found');
+      throw new Error("Company profile not found");
     }
 
     return await this.prisma.jobPosting.findMany({
@@ -419,11 +422,11 @@ export class JobPostingService {
         _count: {
           select: {
             applications: true,
-            smartMatches: true
-          }
-        }
+            smartMatches: true,
+          },
+        },
       },
-      orderBy: { postedAt: 'desc' }
+      orderBy: { postedAt: "desc" },
     });
   }
 
@@ -433,11 +436,11 @@ export class JobPostingService {
   async getEngineerApplications(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { engineerProfile: true }
+      include: { engineerProfile: true },
     });
 
     if (!user || !user.engineerProfile) {
-      throw new Error('Engineer profile not found');
+      throw new Error("Engineer profile not found");
     }
 
     return await this.prisma.jobApplication.findMany({
@@ -448,13 +451,13 @@ export class JobPostingService {
             companyProfile: {
               select: {
                 companyName: true,
-                logoUrl: true
-              }
-            }
-          }
-        }
+                logoUrl: true,
+              },
+            },
+          },
+        },
       },
-      orderBy: { appliedAt: 'desc' }
+      orderBy: { appliedAt: "desc" },
     });
   }
 }

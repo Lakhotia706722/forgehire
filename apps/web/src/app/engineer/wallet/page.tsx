@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AriaToggleButton } from '@/components/ui/aria-tab-button';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import {
   useWallet,
@@ -56,13 +57,7 @@ export default function EngineerWalletPage() {
         <div className="relative bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-8 overflow-hidden">
           {/* Subtle grid pattern */}
           <div
-            className="absolute inset-0 opacity-[0.02]"
-            style={{
-              backgroundImage: `
-                repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,1) 39px, rgba(255,255,255,1) 40px),
-                repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,1) 39px, rgba(255,255,255,1) 40px)
-              `,
-            }}
+            className="absolute inset-0 opacity-[0.02] wallet-hero-grid"
             aria-hidden="true"
           />
 
@@ -104,8 +99,9 @@ export default function EngineerWalletPage() {
             <h2 className="font-display font-semibold text-text-primary text-lg">Monthly Earnings</h2>
             <div className="flex gap-2" role="group" aria-label="Chart period">
               {(['year', '6months', '30days'] as ChartPeriod[]).map((period) => (
-                <button
+                <AriaToggleButton
                   key={period}
+                  pressed={chartPeriod === period}
                   onClick={() => setChartPeriod(period)}
                   className={cn(
                     'text-xs px-3 py-1.5 rounded-lg transition-all',
@@ -113,10 +109,9 @@ export default function EngineerWalletPage() {
                       ? 'bg-accent-cyan text-bg-base font-semibold'
                       : 'text-text-muted hover:text-text-secondary'
                   )}
-                  aria-pressed={chartPeriod === period}
                 >
                   {period === 'year' ? 'This Year' : period === '6months' ? 'Last 6 Months' : 'Last 30 Days'}
-                </button>
+                </AriaToggleButton>
               ))}
             </div>
           </div>
@@ -124,8 +119,8 @@ export default function EngineerWalletPage() {
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={earningsData ?? []}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="date" stroke="#8892A4" style={{ fontSize: 12 }} />
-              <YAxis stroke="#8892A4" style={{ fontSize: 12 }} tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}K`} />
+              <XAxis dataKey="date" stroke="#8892A4" className="recharts-axis-text" />
+              <YAxis stroke="#8892A4" className="recharts-axis-text" tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}K`} />
               <Tooltip
                 contentStyle={{
                   backgroundColor: '#141828',
@@ -337,10 +332,11 @@ function WithdrawModal({ open, onClose, availableBalance }: WithdrawModalProps) 
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">
+            <label htmlFor="withdraw-destination" className="block text-sm font-medium text-text-secondary mb-2">
               {method === 'upi' ? 'UPI ID' : 'Bank Account'}
             </label>
             <input
+              id="withdraw-destination"
               type="text"
               value={upiId}
               onChange={(e) => setUpiId(e.target.value)}
@@ -400,15 +396,19 @@ function TransactionHistoryModal({
         {/* Search & Filter */}
         <div className="flex gap-3">
           <input
+            id="wallet-txn-search"
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search transactions..."
+            aria-label="Search transactions"
             className="flex-1 bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-lg px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)]"
           />
           <select
+            id="wallet-txn-filter"
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
+            aria-label="Filter transaction type"
             className="bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-[rgba(0,212,255,0.3)] [color-scheme:dark]"
           >
             <option value="all">All Types</option>

@@ -1,6 +1,6 @@
-import { PrismaClient, SubscriptionStatus } from '@prisma/client';
-import Razorpay from 'razorpay';
-import { getEnv } from '../config/env';
+import { PrismaClient, SubscriptionStatus } from "@prisma/client";
+import Razorpay from "razorpay";
+import { getEnv } from "../config/env";
 
 export class SubscriptionService {
   private prisma: PrismaClient;
@@ -11,40 +11,43 @@ export class SubscriptionService {
     const env = getEnv();
     this.razorpay = new Razorpay({
       key_id: env.RAZORPAY_KEY_ID,
-      key_secret: env.RAZORPAY_KEY_SECRET
+      key_secret: env.RAZORPAY_KEY_SECRET,
     });
   }
 
   /**
    * Create subscription for purchase
    */
-  async createSubscription(purchaseId: string, billingCycle: 'monthly' | 'quarterly' | 'yearly') {
+  async createSubscription(
+    purchaseId: string,
+    billingCycle: "monthly" | "quarterly" | "yearly",
+  ) {
     const purchase = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },
       include: {
-        product: true
-      }
+        product: true,
+      },
     });
 
     if (!purchase) {
-      throw new Error('Purchase not found');
+      throw new Error("Purchase not found");
     }
 
-    if (purchase.product.pricingModel !== 'subscription') {
-      throw new Error('Product is not a subscription');
+    if (purchase.product.pricingModel !== "subscription") {
+      throw new Error("Product is not a subscription");
     }
 
-    if (purchase.status !== 'completed') {
-      throw new Error('Purchase not completed');
+    if (purchase.status !== "completed") {
+      throw new Error("Purchase not completed");
     }
 
     // Check if subscription already exists
     const existing = await this.prisma.subscription.findUnique({
-      where: { purchaseId }
+      where: { purchaseId },
     });
 
     if (existing) {
-      throw new Error('Subscription already exists');
+      throw new Error("Subscription already exists");
     }
 
     // Calculate next billing date
@@ -65,8 +68,8 @@ export class SubscriptionService {
         razorpayPlanId,
         billingCycle,
         nextBillingDate,
-        status: SubscriptionStatus.active
-      }
+        status: SubscriptionStatus.active,
+      },
     });
 
     return subscription;
@@ -81,23 +84,23 @@ export class SubscriptionService {
       include: {
         purchase: {
           include: {
-            product: true
-          }
-        }
-      }
+            product: true,
+          },
+        },
+      },
     });
 
     if (!subscription) {
-      throw new Error('Subscription not found');
+      throw new Error("Subscription not found");
     }
 
     if (subscription.status !== SubscriptionStatus.active) {
-      throw new Error('Subscription is not active');
+      throw new Error("Subscription is not active");
     }
 
     // Check if billing is due
     if (new Date() < subscription.nextBillingDate) {
-      throw new Error('Billing not yet due');
+      throw new Error("Billing not yet due");
     }
 
     try {
@@ -106,7 +109,9 @@ export class SubscriptionService {
       console.log(`Processing billing for subscription ${subscriptionId}`);
 
       // Calculate next billing date
-      const nextBillingDate = this.calculateNextBillingDate(subscription.billingCycle);
+      const nextBillingDate = this.calculateNextBillingDate(
+        subscription.billingCycle,
+      );
 
       // Update subscription
       await this.prisma.subscription.update({
@@ -114,23 +119,23 @@ export class SubscriptionService {
         data: {
           lastBillingDate: new Date(),
           nextBillingDate,
-          failedPayments: 0
-        }
+          failedPayments: 0,
+        },
       });
 
       return {
         success: true,
-        nextBillingDate
+        nextBillingDate,
       };
     } catch (error) {
-      console.error('Billing error:', error);
+      console.error("Billing error:", error);
 
       // Increment failed payments
       const updated = await this.prisma.subscription.update({
         where: { id: subscriptionId },
         data: {
-          failedPayments: { increment: 1 }
-        }
+          failedPayments: { increment: 1 },
+        },
       });
 
       // Mark as past_due after 3 failed attempts
@@ -138,36 +143,40 @@ export class SubscriptionService {
         await this.prisma.subscription.update({
           where: { id: subscriptionId },
           data: {
-            status: SubscriptionStatus.past_due
-          }
+            status: SubscriptionStatus.past_due,
+          },
         });
       }
 
-      throw new Error('Billing failed');
+      throw new Error("Billing failed");
     }
   }
 
   /**
    * Cancel subscription
    */
-  async cancelSubscription(subscriptionId: string, userId: string, reason?: string) {
+  async cancelSubscription(
+    subscriptionId: string,
+    userId: string,
+    reason?: string,
+  ) {
     const subscription = await this.prisma.subscription.findUnique({
       where: { id: subscriptionId },
       include: {
-        purchase: true
-      }
+        purchase: true,
+      },
     });
 
     if (!subscription) {
-      throw new Error('Subscription not found');
+      throw new Error("Subscription not found");
     }
 
     if (subscription.buyerId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     if (subscription.status === SubscriptionStatus.cancelled) {
-      throw new Error('Subscription already cancelled');
+      throw new Error("Subscription already cancelled");
     }
 
     // Cancel Razorpay subscription
@@ -180,8 +189,8 @@ export class SubscriptionService {
       data: {
         status: SubscriptionStatus.cancelled,
         cancelledAt: new Date(),
-        cancellationReason: reason
-      }
+        cancellationReason: reason,
+      },
     });
 
     // Revoke license
@@ -189,8 +198,8 @@ export class SubscriptionService {
       where: { id: subscription.purchaseId },
       data: {
         licenseActive: false,
-        licenseRevokedAt: new Date()
-      }
+        licenseRevokedAt: new Date(),
+      },
     });
 
     return cancelled;
@@ -201,19 +210,19 @@ export class SubscriptionService {
    */
   async reactivateSubscription(subscriptionId: string, userId: string) {
     const subscription = await this.prisma.subscription.findUnique({
-      where: { id: subscriptionId }
+      where: { id: subscriptionId },
     });
 
     if (!subscription) {
-      throw new Error('Subscription not found');
+      throw new Error("Subscription not found");
     }
 
     if (subscription.buyerId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     if (subscription.status !== SubscriptionStatus.cancelled) {
-      throw new Error('Subscription is not cancelled');
+      throw new Error("Subscription is not cancelled");
     }
 
     // Reactivate Razorpay subscription
@@ -221,7 +230,9 @@ export class SubscriptionService {
     console.log(`Reactivating subscription ${subscriptionId}`);
 
     // Calculate next billing date
-    const nextBillingDate = this.calculateNextBillingDate(subscription.billingCycle);
+    const nextBillingDate = this.calculateNextBillingDate(
+      subscription.billingCycle,
+    );
 
     // Update subscription
     const reactivated = await this.prisma.subscription.update({
@@ -231,8 +242,8 @@ export class SubscriptionService {
         nextBillingDate,
         cancelledAt: null,
         cancellationReason: null,
-        failedPayments: 0
-      }
+        failedPayments: 0,
+      },
     });
 
     // Reactivate license
@@ -240,8 +251,8 @@ export class SubscriptionService {
       where: { id: subscription.purchaseId },
       data: {
         licenseActive: true,
-        licenseRevokedAt: null
-      }
+        licenseRevokedAt: null,
+      },
     });
 
     return reactivated;
@@ -253,7 +264,7 @@ export class SubscriptionService {
   async getBuyerSubscriptions(buyerId: string) {
     return await this.prisma.subscription.findMany({
       where: { buyerId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
         purchase: {
           include: {
@@ -262,12 +273,12 @@ export class SubscriptionService {
                 name: true,
                 slug: true,
                 thumbnailUrl: true,
-                category: true
-              }
-            }
-          }
-        }
-      }
+                category: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -279,22 +290,22 @@ export class SubscriptionService {
       where: {
         purchase: {
           product: {
-            userId: engineerId
-          }
-        }
+            userId: engineerId,
+          },
+        },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
         purchase: {
           include: {
             product: {
               select: {
-                name: true
-              }
-            }
-          }
-        }
-      }
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -306,9 +317,9 @@ export class SubscriptionService {
       where: {
         status: SubscriptionStatus.active,
         nextBillingDate: {
-          lte: new Date()
-        }
-      }
+          lte: new Date(),
+        },
+      },
     });
 
     const results = [];
@@ -318,13 +329,13 @@ export class SubscriptionService {
         const result = await this.processBilling(subscription.id);
         results.push({
           subscriptionId: subscription.id,
-          ...result
+          ...result,
         });
       } catch (error: any) {
         results.push({
           subscriptionId: subscription.id,
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
     }
@@ -338,13 +349,13 @@ export class SubscriptionService {
     const nextDate = new Date();
 
     switch (billingCycle) {
-      case 'monthly':
+      case "monthly":
         nextDate.setMonth(nextDate.getMonth() + 1);
         break;
-      case 'quarterly':
+      case "quarterly":
         nextDate.setMonth(nextDate.getMonth() + 3);
         break;
-      case 'yearly':
+      case "yearly":
         nextDate.setFullYear(nextDate.getFullYear() + 1);
         break;
       default:

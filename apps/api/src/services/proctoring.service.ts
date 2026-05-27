@@ -1,6 +1,6 @@
-import { Server as SocketIOServer, Socket } from 'socket.io';
-import { getRedisClient } from '../config/redis';
-import { getPrismaClient } from '../config/database';
+import { Server as SocketIOServer, Socket } from "socket.io";
+import { getRedisClient } from "../config/redis";
+import { getPrismaClient } from "../config/database";
 
 export interface ProctoringEvent {
   type: string;
@@ -22,46 +22,46 @@ export class ProctoringService {
    * Setup WebSocket handlers for proctoring
    */
   private setupSocketHandlers(): void {
-    this.io.on('connection', (socket: Socket) => {
+    this.io.on("connection", (socket: Socket) => {
       console.log(`Proctoring client connected: ${socket.id}`);
 
       // Session start
-      socket.on('session:start', async (data) => {
+      socket.on("session:start", async (data) => {
         await this.handleSessionStart(socket, data);
       });
 
       // Tab switch detection
-      socket.on('proctoring:tab_switch', async (data) => {
+      socket.on("proctoring:tab_switch", async (data) => {
         await this.handleTabSwitch(socket, data);
       });
 
       // Window blur detection
-      socket.on('proctoring:window_blur', async (data) => {
+      socket.on("proctoring:window_blur", async (data) => {
         await this.handleWindowBlur(socket, data);
       });
 
       // Paste attempt
-      socket.on('proctoring:paste_attempt', async (data) => {
+      socket.on("proctoring:paste_attempt", async (data) => {
         await this.handlePasteAttempt(socket, data);
       });
 
       // Inactivity
-      socket.on('proctoring:inactivity', async (data) => {
+      socket.on("proctoring:inactivity", async (data) => {
         await this.handleInactivity(socket, data);
       });
 
       // Keystroke rhythm
-      socket.on('proctoring:keystroke', async (data) => {
+      socket.on("proctoring:keystroke", async (data) => {
         await this.handleKeystroke(socket, data);
       });
 
       // Fullscreen exit
-      socket.on('proctoring:fullscreen_exit', async (data) => {
+      socket.on("proctoring:fullscreen_exit", async (data) => {
         await this.handleFullscreenExit(socket, data);
       });
 
       // Disconnect
-      socket.on('disconnect', () => {
+      socket.on("disconnect", () => {
         console.log(`Proctoring client disconnected: ${socket.id}`);
       });
     });
@@ -78,8 +78,9 @@ export class ProctoringService {
     const lastAssessment = await this.redis.get(cooldownKey);
 
     if (lastAssessment) {
-      socket.emit('proctoring:blocked', {
-        reason: 'Device is on cooldown. Please wait 30 days between assessments.'
+      socket.emit("proctoring:blocked", {
+        reason:
+          "Device is on cooldown. Please wait 30 days between assessments.",
       });
       socket.disconnect();
       return;
@@ -98,18 +99,18 @@ export class ProctoringService {
         tabSwitchCount: 0,
         windowBlurCount: 0,
         pasteAttempts: 0,
-        keystrokeBaseline: null
-      })
+        keystrokeBaseline: null,
+      }),
     );
 
     // Log event
     await this.logProctoringEvent(sessionToken, {
-      type: 'session_start',
+      type: "session_start",
       timestamp: new Date(),
-      details: { ipAddress, deviceFingerprint }
+      details: { ipAddress, deviceFingerprint },
     });
 
-    socket.emit('proctoring:session_started', { success: true });
+    socket.emit("proctoring:session_started", { success: true });
   }
 
   /**
@@ -126,26 +127,27 @@ export class ProctoringService {
     sessionData.tabSwitchCount++;
 
     await this.logProctoringEvent(sessionToken, {
-      type: 'tab_switch',
+      type: "tab_switch",
       timestamp: new Date(),
-      details: { count: sessionData.tabSwitchCount }
+      details: { count: sessionData.tabSwitchCount },
     });
 
     if (sessionData.tabSwitchCount === 1) {
-      socket.emit('proctoring:warning', {
-        message: 'Warning: Tab switching detected. Next violation will be flagged.'
+      socket.emit("proctoring:warning", {
+        message:
+          "Warning: Tab switching detected. Next violation will be flagged.",
       });
     } else if (sessionData.tabSwitchCount === 2) {
-      socket.emit('proctoring:flagged', {
-        message: 'Violation flagged: Multiple tab switches detected.'
+      socket.emit("proctoring:flagged", {
+        message: "Violation flagged: Multiple tab switches detected.",
       });
-      await this.flagAssessment(sessionToken, 'tab_switch');
+      await this.flagAssessment(sessionToken, "tab_switch");
     } else if (sessionData.tabSwitchCount >= 3) {
-      socket.emit('proctoring:auto_submit', {
-        message: 'Assessment auto-submitted due to repeated violations.',
-        penalty: true
+      socket.emit("proctoring:auto_submit", {
+        message: "Assessment auto-submitted due to repeated violations.",
+        penalty: true,
       });
-      await this.autoSubmitAssessment(sessionToken, 'tab_switch_violation');
+      await this.autoSubmitAssessment(sessionToken, "tab_switch_violation");
       socket.disconnect();
       return;
     }
@@ -166,26 +168,27 @@ export class ProctoringService {
     sessionData.windowBlurCount++;
 
     await this.logProctoringEvent(sessionToken, {
-      type: 'window_blur',
+      type: "window_blur",
       timestamp: new Date(),
-      details: { count: sessionData.windowBlurCount }
+      details: { count: sessionData.windowBlurCount },
     });
 
     if (sessionData.windowBlurCount === 1) {
-      socket.emit('proctoring:warning', {
-        message: 'Warning: Window focus lost. Please stay focused on the assessment.'
+      socket.emit("proctoring:warning", {
+        message:
+          "Warning: Window focus lost. Please stay focused on the assessment.",
       });
     } else if (sessionData.windowBlurCount === 2) {
-      socket.emit('proctoring:flagged', {
-        message: 'Violation flagged: Multiple focus losses detected.'
+      socket.emit("proctoring:flagged", {
+        message: "Violation flagged: Multiple focus losses detected.",
       });
-      await this.flagAssessment(sessionToken, 'window_blur');
+      await this.flagAssessment(sessionToken, "window_blur");
     } else if (sessionData.windowBlurCount >= 3) {
-      socket.emit('proctoring:auto_submit', {
-        message: 'Assessment auto-submitted due to repeated violations.',
-        penalty: true
+      socket.emit("proctoring:auto_submit", {
+        message: "Assessment auto-submitted due to repeated violations.",
+        penalty: true,
       });
-      await this.autoSubmitAssessment(sessionToken, 'window_blur_violation');
+      await this.autoSubmitAssessment(sessionToken, "window_blur_violation");
       socket.disconnect();
       return;
     }
@@ -206,13 +209,13 @@ export class ProctoringService {
     sessionData.pasteAttempts++;
 
     await this.logProctoringEvent(sessionToken, {
-      type: 'paste_attempt',
+      type: "paste_attempt",
       timestamp: new Date(),
-      details: { count: sessionData.pasteAttempts }
+      details: { count: sessionData.pasteAttempts },
     });
 
-    socket.emit('proctoring:warning', {
-      message: 'Paste operation blocked. All paste attempts are logged.'
+    socket.emit("proctoring:warning", {
+      message: "Paste operation blocked. All paste attempts are logged.",
     });
 
     await this.redis.setex(sessionKey, 9000, JSON.stringify(sessionData));
@@ -226,29 +229,29 @@ export class ProctoringService {
     const { sessionToken, inactiveSeconds } = data;
 
     await this.logProctoringEvent(sessionToken, {
-      type: 'inactivity_warning',
+      type: "inactivity_warning",
       timestamp: new Date(),
-      details: { inactiveSeconds }
+      details: { inactiveSeconds },
     });
 
     if (inactiveSeconds >= 300) {
       // 5 minutes - auto submit
-      socket.emit('proctoring:auto_submit', {
-        message: 'Assessment auto-submitted due to prolonged inactivity.',
-        penalty: false
+      socket.emit("proctoring:auto_submit", {
+        message: "Assessment auto-submitted due to prolonged inactivity.",
+        penalty: false,
       });
-      await this.autoSubmitAssessment(sessionToken, 'inactivity');
+      await this.autoSubmitAssessment(sessionToken, "inactivity");
       socket.disconnect();
     } else if (inactiveSeconds >= 180) {
       // 3 minutes - auto pause
-      socket.emit('proctoring:auto_pause', {
-        message: 'Assessment paused due to inactivity.'
+      socket.emit("proctoring:auto_pause", {
+        message: "Assessment paused due to inactivity.",
       });
       await this.pauseAssessment(sessionToken);
     } else if (inactiveSeconds >= 90) {
       // 90 seconds - warning
-      socket.emit('proctoring:warning', {
-        message: 'Inactivity detected. Please continue with the assessment.'
+      socket.emit("proctoring:warning", {
+        message: "Inactivity detected. Please continue with the assessment.",
       });
     }
   }
@@ -273,16 +276,16 @@ export class ProctoringService {
     // Check for anomalies (burst typing - possible paste or external help)
     if (burstDetected || typingSpeed > sessionData.keystrokeBaseline * 2) {
       await this.logProctoringEvent(sessionToken, {
-        type: 'keystroke_anomaly',
+        type: "keystroke_anomaly",
         timestamp: new Date(),
-        details: { typingSpeed, baseline: sessionData.keystrokeBaseline }
+        details: { typingSpeed, baseline: sessionData.keystrokeBaseline },
       });
 
-      socket.emit('proctoring:flagged', {
-        message: 'Unusual typing pattern detected.'
+      socket.emit("proctoring:flagged", {
+        message: "Unusual typing pattern detected.",
       });
 
-      await this.flagAssessment(sessionToken, 'keystroke_anomaly');
+      await this.flagAssessment(sessionToken, "keystroke_anomaly");
     }
   }
 
@@ -293,12 +296,12 @@ export class ProctoringService {
     const { sessionToken } = data;
 
     await this.logProctoringEvent(sessionToken, {
-      type: 'fullscreen_exit',
-      timestamp: new Date()
+      type: "fullscreen_exit",
+      timestamp: new Date(),
     });
 
-    socket.emit('proctoring:pause_required', {
-      message: 'Assessment paused. Please re-enter fullscreen to continue.'
+    socket.emit("proctoring:pause_required", {
+      message: "Assessment paused. Please re-enter fullscreen to continue.",
     });
 
     await this.pauseAssessment(sessionToken);
@@ -317,7 +320,7 @@ export class ProctoringService {
    */
   private async logProctoringEvent(
     sessionToken: string,
-    event: ProctoringEvent
+    event: ProctoringEvent,
   ): Promise<void> {
     const eventsKey = `assessment:events:${sessionToken}`;
     const events = await this.redis.get(eventsKey);
@@ -331,10 +334,13 @@ export class ProctoringService {
   /**
    * Flag assessment for violation
    */
-  private async flagAssessment(sessionToken: string, _reason: string): Promise<void> {
+  private async flagAssessment(
+    sessionToken: string,
+    _reason: string,
+  ): Promise<void> {
     await this.prisma.assessment.updateMany({
       where: { sessionToken },
-      data: { proctoringViolation: true }
+      data: { proctoringViolation: true },
     });
   }
 
@@ -343,24 +349,24 @@ export class ProctoringService {
    */
   private async autoSubmitAssessment(
     sessionToken: string,
-    _reason: string
+    _reason: string,
   ): Promise<void> {
     await this.prisma.assessment.updateMany({
       where: { sessionToken },
       data: {
-        status: 'submitted',
+        status: "submitted",
         submittedAt: new Date(),
-        proctoringViolation: true
-      }
+        proctoringViolation: true,
+      },
     });
 
     // Set device cooldown
     const sessionKey = `assessment:session:${sessionToken}`;
     const sessionData = await this.getSessionData(sessionKey);
-    
+
     if (sessionData?.deviceFingerprint) {
       const cooldownKey = `device:cooldown:${sessionData.deviceFingerprint}`;
-      await this.redis.setex(cooldownKey, 30 * 24 * 60 * 60, 'blocked'); // 30 days
+      await this.redis.setex(cooldownKey, 30 * 24 * 60 * 60, "blocked"); // 30 days
     }
   }
 
@@ -370,7 +376,7 @@ export class ProctoringService {
   private async pauseAssessment(sessionToken: string): Promise<void> {
     await this.prisma.assessment.updateMany({
       where: { sessionToken },
-      data: { status: 'paused' }
+      data: { status: "paused" },
     });
   }
 }

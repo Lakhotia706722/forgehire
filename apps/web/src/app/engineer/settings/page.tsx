@@ -2,12 +2,26 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { AriaNavButton, AriaSwitch } from '@/components/ui/aria-tab-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useEngineerSettings, useActiveSessions, useUpdateSettings, useRevokeSession } from '@/lib/api-hooks';
+import {
+  useEngineerSettings,
+  useActiveSessions,
+  useUpdateSettings,
+  useRevokeSession,
+  useMyEngineerProfile,
+  useUpdateEngineerProfile,
+} from '@/lib/api-hooks';
 import { useUser } from '@clerk/nextjs';
+import { toast } from 'sonner';
+import {
+  buildProfilePatchPayload,
+  validateProfileFormName,
+  type EngineerProfileForm,
+} from '@/lib/engineer-profile-form';
 import type { NotificationPreferences, PrivacySettings } from '@/lib/payments-analytics-data';
 
 type SettingsTab = 'profile' | 'account' | 'notifications' | 'privacy' | 'billing' | 'danger';
@@ -21,7 +35,7 @@ export default function EngineerSettingsPage() {
         <div className="flex gap-8">
           {/* Left Nav */}
           <aside className="w-56 shrink-0">
-            <nav className="sticky top-8 space-y-1" role="tablist" aria-label="Settings navigation">
+            <nav className="sticky top-8 space-y-1" aria-label="Settings navigation">
               {([
                 { id: 'profile', label: 'Profile', icon: '👤' },
                 { id: 'account', label: 'Account', icon: '🔐' },
@@ -30,10 +44,9 @@ export default function EngineerSettingsPage() {
                 { id: 'billing', label: 'Billing', icon: '💳' },
                 { id: 'danger', label: 'Danger Zone', icon: '⚠️' },
               ] as const).map((tab) => (
-                <button
+                <AriaNavButton
                   key={tab.id}
-                  role="tab"
-                  aria-selected={activeTab === tab.id}
+                  current={activeTab === tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
                     'w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
@@ -44,7 +57,7 @@ export default function EngineerSettingsPage() {
                 >
                   <span aria-hidden="true">{tab.icon}</span>
                   {tab.label}
-                </button>
+                </AriaNavButton>
               ))}
             </nav>
           </aside>
@@ -65,26 +78,75 @@ export default function EngineerSettingsPage() {
 }
 
 // ─── Profile Tab ──────────────────────────────────────────────
-const INITIAL_PROFILE = {
-  name: 'Arjun Sharma',
-  headline: 'LLM Engineer · RAG Systems · Agentic AI',
-  bio: 'Specialized in building production-grade LLM applications...',
-};
-
 function ProfileTab() {
-  const [name, setName] = React.useState(INITIAL_PROFILE.name);
-  const [headline, setHeadline] = React.useState(INITIAL_PROFILE.headline);
-  const [bio, setBio] = React.useState(INITIAL_PROFILE.bio);
+  const { data: profile, isLoading } = useMyEngineerProfile();
+  const updateProfile = useUpdateEngineerProfile();
+  const [form, setForm] = React.useState<Pick<EngineerProfileForm, 'fullName' | 'headline' | 'bio'>>({
+    fullName: '',
+    headline: '',
+    bio: '',
+  });
+  const [saved, setSaved] = React.useState({ fullName: '', headline: '', bio: '' });
+
+  React.useEffect(() => {
+    if (!profile) return;
+    const mapped = {
+      fullName: profile.fullName || '',
+      headline: profile.headline || '',
+      bio: profile.bio || '',
+    };
+    setForm(mapped);
+    setSaved(mapped);
+  }, [profile]);
 
   const isDirty =
-    name !== INITIAL_PROFILE.name ||
-    headline !== INITIAL_PROFILE.headline ||
-    bio !== INITIAL_PROFILE.bio;
+    form.fullName !== saved.fullName ||
+    form.headline !== saved.headline ||
+    form.bio !== saved.bio;
 
   async function handleSave() {
-    // Save logic
-    await new Promise((r) => setTimeout(r, 1000));
-    // Reset to saved values (in real app, update INITIAL_PROFILE from server response)
+    const nameError = validateProfileFormName(form.fullName);
+    if (nameError) {
+      toast.error(nameError);
+      return;
+    }
+
+    const payload = buildProfilePatchPayload({
+      ...form,
+      location: profile?.location || '',
+      githubUrl: profile?.githubUrl || '',
+      linkedinUrl: profile?.linkedinUrl || '',
+      portfolioUrl: profile?.portfolioUrl || '',
+      hourlyRate: Number(profile?.hourlyRate) || 0,
+      availabilityStatus:
+        (profile?.availabilityStatus as EngineerProfileForm['availabilityStatus']) ||
+        'available_now',
+    });
+
+    try {
+      const updated = await updateProfile.mutateAsync(payload);
+      const mapped = {
+        fullName: updated.fullName || '',
+        headline: updated.headline || '',
+        bio: updated.bio || '',
+      };
+      setForm(mapped);
+      setSaved(mapped);
+      toast.success('Profile saved successfully');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save profile');
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6 space-y-4">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
   }
 
   return (
@@ -94,21 +156,39 @@ function ProfileTab() {
         <p className="text-text-muted text-sm">Update your public profile information</p>
       </div>
 
-      <Input label="Full Name" value={name} onChange={(e) => setName(e.target.value)} />
-      <Input label="Headline" value={headline} onChange={(e) => setHeadline(e.target.value)} />
-      
+      <Input
+        label="Full Name"
+        value={form.fullName}
+        onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
+      />
+      <Input
+        label="Headline"
+        value={form.headline}
+        onChange={(e) => setForm((prev) => ({ ...prev, headline: e.target.value }))}
+        hint="e.g. LLM Engineer · RAG Systems"
+      />
+
       <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">Bio</label>
+        <label htmlFor="settings-bio" className="block text-sm font-medium text-text-secondary mb-2">
+          Bio
+        </label>
         <textarea
-          value={bio}
-          onChange={(e) => setBio(e.target.value)}
+          id="settings-bio"
+          value={form.bio}
+          onChange={(e) => setForm((prev) => ({ ...prev, bio: e.target.value }))}
           rows={4}
           className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-[rgba(0,212,255,0.3)] resize-none"
         />
       </div>
 
       <div className="flex justify-end">
-        <Button size="md" disabled={!isDirty} onClick={handleSave} data-testid="save-profile-btn">
+        <Button
+          size="md"
+          disabled={!isDirty}
+          loading={updateProfile.isPending}
+          onClick={handleSave}
+          data-testid="save-profile-btn"
+        >
           Save Changes
         </Button>
       </div>
@@ -469,10 +549,9 @@ interface ToggleSwitchProps {
 
 function ToggleSwitch({ id, checked, onChange }: ToggleSwitchProps) {
   return (
-    <button
+    <AriaSwitch
       id={id}
-      role="switch"
-      aria-checked={checked}
+      checked={checked}
       onClick={onChange}
       className={cn(
         'relative w-11 h-6 rounded-full transition-all duration-200',
@@ -485,7 +564,7 @@ function ToggleSwitch({ id, checked, onChange }: ToggleSwitchProps) {
           checked && 'translate-x-5'
         )}
       />
-    </button>
+    </AriaSwitch>
   );
 }
 

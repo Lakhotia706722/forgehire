@@ -3,36 +3,48 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useNotifications } from '@/lib/api-hooks';
 
-const MOCK_NOTIFICATIONS = [
-  { id: 'n1', type: 'submission', icon: '📥', title: 'New submission received',    body: 'Arjun Sharma submitted work for Voice AI Agent bounty',    time: '1 hour ago',   read: false, href: '/company/tasks/t1/submissions' },
-  { id: 'n2', type: 'contract',   icon: '📄', title: 'Contract signed',            body: 'Priya Menon has signed the RAG Pipeline contract',         time: '3 hours ago',  read: false, href: '/company/contracts' },
-  { id: 'n3', type: 'message',    icon: '💬', title: 'New message',                body: 'Rahul Kumar sent you a message about the ML Engineer role', time: '5 hours ago',  read: false, href: '/company/messages' },
-  { id: 'n4', type: 'payment',    icon: '💰', title: 'Escrow deposited',           body: 'Escrow of ₹1,50,000 confirmed for Voice AI Agent bounty',  time: '1 day ago',    read: true,  href: '/company/billing' },
-  { id: 'n5', type: 'system',     icon: '⚡', title: 'Trust score updated',        body: 'Your company trust score increased to 87/100',             time: '2 days ago',   read: true,  href: '/company/profile' },
-];
-
-const TYPE_COLOR: Record<string, string> = {
-  submission: '#00D4FF',
-  contract:   '#7B5EA7',
-  message:    '#10B981',
-  payment:    '#F59E0B',
-  system:     '#8892A4',
+const TYPE_ICON: Record<string, string> = {
+  submission: '📥',
+  contract: '📄',
+  message: '💬',
+  payment: '💰',
+  system: '⚡',
 };
 
-export default function CompanyNotificationsPage() {
-  const [notifications, setNotifications] = React.useState(MOCK_NOTIFICATIONS);
-  const [loading, setLoading] = React.useState(true);
+const TYPE_ICON_CLASS: Record<string, string> = {
+  submission: 'notif-icon-submission',
+  contract: 'notif-icon-contract',
+  message: 'notif-icon-message',
+  payment: 'notif-icon-payment',
+  system: 'notif-icon-system',
+};
 
-  React.useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(t);
-  }, []);
+function formatTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+export default function CompanyNotificationsPage() {
+  const { data: items = [], isLoading } = useNotifications();
+  const [readIds, setReadIds] = React.useState<Set<string>>(new Set());
+
+  const notifications = items.map((n) => ({
+    ...n,
+    read: n.read || readIds.has(n.id),
+    icon: TYPE_ICON[n.type] ?? '🔔',
+    time: formatTime(n.createdAt),
+  }));
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   function markAllRead() {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setReadIds(new Set(notifications.map((n) => n.id)));
   }
 
   return (
@@ -50,7 +62,7 @@ export default function CompanyNotificationsPage() {
           )}
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
               <div key={i} className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-4 flex gap-3">
@@ -62,29 +74,36 @@ export default function CompanyNotificationsPage() {
               </div>
             ))}
           </div>
+        ) : notifications.length === 0 ? (
+          <div className="text-center py-16 text-text-muted text-sm">No notifications yet</div>
         ) : (
           <div className="space-y-2">
             {notifications.map((notif) => {
-              const color = TYPE_COLOR[notif.type] ?? '#8892A4';
+              const iconClass = TYPE_ICON_CLASS[notif.type] ?? 'notif-icon-system';
               return (
                 <a
                   key={notif.id}
                   href={notif.href ?? '#'}
-                  onClick={() => setNotifications((prev) => prev.map((n) => n.id === notif.id ? { ...n, read: true } : n))}
+                  onClick={() => setReadIds((prev) => new Set(prev).add(notif.id))}
                   className={cn(
                     'flex items-start gap-4 p-4 rounded-xl border transition-all',
                     'hover:border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.02)]',
                     notif.read
                       ? 'bg-bg-surface border-[rgba(255,255,255,0.06)]'
-                      : 'bg-bg-elevated border-[rgba(123,94,167,0.15)]'
+                      : 'bg-bg-elevated border-[rgba(123,94,167,0.15)]',
                   )}
                 >
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-base shrink-0" style={{ background: `${color}15`, border: `1px solid ${color}25` }} aria-hidden="true">
+                  <div
+                    className={cn('w-10 h-10 rounded-xl flex items-center justify-center text-base shrink-0', iconClass)}
+                    aria-hidden="true"
+                  >
                     {notif.icon}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className={cn('text-sm font-medium', notif.read ? 'text-text-secondary' : 'text-text-primary')}>{notif.title}</p>
+                      <p className={cn('text-sm font-medium', notif.read ? 'text-text-secondary' : 'text-text-primary')}>
+                        {notif.title}
+                      </p>
                       {!notif.read && <span className="w-2 h-2 rounded-full bg-accent-violet shrink-0 mt-1.5" aria-label="Unread" />}
                     </div>
                     <p className="text-xs text-text-muted mt-0.5 leading-relaxed">{notif.body}</p>

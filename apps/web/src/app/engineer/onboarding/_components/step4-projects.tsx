@@ -1,5 +1,4 @@
 'use client';
-
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -147,7 +146,7 @@ function ProjectCard({
               key={type}
               type="button"
               role="radio"
-              aria-checked={p.type === type}
+              aria-checked={p.type === type ? "true" : "false"}
               onClick={() => onUpdate({ type })}
               className={cn(
                 'px-3 py-1.5 rounded-lg text-xs font-mono transition-all duration-150',

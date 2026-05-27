@@ -4,12 +4,19 @@ import * as React from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { avatarToneClass } from '@/lib/avatar-tone';
 import { ActionPanel } from './_components/action-panel';
 import { NDAModal } from './_components/nda-modal';
 import { MiniGateModal } from './_components/mini-gate-modal';
-import { MOCK_BOUNTY_DETAIL, formatReward } from '@/lib/bounty-data';
+import { formatReward } from '@/lib/bounty-data';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '@/lib/api-fetch';
+import { mapApiTaskToBountyDetail } from '@/lib/map-task-to-bounty';
+import { useNeuronScore } from '@/lib/api-hooks';
+import { Skeleton } from '@/components/ui/skeleton';
 
-const ENGINEER_SCORE = 920;
+const ENGINEER_SCORE_FALLBACK = 0;
 
 const TYPE_COLORS = {
   Bounty:  'text-accent-cyan bg-[rgba(0,212,255,0.1)] border-[rgba(0,212,255,0.2)]',
@@ -18,15 +25,35 @@ const TYPE_COLORS = {
 };
 
 export default function BountyDetailPage({ params }: { params: { id: string } }) {
-  const bounty = MOCK_BOUNTY_DETAIL; // In production: fetch by params.id
+  const { data: scoreData } = useNeuronScore();
+  const engineerScore = scoreData?.score ?? ENGINEER_SCORE_FALLBACK;
+
+  const { data: taskRaw, isLoading } = useQuery({
+    queryKey: ['task', params.id],
+    queryFn: () => apiFetch<Record<string, unknown>>(`/api/tasks/${params.id}`),
+    enabled: !!params.id,
+  });
+
+  const bounty = taskRaw ? mapApiTaskToBountyDetail(taskRaw) : null;
+
   const [showNDA, setShowNDA] = React.useState(false);
   const [showMiniGate, setShowMiniGate] = React.useState(false);
   const [participated, setParticipated] = React.useState(false);
   const [qaInput, setQaInput] = React.useState('');
 
-  const isEligible = ENGINEER_SCORE >= bounty.minNeuronScore;
+  if (isLoading || !bounty) {
+    return (
+      <div className="min-h-screen bg-bg-base p-8 max-w-7xl mx-auto space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
+  const isEligible = engineerScore >= bounty.minNeuronScore;
 
   function handleParticipate() {
+    if (!bounty) return;
     if (!isEligible) { setShowMiniGate(true); return; }
     if (bounty.ndaRequired) { setShowNDA(true); return; }
     setParticipated(true);
@@ -52,8 +79,7 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <div className="flex items-center gap-2">
                   <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs"
-                    style={{ background: bounty.companyColor }}
+                    className={cn('w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs', avatarToneClass(bounty.company))}
                     aria-hidden="true"
                   >
                     {bounty.companyInitials}
@@ -80,17 +106,13 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
               {/* AI quality score */}
               <div className="flex items-center gap-3">
                 <span className="text-xs text-text-muted">Task Quality</span>
-                <div className="flex-1 max-w-48 h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-accent-cyan rounded-full"
-                    style={{ width: `${(bounty.aiPostingQuality / 10) * 100}%` }}
-                    role="progressbar"
-                    aria-valuenow={bounty.aiPostingQuality}
-                    aria-valuemin={0}
-                    aria-valuemax={10}
-                    aria-label={`Task quality: ${bounty.aiPostingQuality}/10`}
-                  />
-                </div>
+                <Progress
+                  value={bounty.aiPostingQuality}
+                  max={10}
+                  size="sm"
+                  label={`Task quality: ${bounty.aiPostingQuality}/10`}
+                  className="flex-1 max-w-48"
+                />
                 <span className="text-xs font-mono text-accent-cyan">{bounty.aiPostingQuality}/10</span>
               </div>
             </div>
@@ -237,7 +259,7 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
             <div className="lg:sticky lg:top-8">
               <ActionPanel
                 bounty={bounty}
-                engineerScore={ENGINEER_SCORE}
+                engineerScore={engineerScore}
                 onParticipate={handleParticipate}
                 participated={participated}
               />

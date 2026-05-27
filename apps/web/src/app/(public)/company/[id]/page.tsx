@@ -1,18 +1,55 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { MOCK_COMPANY } from '@/lib/mock-data';
 import { CompanyHero } from './_components/company-hero';
 import { CompanyContent } from './_components/company-content';
+import type { CompanyProfile } from '@/lib/mock-data';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 
 interface Props {
   params: { id: string };
 }
 
-async function getCompany(id: string) {
-  if (id === MOCK_COMPANY.id || id) {
-    return { ...MOCK_COMPANY, id };
+async function getCompany(id: string): Promise<CompanyProfile | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/company/profiles/${id}`, {
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const raw = json?.data ?? json;
+    if (!raw?.id) return null;
+
+    const name = String(raw.companyName ?? 'Company');
+    return {
+      id: String(raw.id),
+      name,
+      description: String(raw.description ?? ''),
+      industry: String(raw.industry ?? ''),
+      logoInitials: name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
+      logoColor: '#00D4FF',
+      location: String(raw.location ?? ''),
+      size: String(raw.size ?? ''),
+      website: String(raw.website ?? ''),
+      trustScore: Number(raw.trustScore ?? 0),
+      websiteVerified: Boolean(raw.websiteVerified),
+      gstVerified: Boolean(raw.gstVerified),
+      tasksPosted: Number(raw.taskCount ?? 0),
+      engineersHired: Number(raw.contractCount ?? 0),
+      spendRange: '—',
+      avgRating: 4.5,
+      responseRate: 90,
+      avgResponseTime: '< 4h',
+      hiringSuccessRate: 85,
+      repeatHireRate: 60,
+      openJobs: [],
+      openBounties: [],
+      pastProjects: [],
+      reviews: [],
+    };
+  } catch {
+    return null;
   }
-  return null;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

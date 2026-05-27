@@ -1,6 +1,6 @@
-import { getMongoDB } from '../config/mongodb';
-import { v4 as uuidv4 } from 'uuid';
-import { Document, WithId } from 'mongodb';
+import { getMongoDB } from "../config/mongodb";
+import { v4 as uuidv4 } from "uuid";
+import { Document, WithId } from "mongodb";
 
 export interface BuildInPublicActivity {
   _id: string;
@@ -11,12 +11,12 @@ export interface BuildInPublicActivity {
 }
 
 export class BuildInPublicService {
-  private collection = 'build_in_public_activities';
+  private collection = "build_in_public_activities";
 
   async postActivity(
     engineerProfileId: string,
     userId: string,
-    content: string
+    content: string,
   ): Promise<BuildInPublicActivity> {
     const db = getMongoDB();
 
@@ -25,10 +25,12 @@ export class BuildInPublicService {
       engineerProfileId,
       userId,
       content,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
 
-    await db.collection(this.collection).insertOne(activity as unknown as Document);
+    await db
+      .collection(this.collection)
+      .insertOne(activity as unknown as Document);
 
     return activity;
   }
@@ -36,7 +38,7 @@ export class BuildInPublicService {
   async getActivitiesByEngineer(
     engineerProfileId: string,
     limit = 20,
-    skip = 0
+    skip = 0,
   ): Promise<BuildInPublicActivity[]> {
     const db = getMongoDB();
 
@@ -48,10 +50,13 @@ export class BuildInPublicService {
       .skip(skip)
       .toArray();
 
-    return (docs as unknown as BuildInPublicActivity[]);
+    return docs as unknown as BuildInPublicActivity[];
   }
 
-  async getActivityFeed(limit = 50, skip = 0): Promise<BuildInPublicActivity[]> {
+  async getActivityFeed(
+    limit = 50,
+    skip = 0,
+  ): Promise<BuildInPublicActivity[]> {
     const db = getMongoDB();
 
     const docs = await db
@@ -62,24 +67,26 @@ export class BuildInPublicService {
       .skip(skip)
       .toArray();
 
-    return (docs as unknown as BuildInPublicActivity[]);
+    return docs as unknown as BuildInPublicActivity[];
   }
 
   async deleteActivity(activityId: string, userId: string): Promise<void> {
     const db = getMongoDB();
 
     const result = await db.collection(this.collection).deleteOne({
-      _id: activityId as unknown as WithId<Document>['_id'],
-      userId
+      _id: activityId as unknown as WithId<Document>["_id"],
+      userId,
     });
 
     if (result.deletedCount === 0) {
-      throw new Error('Activity not found or unauthorized');
+      throw new Error("Activity not found or unauthorized");
     }
   }
 
   async getActivityCount(engineerProfileId: string): Promise<number> {
     const db = getMongoDB();
-    return await db.collection(this.collection).countDocuments({ engineerProfileId });
+    return await db
+      .collection(this.collection)
+      .countDocuments({ engineerProfileId });
   }
 }

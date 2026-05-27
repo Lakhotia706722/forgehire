@@ -9,14 +9,13 @@ import { NeuronScoreRing } from '@/components/ui/neuron-score-ring';
 import { ScreenshotCarousel } from './_components/screenshot-carousel';
 import { TryBeforeBuy } from './_components/try-before-buy';
 import { PurchaseModal } from './_components/purchase-modal';
-import { MOCK_PRODUCTS, MOCK_REVIEWS, formatPrice, getPricingLabel, type ProductListing } from '@/lib/marketplace-data';
+import { formatPrice, getPricingLabel, type ProductListing } from '@/lib/marketplace-data';
 import { useQuery } from '@tanstack/react-query';
-
-async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}${path}`, { credentials: 'include' });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+import { apiFetch, apiFetchList } from '@/lib/api-fetch';
+import { mapApiProductToListing } from '@/lib/map-api-product';
+import { Skeleton } from '@/components/ui/skeleton';
+import { avatarBgClass } from '@/lib/a11y';
+import { AriaNavButton, AriaToggleButton } from '@/components/ui/aria-tab-button';
 
 type DetailTab = 'overview' | 'technical' | 'features' | 'performance' | 'support';
 
@@ -41,36 +40,98 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export default function ProductDetailPage({ params }: { params: { id: string } }) {
-  const { data: productData } = useQuery({
+  const {
+    data: productFromApi,
+    isLoading: productLoading,
+    isError: productError,
+  } = useQuery({
     queryKey: ['product', params.id],
-    queryFn: () => apiFetch<{ data: ProductListing }>(`/api/products/${params.id}`),
+    queryFn: async () => {
+      const raw = await apiFetch<Record<string, unknown>>(`/api/products/${params.id}`);
+      return mapApiProductToListing(raw);
+    },
     staleTime: 5 * 60_000,
+    retry: false,
   });
-  const { data: reviewsData } = useQuery({
+  const { data: reviewsFromApi = [] } = useQuery({
     queryKey: ['product', params.id, 'reviews'],
-    queryFn: () => apiFetch<{ data: any[] }>(`/api/products/${params.id}/reviews`),
+    queryFn: () => apiFetchList<Record<string, unknown>>(`/api/products/${params.id}/reviews`),
     staleTime: 5 * 60_000,
+    retry: false,
+    enabled: !!productFromApi,
   });
 
-  const product = productData?.data ?? (MOCK_PRODUCTS ?? []).find((p) => p.id === params.id) ?? MOCK_PRODUCTS[0];
-  const reviews = reviewsData?.data ?? MOCK_REVIEWS.filter((r) => r.productId === product.id);
+  if (productLoading) {
+    return (
+      <div className="min-h-screen bg-bg-base max-w-7xl mx-auto px-6 py-8 space-y-6">
+        <Skeleton className="h-6 w-64" />
+        <Skeleton className="h-72 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  if (productError || !productFromApi) {
+    return (
+      <div className="min-h-screen bg-bg-base flex items-center justify-center px-6">
+        <div className="text-center">
+          <h1 className="font-display text-xl font-bold text-text-primary mb-2">Product not found</h1>
+          <Link href="/marketplace" className="text-sm text-accent-cyan hover:underline">
+            ← Back to marketplace
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return <ProductDetailView product={productFromApi} reviewsFromApi={reviewsFromApi} />;
+}
+
+function ProductDetailView({
+  product,
+  reviewsFromApi,
+}: {
+  product: ProductListing;
+  reviewsFromApi: Record<string, unknown>[];
+}) {
+  const reviews = reviewsFromApi.map((rev, i) => ({
+    id: String(rev.id ?? i),
+    productId: product.id,
+    reviewerName: String(rev.reviewerName ?? rev.buyerName ?? 'Buyer'),
+    reviewerInitials: String(rev.reviewerInitials ?? 'B'),
+    reviewerCompany: String(rev.reviewerCompany ?? ''),
+    rating: Number(rev.rating ?? 0),
+    date: rev.createdAt
+      ? new Date(String(rev.createdAt)).toLocaleDateString('en-IN', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        })
+      : '',
+    text: String(rev.review ?? rev.text ?? ''),
+    verified: Boolean(rev.verified ?? true),
+  }));
+  const displayReviews = reviews;
   const [activeTab, setActiveTab] = React.useState<DetailTab>('overview');
+  const useCases = product.useCases ?? [];
+  const features = product.features ?? [];
+  const deliverables = product.deliverables ?? [];
+  const techStack = product.techStack ?? [];
+  const screenshots = product.screenshots ?? [];
+  const hostingRequirements = product.hostingRequirements ?? [];
+  const apiDependencies = product.apiDependencies ?? [];
+
   const [selectedTierId, setSelectedTierId] = React.useState(
     product.pricingTiers?.find((t) => t.highlighted)?.id ?? product.pricingTiers?.[0]?.id
   );
   const [showPurchase, setShowPurchase] = React.useState(false);
   const [wishlisted, setWishlisted] = React.useState(false);
 
-  const bundleProduct = product.bundleIds?.[0]
-    ? (MOCK_PRODUCTS ?? []).find((p) => p.bundleIds?.includes(product.id) || product.bundleIds?.includes(p.id))
-    : null;
-
   // Build carousel slides
   const slides = [
     ...(product.videoUrl ? [{ type: 'video' as const, url: product.videoUrl }] : []),
-    ...product.screenshots.map((url) => ({ type: 'image' as const, url })),
-    // Fallback placeholder slides
-    ...(!product.screenshots.length && !product.videoUrl
+    ...screenshots.map((url) => ({ type: 'image' as const, url })),
+    ...(!screenshots.length && !product.videoUrl
       ? [{ type: 'image' as const, url: '', alt: 'Product screenshot' }]
       : []),
   ];
@@ -110,13 +171,12 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
             )}
 
             {/* Tab navigation */}
-            <div className="border-b border-[rgba(255,255,255,0.06)]" role="tablist" aria-label="Product details">
+            <nav className="border-b border-[rgba(255,255,255,0.06)]" aria-label="Product details">
               <div className="flex gap-0 overflow-x-auto scrollbar-none">
                 {TABS.map((tab) => (
-                  <button
+                  <AriaNavButton
                     key={tab.id}
-                    role="tab"
-                    aria-selected={activeTab === tab.id}
+                    current={activeTab === tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={cn(
                       'px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors relative',
@@ -127,34 +187,40 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
                     {activeTab === tab.id && (
                       <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-cyan rounded-full" aria-hidden="true" />
                     )}
-                  </button>
+                  </AriaNavButton>
                 ))}
               </div>
-            </div>
+            </nav>
 
             {/* Tab content */}
-            <div key={activeTab} className="animate-fade-up" role="tabpanel">
+            <div key={activeTab} className="animate-fade-up">
               {activeTab === 'overview' && (
                 <div className="space-y-4">
                   <p className="text-text-secondary text-sm leading-relaxed">{product.description}</p>
-                  <div>
-                    <h3 className="font-display font-semibold text-text-primary text-sm mb-2">Problem Solved</h3>
-                    <p className="text-text-secondary text-sm leading-relaxed">{product.problemSolved}</p>
-                  </div>
-                  <div>
-                    <h3 className="font-display font-semibold text-text-primary text-sm mb-2">Use Cases</h3>
-                    <ul className="space-y-1.5">
-                      {product.useCases.map((u, i) => (
-                        <li key={i} className="flex items-center gap-2 text-sm text-text-secondary">
-                          <span className="text-accent-cyan" aria-hidden="true">·</span>{u}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <h3 className="font-display font-semibold text-text-primary text-sm mb-2">Who It&apos;s For</h3>
-                    <p className="text-text-secondary text-sm">{product.whoItsFor}</p>
-                  </div>
+                  {product.problemSolved ? (
+                    <div>
+                      <h3 className="font-display font-semibold text-text-primary text-sm mb-2">Problem Solved</h3>
+                      <p className="text-text-secondary text-sm leading-relaxed">{product.problemSolved}</p>
+                    </div>
+                  ) : null}
+                  {useCases.length > 0 ? (
+                    <div>
+                      <h3 className="font-display font-semibold text-text-primary text-sm mb-2">Use Cases</h3>
+                      <ul className="space-y-1.5">
+                        {useCases.map((u, i) => (
+                          <li key={i} className="flex items-center gap-2 text-sm text-text-secondary">
+                            <span className="text-accent-cyan" aria-hidden="true">·</span>{u}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {product.whoItsFor ? (
+                    <div>
+                      <h3 className="font-display font-semibold text-text-primary text-sm mb-2">Who It&apos;s For</h3>
+                      <p className="text-text-secondary text-sm">{product.whoItsFor}</p>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -162,27 +228,31 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
                 <div className="space-y-4">
                   <div>
                     <h3 className="font-display font-semibold text-text-primary text-sm mb-2">Tech Stack</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {product.techStack.map((t) => <Badge key={t} variant="gray">{t}</Badge>)}
-                    </div>
+                    {techStack.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {techStack.map((t) => <Badge key={t} variant="gray">{t}</Badge>)}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-text-muted">Not specified</p>
+                    )}
                   </div>
                   <div className="grid sm:grid-cols-2 gap-4 text-sm">
                     <div><p className="text-xs text-text-muted mb-0.5">AI Model</p><p className="text-text-primary font-mono">{product.aiModel}</p></div>
-                    <div><p className="text-xs text-text-muted mb-0.5">Architecture</p><p className="text-text-primary">{product.architectureType}</p></div>
+                    <div><p className="text-xs text-text-muted mb-0.5">Architecture</p><p className="text-text-primary">{product.architectureType || '—'}</p></div>
                   </div>
-                  {product.hostingRequirements.length > 0 && (
+                  {hostingRequirements.length > 0 && (
                     <div>
                       <h3 className="font-display font-semibold text-text-primary text-sm mb-2">Hosting Requirements</h3>
                       <div className="flex flex-wrap gap-2">
-                        {product.hostingRequirements.map((h) => <Badge key={h} variant="amber">{h}</Badge>)}
+                        {hostingRequirements.map((h) => <Badge key={h} variant="amber">{h}</Badge>)}
                       </div>
                     </div>
                   )}
-                  {product.apiDependencies.length > 0 && (
+                  {apiDependencies.length > 0 && (
                     <div>
                       <h3 className="font-display font-semibold text-text-primary text-sm mb-2">API Dependencies</h3>
                       <div className="flex flex-wrap gap-2">
-                        {product.apiDependencies.map((a) => <Badge key={a} variant="violet">{a}</Badge>)}
+                        {apiDependencies.map((a) => <Badge key={a} variant="violet">{a}</Badge>)}
                       </div>
                     </div>
                   )}
@@ -190,25 +260,29 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
               )}
 
               {activeTab === 'features' && (
-                <ul className="space-y-3">
-                  {product.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-3 p-3 bg-bg-elevated rounded-xl border border-[rgba(255,255,255,0.04)]">
-                      <span className="text-xl shrink-0" aria-hidden="true">{f.icon}</span>
-                      <span className="text-sm text-text-secondary">{f.text}</span>
-                    </li>
-                  ))}
-                </ul>
+                features.length > 0 ? (
+                  <ul className="space-y-3">
+                    {features.map((f, i) => (
+                      <li key={i} className="flex items-start gap-3 p-3 bg-bg-elevated rounded-xl border border-[rgba(255,255,255,0.04)]">
+                        <span className="text-xl shrink-0" aria-hidden="true">{f.icon}</span>
+                        <span className="text-sm text-text-secondary">{f.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-text-muted">No features listed for this product.</p>
+                )
               )}
 
               {activeTab === 'performance' && (
                 <div className="grid sm:grid-cols-3 gap-4">
                   {[
-                    { label: 'Accuracy',      value: product.accuracy ? `${product.accuracy}%` : '—',    color: '#10B981' },
-                    { label: 'Avg Response',  value: product.avgResponseMs ? `${product.avgResponseMs}ms` : '—', color: '#00D4FF' },
-                    { label: 'Uptime',        value: product.uptime ? `${product.uptime}%` : '—',        color: '#F59E0B' },
+                    { label: 'Accuracy',      value: product.accuracy ? `${product.accuracy}%` : '—',    colorClass: 'text-accent-green' },
+                    { label: 'Avg Response',  value: product.avgResponseMs ? `${product.avgResponseMs}ms` : '—', colorClass: 'text-accent-cyan' },
+                    { label: 'Uptime',        value: product.uptime ? `${product.uptime}%` : '—',        colorClass: 'text-accent-amber' },
                   ].map((stat) => (
                     <div key={stat.label} className="bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl p-5 text-center">
-                      <p className="font-mono font-bold text-3xl leading-none mb-1" style={{ color: stat.color }}>{stat.value}</p>
+                      <p className={cn('font-mono font-bold text-3xl leading-none mb-1', stat.colorClass)}>{stat.value}</p>
                       <p className="text-xs text-text-muted">{stat.label}</p>
                     </div>
                   ))}
@@ -248,9 +322,12 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
                     <div key={r.stars} className="flex items-center gap-2">
                       <span className="text-xs text-text-muted w-3">{r.stars}</span>
                       <svg width="10" height="10" viewBox="0 0 12 12" fill="#F59E0B" aria-hidden="true"><path d="M6 1l1.39 2.82L10.5 4.27l-2.25 2.19.53 3.09L6 8.02 3.22 9.55l.53-3.09L1.5 4.27l3.11-.45L6 1z"/></svg>
-                      <div className="flex-1 h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
-                        <div className="h-full bg-accent-amber rounded-full" style={{ width: `${r.pct}%` }} />
-                      </div>
+                      <progress
+                        className="progress-rating flex-1"
+                        value={r.pct}
+                        max={100}
+                        aria-label={`${r.stars} star ratings`}
+                      />
                       <span className="text-xs text-text-muted w-8 text-right">{r.pct}%</span>
                     </div>
                   ))}
@@ -259,7 +336,10 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
 
               {/* Review cards */}
               <div className="space-y-4">
-                {reviews.map((rev) => (
+                {displayReviews.length === 0 ? (
+                  <p className="text-text-muted text-sm text-center py-8">No reviews yet. Be the first to purchase and review.</p>
+                ) : null}
+                {displayReviews.map((rev) => (
                   <div key={rev.id} className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-5">
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="flex items-center gap-3">
@@ -298,12 +378,11 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
                 {/* Price */}
                 {product.pricingTiers ? (
                   <div>
-                    <div className="flex gap-1 mb-3" role="tablist" aria-label="Pricing plans">
+                    <nav className="flex gap-1 mb-3" aria-label="Pricing plans">
                       {product.pricingTiers.map((tier) => (
-                        <button
+                        <AriaNavButton
                           key={tier.id}
-                          role="tab"
-                          aria-selected={selectedTierId === tier.id}
+                          current={selectedTierId === tier.id}
                           onClick={() => setSelectedTierId(tier.id)}
                           className={cn(
                             'flex-1 py-1.5 rounded-lg text-xs font-medium transition-all',
@@ -313,9 +392,9 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
                           )}
                         >
                           {tier.name}
-                        </button>
+                        </AriaNavButton>
                       ))}
-                    </div>
+                    </nav>
                     {(() => {
                       const tier = product.pricingTiers!.find((t) => t.id === selectedTierId)!;
                       return (
@@ -358,21 +437,23 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
                 </div>
 
                 {/* What you get */}
-                <div>
-                  <p className="text-xs text-text-muted mb-2">What you get:</p>
-                  <ul className="space-y-1.5">
-                    {product.deliverables.map((d, i) => (
-                      <li key={i} className="flex items-center gap-2 text-xs text-text-secondary">
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 8l4 4 8-8"/></svg>
-                        {d}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {deliverables.length > 0 ? (
+                  <div>
+                    <p className="text-xs text-text-muted mb-2">What you get:</p>
+                    <ul className="space-y-1.5">
+                      {deliverables.map((d, i) => (
+                        <li key={i} className="flex items-center gap-2 text-xs text-text-secondary">
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 8l4 4 8-8"/></svg>
+                          {d}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
 
                 {/* Engineer card */}
                 <div className="flex items-center gap-3 p-3 bg-bg-elevated rounded-xl border border-[rgba(255,255,255,0.06)]">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-sm shrink-0" style={{ background: product.engineerColor }} aria-hidden="true">
+                  <div className={cn('w-10 h-10 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-sm shrink-0', avatarBgClass(product.engineerName))} aria-hidden="true">
                     {product.engineerInitials}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -392,17 +473,10 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
                   <span className="text-xs text-accent-green">30-day buyer protection</span>
                 </div>
 
-                {/* Bundle */}
-                {bundleProduct && (
-                  <div className="p-3 bg-[rgba(245,158,11,0.06)] border border-[rgba(245,158,11,0.2)] rounded-xl">
-                    <p className="text-xs text-accent-amber font-medium mb-1">Bundle & Save {product.bundleDiscount}%</p>
-                    <p className="text-xs text-text-secondary">Also available with <strong>{bundleProduct.name}</strong></p>
-                  </div>
-                )}
-
                 {/* Wishlist + Share */}
                 <div className="flex gap-2">
-                  <button
+                  <AriaToggleButton
+                    pressed={wishlisted}
                     onClick={() => setWishlisted((w) => !w)}
                     className={cn(
                       'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs transition-all',
@@ -410,14 +484,13 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
                         ? 'border-[rgba(239,68,68,0.4)] text-accent-red bg-[rgba(239,68,68,0.06)]'
                         : 'border-[rgba(255,255,255,0.08)] text-text-muted hover:text-text-secondary'
                     )}
-                    aria-pressed={wishlisted}
                     aria-label={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
                   >
                     <svg width="12" height="12" viewBox="0 0 16 16" fill={wishlisted ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M8 14s-6-3.5-6-8a4 4 0 018 0 4 4 0 018 0c0 4.5-6 8-6 8z"/>
                     </svg>
                     {wishlisted ? 'Saved' : 'Wishlist'}
-                  </button>
+                  </AriaToggleButton>
                   <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[rgba(255,255,255,0.08)] text-xs text-text-muted hover:text-text-secondary transition-all">
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <circle cx="13" cy="3" r="1.5"/><circle cx="13" cy="13" r="1.5"/><circle cx="3" cy="8" r="1.5"/>

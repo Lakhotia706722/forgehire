@@ -2,9 +2,11 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFeaturedBounties, type FeaturedBounty } from '@/lib/api-hooks';
+import { avatarToneClass, initialsFromName } from '@/lib/avatar-tone';
 
 const DIFFICULTY_VARIANT: Record<string, 'green' | 'cyan' | 'amber' | 'violet'> = {
   easy:   'green',
@@ -12,16 +14,6 @@ const DIFFICULTY_VARIANT: Record<string, 'green' | 'cyan' | 'amber' | 'violet'> 
   hard:   'amber',
   expert: 'violet',
 };
-
-const COMPANY_COLORS = ['#00D4FF', '#7B5EA7', '#F59E0B', '#10B981', '#EF4444'];
-function colorFromName(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return COMPANY_COLORS[Math.abs(hash) % COMPANY_COLORS.length];
-}
-function initialsFromName(name: string): string {
-  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-}
 
 function BountyCardSkeleton() {
   return (
@@ -71,31 +63,37 @@ function useCountdown(daysLeft: number | null) {
 
 function BountyCard({ bounty }: { bounty: FeaturedBounty }) {
   const countdown = useCountdown(bounty.daysLeft);
-  const companyColor = colorFromName(bounty.company.name);
-  const companyInitials = initialsFromName(bounty.company.name);
-  const difficultyVariant = DIFFICULTY_VARIANT[bounty.difficulty.toLowerCase()] ?? 'gray';
+  const companyName = bounty.company?.name ?? 'Company';
+  const companyAvatarClass = avatarToneClass(companyName);
+  const companyInitials = initialsFromName(companyName);
+  const difficultyVariant =
+    DIFFICULTY_VARIANT[(bounty.difficulty ?? '').toLowerCase()] ?? 'gray';
+  const categories = Array.isArray(bounty.category) ? bounty.category : [];
+  const rewardAmount = Number(bounty.rewardAmount ?? 0);
 
   return (
     <article className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-6 hover:border-[rgba(245,158,11,0.25)] hover:-translate-y-0.5 transition-all duration-300 group">
       <div className="flex items-start justify-between gap-4 mb-4">
         {/* Company */}
         <div className="flex items-center gap-3">
-          {bounty.company.logoUrl ? (
-            <img
+          {bounty.company?.logoUrl ? (
+            <Image
               src={bounty.company.logoUrl}
-              alt={bounty.company.name}
-              className="w-10 h-10 rounded-lg object-cover"
+              alt={companyName}
+              width={40}
+              height={40}
+              unoptimized
+              className="h-10 w-10 rounded-lg object-cover"
             />
           ) : (
             <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center font-display font-bold text-bg-base text-xs shrink-0"
-              style={{ background: companyColor }}
+              className={`w-10 h-10 rounded-lg flex items-center justify-center font-display font-bold text-bg-base text-xs shrink-0 ${companyAvatarClass}`}
               aria-hidden="true"
             >
               {companyInitials}
             </div>
           )}
-          <span className="text-text-secondary text-sm">{bounty.company.name}</span>
+          <span className="text-text-secondary text-sm">{companyName}</span>
         </div>
 
         {/* Difficulty */}
@@ -111,7 +109,7 @@ function BountyCard({ bounty }: { bounty: FeaturedBounty }) {
 
       {/* Categories */}
       <div className="flex flex-wrap gap-1.5 mb-5">
-        {bounty.category.slice(0, 3).map((c) => (
+        {categories.slice(0, 3).map((c) => (
           <Badge key={c} variant="gray" className="text-[10px]">{c}</Badge>
         ))}
       </div>
@@ -121,7 +119,7 @@ function BountyCard({ bounty }: { bounty: FeaturedBounty }) {
         <div>
           <p className="text-xs text-text-muted mb-0.5">Reward</p>
           <p className="font-display font-bold text-accent-amber text-2xl leading-none">
-            ₹{bounty.rewardAmount.toLocaleString('en-IN')}
+            ₹{rewardAmount.toLocaleString('en-IN')}
           </p>
         </div>
         <div className="text-right">

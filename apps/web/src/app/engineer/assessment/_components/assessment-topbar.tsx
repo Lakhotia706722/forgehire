@@ -1,5 +1,4 @@
 'use client';
-
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import type { AssessmentSection } from './assessment-store';
@@ -47,22 +46,25 @@ export function AssessmentTopbar({ section, secondsLeft, tabSwitchCount }: Asses
       </div>
 
       {/* Section pills — center */}
-      <div className="flex-1 flex items-center justify-center gap-2" role="tablist" aria-label="Assessment sections">
-        {SECTIONS.map((s) => (
-          <div
-            key={s.id}
-            role="tab"
-            aria-selected={section === s.id}
-            className={cn(
-              'px-4 py-1.5 rounded-full text-xs font-mono font-medium transition-all',
-              section === s.id
-                ? 'bg-accent-cyan text-bg-base'
-                : 'text-text-muted border border-[rgba(255,255,255,0.08)]'
-            )}
-          >
-            {s.label}
-          </div>
-        ))}
+      <div className="flex-1 flex items-center justify-center gap-2" role="group" aria-label="Assessment sections">
+        {SECTIONS.map((s) =>
+          section === s.id ? (
+            <span
+              key={s.id}
+              aria-current="step"
+              className="px-4 py-1.5 rounded-full text-xs font-mono font-medium bg-accent-cyan text-bg-base"
+            >
+              {s.label}
+            </span>
+          ) : (
+            <span
+              key={s.id}
+              className="px-4 py-1.5 rounded-full text-xs font-mono font-medium text-text-muted border border-[rgba(255,255,255,0.08)]"
+            >
+              {s.label}
+            </span>
+          ),
+        )}
       </div>
 
       {/* Right: timer + proctoring */}

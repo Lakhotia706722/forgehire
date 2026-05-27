@@ -1,14 +1,14 @@
-import { AuthService } from '../../services/auth.service';
-import { getPrismaClient } from '../../config/database';
-import { getRedisClient } from '../../config/redis';
-import { ValidationError, AuthenticationError } from '@neuronhire/shared';
-import { UserRole } from '@prisma/client';
+import { AuthService } from "../../services/auth.service";
+import { getPrismaClient } from "../../config/database";
+import { getRedisClient } from "../../config/redis";
+import { ValidationError, AuthenticationError } from "@neuronhire/shared";
+import { UserRole } from "@prisma/client";
 
-jest.mock('../../config/database');
-jest.mock('../../config/redis');
-jest.mock('../../middleware/rateLimiter');
+jest.mock("../../config/database");
+jest.mock("../../config/redis");
+jest.mock("../../middleware/rateLimiter");
 
-describe('AuthService', () => {
+describe("AuthService", () => {
   let authService: AuthService;
   let mockPrisma: any;
   let mockRedis: any;
@@ -17,20 +17,20 @@ describe('AuthService', () => {
     mockPrisma = {
       user: {
         findUnique: jest.fn(),
-        create: jest.fn()
+        create: jest.fn(),
       },
       refreshToken: {
         findUnique: jest.fn(),
         create: jest.fn(),
         delete: jest.fn(),
-        deleteMany: jest.fn()
-      }
+        deleteMany: jest.fn(),
+      },
     };
 
     mockRedis = {
       setex: jest.fn(),
       get: jest.fn(),
-      del: jest.fn()
+      del: jest.fn(),
     };
 
     (getPrismaClient as jest.Mock).mockReturnValue(mockPrisma);
@@ -39,37 +39,37 @@ describe('AuthService', () => {
     authService = new AuthService();
   });
 
-  describe('signup', () => {
-    it('should throw error if user already exists', async () => {
+  describe("signup", () => {
+    it("should throw error if user already exists", async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
-        id: '123',
-        email: 'test@example.com'
+        id: "123",
+        email: "test@example.com",
       });
 
       await expect(
-        authService.signup('test@example.com', UserRole.engineer)
+        authService.signup("test@example.com", UserRole.engineer),
       ).rejects.toThrow(ValidationError);
     });
   });
 
-  describe('verifyOTP', () => {
-    it('should throw error if no pending signup data', async () => {
+  describe("verifyOTP", () => {
+    it("should throw error if no pending signup data", async () => {
       mockRedis.get.mockResolvedValue(null);
 
       await expect(
-        authService.verifyOTP('test@example.com', '123456')
+        authService.verifyOTP("test@example.com", "123456"),
       ).rejects.toThrow(AuthenticationError);
     });
   });
 
-  describe('logout', () => {
-    it('should delete refresh token', async () => {
+  describe("logout", () => {
+    it("should delete refresh token", async () => {
       mockPrisma.refreshToken.deleteMany.mockResolvedValue({ count: 1 });
 
-      await authService.logout('refresh-token');
+      await authService.logout("refresh-token");
 
       expect(mockPrisma.refreshToken.deleteMany).toHaveBeenCalledWith({
-        where: { token: 'refresh-token' }
+        where: { token: "refresh-token" },
       });
     });
   });

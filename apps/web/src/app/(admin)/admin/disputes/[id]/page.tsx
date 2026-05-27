@@ -5,23 +5,13 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-
-const MOCK_DISPUTE = {
-  id: 'd1',
-  productName: 'RAG Pipeline Starter Kit',
-  buyerName: 'Vikram Nair',
-  buyerInitials: 'VN',
-  buyerColor: '#00D4FF',
-  sellerName: 'Arjun Sharma',
-  sellerInitials: 'AS',
-  sellerColor: '#F59E0B',
-  amount: 4999,
-  reason: 'The product does not work as described. The RAG pipeline fails to connect to Pinecone and the documentation is incomplete.',
-  status: 'open',
-  createdAt: '2026-05-08',
-};
-
+import { useAdminDisputeDetail } from '@/lib/api-hooks';
+import { Skeleton } from '@/components/ui/skeleton';
+import { apiFetch } from '@/lib/api-fetch';
+import { cn } from '@/lib/utils';
+import { avatarToneClass, initialsFromName } from '@/lib/avatar-tone';
 export default function AdminDisputeDetailPage({ params }: { params: { id: string } }) {
+  const { data: dispute, isLoading } = useAdminDisputeDetail(params.id);
   const [resolution, setResolution] = React.useState('');
   const [outcome, setOutcome] = React.useState<'refund_buyer' | 'pay_seller' | 'split' | 'no_action'>('refund_buyer');
   const [saving, setSaving] = React.useState(false);
@@ -29,9 +19,26 @@ export default function AdminDisputeDetailPage({ params }: { params: { id: strin
   async function handleResolve() {
     if (!resolution.trim()) { toast.error('Resolution notes are required'); return; }
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setSaving(false);
-    toast.success('Dispute resolved');
+    try {
+      await apiFetch(`/api/admin/disputes/${params.id}/resolve`, {
+        method: 'PUT',
+        body: JSON.stringify({ resolution, outcome }),
+      });
+      toast.success('Dispute resolved');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to resolve');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (isLoading || !dispute) {
+    return (
+      <div className="min-h-screen bg-bg-base p-8 max-w-4xl mx-auto space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-48 w-full rounded-2xl" />
+      </div>
+    );
   }
 
   return (
@@ -40,28 +47,28 @@ export default function AdminDisputeDetailPage({ params }: { params: { id: strin
         <div className="flex items-center gap-2 text-xs text-text-muted">
           <Link href="/admin/disputes" className="hover:text-text-secondary">Disputes</Link>
           <span>/</span>
-          <span className="text-text-secondary">{MOCK_DISPUTE.productName}</span>
+          <span className="text-text-secondary">{dispute.productName}</span>
         </div>
 
         {/* Header */}
         <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="font-display font-bold text-xl text-text-primary">{MOCK_DISPUTE.productName}</h1>
+            <h1 className="font-display font-bold text-xl text-text-primary">{dispute.productName}</h1>
             <Badge variant="red">Open Dispute</Badge>
           </div>
 
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs" style={{ background: MOCK_DISPUTE.buyerColor }} aria-hidden="true">{MOCK_DISPUTE.buyerInitials}</div>
-              <div><p className="text-sm text-text-primary">{MOCK_DISPUTE.buyerName}</p><p className="text-xs text-text-muted">Buyer</p></div>
+              <div className={cn('w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs', avatarToneClass(dispute.buyerName))} aria-hidden="true">{initialsFromName(dispute.buyerName)}</div>
+              <div><p className="text-sm text-text-primary">{dispute.buyerName}</p><p className="text-xs text-text-muted">Buyer</p></div>
             </div>
             <span className="text-text-muted text-xs">vs</span>
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs" style={{ background: MOCK_DISPUTE.sellerColor }} aria-hidden="true">{MOCK_DISPUTE.sellerInitials}</div>
-              <div><p className="text-sm text-text-primary">{MOCK_DISPUTE.sellerName}</p><p className="text-xs text-text-muted">Seller</p></div>
+              <div className={cn('w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs', avatarToneClass(dispute.sellerName))} aria-hidden="true">{initialsFromName(dispute.sellerName)}</div>
+              <div><p className="text-sm text-text-primary">{dispute.sellerName}</p><p className="text-xs text-text-muted">Seller</p></div>
             </div>
             <div className="ml-auto text-right">
-              <p className="font-mono font-bold text-accent-amber">₹{MOCK_DISPUTE.amount.toLocaleString('en-IN')}</p>
+              <p className="font-mono font-bold text-accent-amber">₹{Number(dispute.amount).toLocaleString('en-IN')}</p>
               <p className="text-xs text-text-muted">Disputed amount</p>
             </div>
           </div>
@@ -70,8 +77,8 @@ export default function AdminDisputeDetailPage({ params }: { params: { id: strin
         {/* Reason */}
         <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
           <h2 className="font-display font-semibold text-text-primary text-lg mb-3">Dispute Reason</h2>
-          <p className="text-sm text-text-secondary leading-relaxed">{MOCK_DISPUTE.reason}</p>
-          <p className="text-xs text-text-muted font-mono mt-3">Filed on {new Date(MOCK_DISPUTE.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          <p className="text-sm text-text-secondary leading-relaxed">{dispute.reason}</p>
+          <p className="text-xs text-text-muted font-mono mt-3">Filed on {new Date(dispute.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
 
         {/* Resolution */}

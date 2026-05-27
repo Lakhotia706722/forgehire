@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { AriaToggleButton } from '@/components/ui/aria-tab-button';
 import type { Review } from '@/lib/mock-data';
 
 type SortOrder = 'recent' | 'highest' | 'lowest';
@@ -34,33 +35,31 @@ export function TabReviews({ reviews }: TabReviewsProps) {
 
   const sorted = [...reviews].sort((a, b) => {
     if (sort === 'highest') return b.rating - a.rating;
-    if (sort === 'lowest')  return a.rating - b.rating;
-    return 0; // recent — keep original order
+    if (sort === 'lowest') return a.rating - b.rating;
+    return 0;
   });
 
   return (
     <div>
-      {/* Sort controls */}
       <div className="flex items-center gap-2 mb-6" role="group" aria-label="Sort reviews">
         <span className="text-xs text-text-muted">Sort:</span>
         {(['recent', 'highest', 'lowest'] as SortOrder[]).map((s) => (
-          <button
+          <AriaToggleButton
             key={s}
+            pressed={sort === s}
             onClick={() => setSort(s)}
             className={cn(
               'text-xs px-3 py-1.5 rounded-lg border transition-all duration-150',
               sort === s
                 ? 'border-[rgba(0,212,255,0.4)] bg-[rgba(0,212,255,0.08)] text-accent-cyan'
-                : 'border-[rgba(255,255,255,0.08)] text-text-muted hover:text-text-secondary'
+                : 'border-[rgba(255,255,255,0.08)] text-text-muted hover:text-text-secondary',
             )}
-            aria-pressed={sort === s}
           >
             {s === 'recent' ? 'Most Recent' : s === 'highest' ? 'Highest Rated' : 'Lowest Rated'}
-          </button>
+          </AriaToggleButton>
         ))}
       </div>
 
-      {/* Review cards */}
       <div className="space-y-4">
         {sorted.map((review) => (
           <ReviewCard key={review.id} review={review} />
@@ -73,7 +72,6 @@ export function TabReviews({ reviews }: TabReviewsProps) {
 function ReviewCard({ review: r }: { review: Review }) {
   return (
     <article className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-5">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-bg-elevated border border-[rgba(255,255,255,0.08)] flex items-center justify-center font-display font-bold text-xs text-text-secondary">
@@ -90,10 +88,8 @@ function ReviewCard({ review: r }: { review: Review }) {
         </div>
       </div>
 
-      {/* Review text */}
       <p className="text-text-secondary text-sm leading-relaxed mb-3">{r.text}</p>
 
-      {/* Project ref + verified */}
       <div className="flex items-center gap-3">
         <span className="text-xs px-2.5 py-1 rounded-full bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-text-muted font-mono">
           {r.projectRef}
@@ -108,7 +104,6 @@ function ReviewCard({ review: r }: { review: Review }) {
         )}
       </div>
 
-      {/* Engineer response */}
       {r.engineerResponse && (
         <div className="mt-4 ml-4 pl-4 border-l-2 border-[rgba(0,212,255,0.2)]">
           <p className="text-xs text-text-muted mb-1 font-medium">Engineer&apos;s response</p>

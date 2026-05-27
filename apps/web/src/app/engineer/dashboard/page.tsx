@@ -35,22 +35,11 @@ const ACTIVITY_ICONS: Record<string, string> = {
   review_received:   '⭐',
 };
 
-const ACTIVITY_COLORS: Record<string, string> = {
-  payment_received:  '#10B981',
-  new_message:       '#00D4FF',
-  proposal_accepted: '#7B5EA7',
-  proposal_pending:  '#F59E0B',
-  contract_started:  '#00D4FF',
-  score_updated:     '#F59E0B',
-  bounty_won:        '#F59E0B',
-  review_received:   '#F59E0B',
-};
-
 export default function EngineerDashboardPage() {
   const { user } = useUser();
   const firstName = user?.firstName || 'there';
 
-  const { data: stats, isLoading: statsLoading } = useEngineerDashboard();
+  const { data: stats, isLoading: statsLoading, isError: statsError } = useEngineerDashboard();
   const { data: bounties, isLoading: bountiesLoading } = useRecommendedBounties(3);
   const { data: activity, isLoading: activityLoading } = useEngineerActivity(5);
 
@@ -60,33 +49,33 @@ export default function EngineerDashboardPage() {
   const statCards = stats ? [
     {
       label: 'Active Contracts',
-      value: String(stats.activeContracts.count),
-      trend: stats.activeContracts.trend,
+      value: String(stats.activeContracts?.count ?? 0),
+      trend: stats.activeContracts?.trend ?? 0,
       trendLabel: 'vs last month',
-      color: '#00D4FF',
+      valueClass: 'stat-value-cyan',
     },
     {
       label: 'Pending Proposals',
-      value: String(stats.pendingProposals.count),
-      trend: stats.pendingProposals.trend,
+      value: String(stats.pendingProposals?.count ?? 0),
+      trend: stats.pendingProposals?.trend ?? 0,
       trendLabel: 'vs last month',
-      color: '#7B5EA7',
+      valueClass: 'stat-value-violet',
     },
     {
       label: 'Marketplace Revenue',
-      value: stats.marketplaceRevenue.amount > 0
-        ? `₹${(stats.marketplaceRevenue.amount / 1000).toFixed(0)}K`
+      value: (stats.marketplaceRevenue?.amount ?? 0) > 0
+        ? `₹${((stats.marketplaceRevenue?.amount ?? 0) / 1000).toFixed(0)}K`
         : '₹0',
-      trend: stats.marketplaceRevenue.trend,
+      trend: stats.marketplaceRevenue?.trend ?? 0,
       trendLabel: '% vs last month',
-      color: '#F59E0B',
+      valueClass: 'stat-value-amber',
     },
     {
       label: 'Unread Messages',
-      value: String(stats.unreadMessages.count),
+      value: String(stats.unreadMessages?.count ?? 0),
       trend: 0,
       trendLabel: 'messages',
-      color: '#10B981',
+      valueClass: 'stat-value-green',
     },
   ] : null;
 
@@ -107,7 +96,7 @@ export default function EngineerDashboardPage() {
           {stats && (
             <div className="flex items-center gap-3">
               <span className="font-mono text-sm text-accent-cyan">
-                ₹{stats.walletBalance.toLocaleString('en-IN')} balance
+                ₹{Number(stats.walletBalance ?? 0).toLocaleString('en-IN')} balance
               </span>
             </div>
           )}
@@ -115,7 +104,7 @@ export default function EngineerDashboardPage() {
 
         {/* ── Stat cards ──────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {statsLoading || !statCards
+          {statsLoading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-5 space-y-3">
                   <Skeleton className="h-3 w-24" />
@@ -123,6 +112,15 @@ export default function EngineerDashboardPage() {
                   <Skeleton className="h-3 w-20" />
                 </div>
               ))
+            : statsError || !statCards
+            ? (
+                <div className="col-span-2 lg:col-span-4 bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-6 text-center">
+                  <p className="text-text-muted text-sm">Dashboard stats unavailable. Complete your engineer profile or try again later.</p>
+                  <Link href="/engineer/profile" className="mt-2 inline-block text-xs text-accent-cyan hover:underline">
+                    Set up profile →
+                  </Link>
+                </div>
+              )
             : statCards.map((card) => (
                 <StatCard key={card.label} {...card} />
               ))
@@ -195,16 +193,16 @@ export default function EngineerDashboardPage() {
 
 // ─── Stat Card ────────────────────────────────────────────────
 function StatCard({
-  label, value, trend, trendLabel, color,
+  label, value, trend, trendLabel, valueClass,
 }: {
-  label: string; value: string; trend: number; trendLabel: string; color: string;
+  label: string; value: string; trend: number; trendLabel: string; valueClass: string;
 }) {
   const isPositive = trend > 0;
   const showTrend = trend !== 0;
   return (
     <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-5 hover:border-[rgba(255,255,255,0.1)] transition-all duration-200 animate-fade-up">
       <p className="text-xs text-text-muted mb-2">{label}</p>
-      <p className="font-mono font-bold text-2xl text-text-primary mb-2" style={{ color }}>
+      <p className={cn('font-mono font-bold text-2xl mb-2', valueClass)}>
         {value}
       </p>
       {showTrend ? (
@@ -223,7 +221,8 @@ function StatCard({
 
 // ─── Bounty Card ──────────────────────────────────────────────
 function BountyCard({ bounty: b }: { bounty: RecommendedBounty }) {
-  const diffVariant = DIFF_VARIANT[b.difficulty.toLowerCase() as keyof typeof DIFF_VARIANT] ?? 'gray';
+  const diffVariant =
+    DIFF_VARIANT[(b.difficulty ?? '').toLowerCase() as keyof typeof DIFF_VARIANT] ?? 'gray';
   const daysLeft = b.daysLeft !== null ? `${b.daysLeft} days` : 'No deadline';
 
   return (
@@ -234,9 +233,9 @@ function BountyCard({ bounty: b }: { bounty: RecommendedBounty }) {
             className="w-8 h-8 rounded-lg flex items-center justify-center font-display font-bold text-bg-base text-xs shrink-0 bg-accent-cyan"
             aria-hidden="true"
           >
-            {b.company.name.slice(0, 2).toUpperCase()}
+            {(b.company?.name ?? 'CO').slice(0, 2).toUpperCase()}
           </div>
-          <span className="text-xs text-text-muted">{b.company.name}</span>
+          <span className="text-xs text-text-muted">{b.company?.name ?? 'Company'}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Badge variant={diffVariant} className="text-[10px] capitalize">
@@ -255,7 +254,7 @@ function BountyCard({ bounty: b }: { bounty: RecommendedBounty }) {
       <div className="flex items-center justify-between">
         <div>
           <p className="font-display font-bold text-accent-amber text-lg leading-none">
-            ₹{b.rewardAmount.toLocaleString('en-IN')}
+            ₹{Number(b.rewardAmount ?? 0).toLocaleString('en-IN')}
           </p>
           <p className="text-[10px] text-text-muted font-mono mt-0.5">{daysLeft} left</p>
         </div>
@@ -267,19 +266,49 @@ function BountyCard({ bounty: b }: { bounty: RecommendedBounty }) {
   );
 }
 
+const ACTIVITY_DELAY_CLASS = [
+  'anim-delay-0',
+  'anim-delay-60',
+  'anim-delay-120',
+  'anim-delay-180',
+  'anim-delay-240',
+] as const;
+
+const KNOWN_ACTIVITY_TYPES = new Set([
+  'payment_received',
+  'new_message',
+  'proposal_accepted',
+  'proposal_pending',
+  'contract_started',
+  'score_updated',
+  'bounty_won',
+  'review_received',
+]);
+
+function activityIconClass(type: string): string {
+  return KNOWN_ACTIVITY_TYPES.has(type)
+    ? `activity-icon activity-icon--${type}`
+    : 'activity-icon';
+}
+
 // ─── Activity Row ─────────────────────────────────────────────
 function ActivityRow({ item, index }: { item: ActivityItem; index: number }) {
   const icon = ACTIVITY_ICONS[item.type] || '📌';
-  const color = ACTIVITY_COLORS[item.type] || '#8892A4';
+  const delayClass = ACTIVITY_DELAY_CLASS[Math.min(index, ACTIVITY_DELAY_CLASS.length - 1)];
 
   return (
     <div
-      className="flex items-start gap-3 p-4 border-b border-[rgba(255,255,255,0.04)] last:border-0 hover:bg-[rgba(255,255,255,0.02)] transition-colors animate-fade-up"
-      style={{ animationDelay: `${index * 60}ms` }}
+      className={cn(
+        'flex items-start gap-3 p-4 border-b border-[rgba(255,255,255,0.04)] last:border-0',
+        'hover:bg-[rgba(255,255,255,0.02)] transition-colors animate-fade-up',
+        delayClass,
+      )}
     >
       <div
-        className="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0"
-        style={{ background: `${color}15`, border: `1px solid ${color}25` }}
+        className={cn(
+          'w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0',
+          activityIconClass(item.type),
+        )}
         aria-hidden="true"
       >
         {icon}

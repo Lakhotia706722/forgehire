@@ -2,7 +2,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 interface ProgressProps {
-  value: number; // 0–100
+  value: number;
   max?: number;
   label?: string;
   color?: 'cyan' | 'violet' | 'amber' | 'green' | 'red';
@@ -11,18 +11,10 @@ interface ProgressProps {
   className?: string;
 }
 
-const colorClasses = {
-  cyan:   'bg-accent-cyan',
-  violet: 'bg-accent-violet',
-  amber:  'bg-accent-amber',
-  green:  'bg-accent-green',
-  red:    'bg-accent-red',
-};
-
 const sizeClasses = {
-  sm: 'h-1',
-  md: 'h-1.5',
-  lg: 'h-2.5',
+  sm: 'nh-progress-sm',
+  md: 'nh-progress-md',
+  lg: 'nh-progress-lg',
 };
 
 export function Progress({
@@ -46,25 +38,12 @@ export function Progress({
           )}
         </div>
       )}
-      <div
-        role="progressbar"
-        aria-valuenow={value}
-        aria-valuemin={0}
-        aria-valuemax={max}
-        aria-label={label}
-        className={cn(
-          'w-full bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden',
-          sizeClasses[size]
-        )}
-      >
-        <div
-          className={cn(
-            'h-full rounded-full transition-all duration-700 ease-out',
-            colorClasses[color]
-          )}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      <progress
+        className={cn('nh-progress', sizeClasses[size], `nh-progress-${color}`)}
+        value={value}
+        max={max}
+        aria-label={label ?? 'Progress'}
+      />
     </div>
   );
 }

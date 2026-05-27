@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-import crypto from 'crypto';
+import { PrismaClient } from "@prisma/client";
+import crypto from "crypto";
 
 /**
  * DPDP Act 2023 Compliance Service
@@ -17,7 +17,11 @@ export class DPDPComplianceService {
    */
   async recordConsent(data: {
     userId: string;
-    consentType: 'marketing_email' | 'profile_recommendations' | 'webcam_proctoring' | 'public_activity';
+    consentType:
+      | "marketing_email"
+      | "profile_recommendations"
+      | "webcam_proctoring"
+      | "public_activity";
     granted: boolean;
     ipAddress: string;
     userAgent: string;
@@ -29,8 +33,8 @@ export class DPDPComplianceService {
         granted: data.granted,
         ipAddress: data.ipAddress,
         userAgent: data.userAgent,
-        timestamp: new Date()
-      }
+        timestamp: new Date(),
+      },
     });
   }
 
@@ -40,15 +44,23 @@ export class DPDPComplianceService {
   async getUserConsents(userId: string) {
     const consents = await this.prisma.userConsent.findMany({
       where: { userId },
-      orderBy: { timestamp: 'desc' },
-      distinct: ['consentType']
+      orderBy: { timestamp: "desc" },
+      distinct: ["consentType"],
     });
 
     return {
-      marketingEmail: consents.find(c => c.consentType === 'marketing_email')?.granted || false,
-      profileRecommendations: consents.find(c => c.consentType === 'profile_recommendations')?.granted || false,
-      webcamProctoring: consents.find(c => c.consentType === 'webcam_proctoring')?.granted || false,
-      publicActivity: consents.find(c => c.consentType === 'public_activity')?.granted || false
+      marketingEmail:
+        consents.find((c) => c.consentType === "marketing_email")?.granted ||
+        false,
+      profileRecommendations:
+        consents.find((c) => c.consentType === "profile_recommendations")
+          ?.granted || false,
+      webcamProctoring:
+        consents.find((c) => c.consentType === "webcam_proctoring")?.granted ||
+        false,
+      publicActivity:
+        consents.find((c) => c.consentType === "public_activity")?.granted ||
+        false,
     };
   }
 
@@ -68,13 +80,18 @@ export class DPDPComplianceService {
   /**
    * Withdraw consent
    */
-  async withdrawConsent(userId: string, consentType: string, ipAddress: string, userAgent: string) {
+  async withdrawConsent(
+    userId: string,
+    consentType: string,
+    ipAddress: string,
+    userAgent: string,
+  ) {
     return await this.recordConsent({
       userId,
       consentType: consentType as any,
       granted: false,
       ipAddress,
-      userAgent
+      userAgent,
     });
   }
 
@@ -85,11 +102,11 @@ export class DPDPComplianceService {
   async requestAccountDeletion(userId: string, reason?: string) {
     // Check if user exists
     const user = await this.prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
 
     // Create deletion request
@@ -99,8 +116,8 @@ export class DPDPComplianceService {
         reason,
         requestedAt: new Date(),
         scheduledFor: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-        status: 'pending'
-      }
+        status: "pending",
+      },
     });
 
     return deletionRequest;
@@ -112,21 +129,21 @@ export class DPDPComplianceService {
   async processAccountDeletion(deletionRequestId: string) {
     const request = await this.prisma.accountDeletionRequest.findUnique({
       where: { id: deletionRequestId },
-      include: { user: true }
+      include: { user: true },
     });
 
     if (!request) {
-      throw new Error('Deletion request not found');
+      throw new Error("Deletion request not found");
     }
 
-    if (request.status !== 'pending') {
-      throw new Error('Deletion request already processed');
+    if (request.status !== "pending") {
+      throw new Error("Deletion request already processed");
     }
 
     const userId = request.userId;
 
     // Anonymize user data
-    const anonymizedEmail = `deleted_${crypto.randomBytes(8).toString('hex')}@deleted.neuronhire.com`;
+    const anonymizedEmail = `deleted_${crypto.randomBytes(8).toString("hex")}@deleted.neuronhire.com`;
     // anonymizedName kept for audit trail purposes but not stored (PII removed)
 
     await this.prisma.$transaction(async (tx) => {
@@ -135,31 +152,31 @@ export class DPDPComplianceService {
         where: { id: userId },
         data: {
           email: anonymizedEmail,
-          clerkId: `deleted_${crypto.randomBytes(8).toString('hex')}`
-        }
+          clerkId: `deleted_${crypto.randomBytes(8).toString("hex")}`,
+        },
       });
 
       // Anonymize engineer profile
       await tx.engineerProfile.updateMany({
         where: { userId },
         data: {
-          bio: 'Account deleted',
+          bio: "Account deleted",
           location: null,
           githubUrl: null,
           linkedinUrl: null,
-          portfolioUrl: null
-        }
+          portfolioUrl: null,
+        },
       });
 
       // Anonymize company profile
       await tx.companyProfile.updateMany({
         where: { userId },
         data: {
-          description: 'Account deleted',
+          description: "Account deleted",
           website: null,
           location: null,
-          logoUrl: null
-        }
+          logoUrl: null,
+        },
       });
 
       // Delete assessment recordings (not financial)
@@ -167,22 +184,22 @@ export class DPDPComplianceService {
       await tx.assessment.updateMany({
         where: { userId },
         data: {
-          proctoringEvents: {} as any
-        }
+          proctoringEvents: {} as any,
+        },
       });
 
       // Delete chat messages (not financial)
       await tx.message.deleteMany({
-        where: { senderId: userId }
+        where: { senderId: userId },
       });
 
       // Anonymize messages in project chat
       await tx.projectChatMessage.updateMany({
         where: { senderId: userId },
         data: {
-          content: '[Message deleted]',
-          fileUrl: null
-        }
+          content: "[Message deleted]",
+          fileUrl: null,
+        },
       });
 
       // Keep financial records (payments, invoices, contracts) for 7 years
@@ -192,13 +209,13 @@ export class DPDPComplianceService {
       await tx.accountDeletionRequest.update({
         where: { id: deletionRequestId },
         data: {
-          status: 'completed',
-          processedAt: new Date()
-        }
+          status: "completed",
+          processedAt: new Date(),
+        },
       });
     });
 
-    return { success: true, message: 'Account anonymized successfully' };
+    return { success: true, message: "Account anonymized successfully" };
   }
 
   /**
@@ -208,24 +225,24 @@ export class DPDPComplianceService {
     const request = await this.prisma.accountDeletionRequest.findFirst({
       where: {
         userId,
-        status: 'pending'
+        status: "pending",
       },
-      orderBy: { requestedAt: 'desc' }
+      orderBy: { requestedAt: "desc" },
     });
 
     if (!request) {
-      throw new Error('No pending deletion request found');
+      throw new Error("No pending deletion request found");
     }
 
     await this.prisma.accountDeletionRequest.update({
       where: { id: request.id },
       data: {
-        status: 'cancelled',
-        processedAt: new Date()
-      }
+        status: "cancelled",
+        processedAt: new Date(),
+      },
     });
 
-    return { success: true, message: 'Deletion request cancelled' };
+    return { success: true, message: "Deletion request cancelled" };
   }
 
   /**
@@ -239,14 +256,14 @@ export class DPDPComplianceService {
           select: {
             id: true,
             createdAt: true,
-            proctoringEvents: true
-          }
-        }
-      }
+            proctoringEvents: true,
+          },
+        },
+      },
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
 
     const now = new Date();
@@ -254,21 +271,21 @@ export class DPDPComplianceService {
 
     // Assessment recordings to be deleted
     const recordingsToDelete = user.assessments.filter(
-      s => s.proctoringEvents && s.createdAt < ninetyDaysAgo
+      (s) => s.proctoringEvents && s.createdAt < ninetyDaysAgo,
     );
 
     return {
       assessmentRecordings: {
         total: user.assessments.length,
         toBeDeleted: recordingsToDelete.length,
-        retentionPeriod: '90 days'
+        retentionPeriod: "90 days",
       },
       chatMessages: {
-        retentionPeriod: '2 years'
+        retentionPeriod: "2 years",
       },
       financialRecords: {
-        retentionPeriod: '7 years (legal requirement)'
-      }
+        retentionPeriod: "7 years (legal requirement)",
+      },
     };
   }
 
@@ -281,12 +298,12 @@ export class DPDPComplianceService {
     const recordings = await this.prisma.assessment.findMany({
       where: {
         createdAt: {
-          lt: ninetyDaysAgo
+          lt: ninetyDaysAgo,
         },
         proctoringEvents: {
-          not: {} as any
-        }
-      }
+          not: {} as any,
+        },
+      },
     });
 
     let deletedCount = 0;
@@ -303,8 +320,8 @@ export class DPDPComplianceService {
         await this.prisma.assessment.update({
           where: { id: recording.id },
           data: {
-            proctoringEvents: {} as any
-          }
+            proctoringEvents: {} as any,
+          },
         });
 
         deletedCount++;
@@ -316,7 +333,7 @@ export class DPDPComplianceService {
     return {
       success: true,
       deletedCount,
-      message: `Deleted ${deletedCount} assessment recordings older than 90 days`
+      message: `Deleted ${deletedCount} assessment recordings older than 90 days`,
     };
   }
 
@@ -329,15 +346,15 @@ export class DPDPComplianceService {
     const result = await this.prisma.message.deleteMany({
       where: {
         createdAt: {
-          lt: twoYearsAgo
-        }
-      }
+          lt: twoYearsAgo,
+        },
+      },
     });
 
     return {
       success: true,
       deletedCount: result.count,
-      message: `Deleted ${result.count} messages older than 2 years`
+      message: `Deleted ${result.count} messages older than 2 years`,
     };
   }
 
@@ -355,16 +372,19 @@ export class DPDPComplianceService {
         companyContracts: true,
         engineerContracts: true,
         payments: true,
-        wallet: true
-      }
+        wallet: true,
+      },
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
 
     // Combine contracts from both relations
-    const allContracts = [...(user.companyContracts || []), ...(user.engineerContracts || [])];
+    const allContracts = [
+      ...(user.companyContracts || []),
+      ...(user.engineerContracts || []),
+    ];
 
     // Remove sensitive fields
     const exportData = {
@@ -372,39 +392,41 @@ export class DPDPComplianceService {
         id: user.id,
         email: user.email,
         role: user.role,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
       },
       profile: user.engineerProfile || user.companyProfile,
-      assessments: user.assessments.map(a => ({
+      assessments: user.assessments.map((a) => ({
         id: a.id,
         overallScore: a.overallScore,
         tier: a.tier,
-        createdAt: a.createdAt
+        createdAt: a.createdAt,
       })),
-      tasks: user.tasks.map(t => ({
+      tasks: user.tasks.map((t) => ({
         id: t.id,
         title: t.title,
         status: t.status,
-        createdAt: t.createdAt
+        createdAt: t.createdAt,
       })),
-      contracts: allContracts.map(c => ({
+      contracts: allContracts.map((c) => ({
         id: c.id,
         hiringMode: c.hiringMode,
         status: c.status,
-        createdAt: c.createdAt
+        createdAt: c.createdAt,
       })),
-      payments: user.payments.map(p => ({
+      payments: user.payments.map((p) => ({
         id: p.id,
         amount: p.amount,
         type: p.type,
         status: p.status,
-        createdAt: p.createdAt
+        createdAt: p.createdAt,
       })),
-      wallet: user.wallet ? {
-        balance: user.wallet.balance,
-        totalEarned: user.wallet.totalEarned,
-        totalWithdrawn: user.wallet.totalWithdrawn
-      } : null
+      wallet: user.wallet
+        ? {
+            balance: user.wallet.balance,
+            totalEarned: user.wallet.totalEarned,
+            totalWithdrawn: user.wallet.totalWithdrawn,
+          }
+        : null,
     };
 
     return exportData;
@@ -415,12 +437,12 @@ export class DPDPComplianceService {
    */
   async hasAcceptedLatestPrivacyPolicy(userId: string): Promise<boolean> {
     const latestVersion = await this.getLatestPrivacyPolicyVersion();
-    
+
     const acceptance = await this.prisma.privacyPolicyAcceptance.findFirst({
       where: {
         userId,
-        version: latestVersion
-      }
+        version: latestVersion,
+      },
     });
 
     return !!acceptance;
@@ -441,8 +463,8 @@ export class DPDPComplianceService {
         version: data.version,
         ipAddress: data.ipAddress,
         userAgent: data.userAgent,
-        acceptedAt: new Date()
-      }
+        acceptedAt: new Date(),
+      },
     });
   }
 
@@ -451,7 +473,7 @@ export class DPDPComplianceService {
    */
   private async getLatestPrivacyPolicyVersion(): Promise<string> {
     // TODO: Implement version tracking
-    return '1.0.0';
+    return "1.0.0";
   }
 
   /**
@@ -460,13 +482,14 @@ export class DPDPComplianceService {
   async getComplianceReport(userId: string) {
     const consents = await this.getUserConsents(userId);
     const retentionStatus = await this.getDataRetentionStatus(userId);
-    const hasAcceptedPrivacy = await this.hasAcceptedLatestPrivacyPolicy(userId);
+    const hasAcceptedPrivacy =
+      await this.hasAcceptedLatestPrivacyPolicy(userId);
 
     const deletionRequest = await this.prisma.accountDeletionRequest.findFirst({
       where: {
         userId,
-        status: 'pending'
-      }
+        status: "pending",
+      },
     });
 
     return {
@@ -474,14 +497,16 @@ export class DPDPComplianceService {
       retentionStatus,
       privacyPolicy: {
         accepted: hasAcceptedPrivacy,
-        latestVersion: await this.getLatestPrivacyPolicyVersion()
+        latestVersion: await this.getLatestPrivacyPolicyVersion(),
       },
-      accountDeletion: deletionRequest ? {
-        requested: true,
-        scheduledFor: deletionRequest.scheduledFor
-      } : {
-        requested: false
-      }
+      accountDeletion: deletionRequest
+        ? {
+            requested: true,
+            scheduledFor: deletionRequest.scheduledFor,
+          }
+        : {
+            requested: false,
+          },
     };
   }
 }

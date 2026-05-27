@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { AriaCheckbox } from '@/components/ui/aria-tab-button';
 
 interface NDAModalProps {
   open: boolean;
@@ -101,23 +102,21 @@ export function NDAModal({ open, onClose, onSigned, taskTitle }: NDAModalProps) 
 
           {/* Agreement checkbox */}
           <label className="flex items-start gap-3 cursor-pointer">
-            <div
+            <AriaCheckbox
+              checked={agreed}
+              onClick={() => setAgreed((a) => !a)}
+              onKeyDown={(e) => e.key === 'Enter' && setAgreed((a) => !a)}
               className={cn(
                 'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all',
                 agreed ? 'bg-accent-cyan border-accent-cyan' : 'border-[rgba(255,255,255,0.2)]'
               )}
-              onClick={() => setAgreed((a) => !a)}
-              role="checkbox"
-              aria-checked={agreed}
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && setAgreed((a) => !a)}
             >
               {agreed && (
                 <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
                   <path d="M1 4L3.5 6.5L9 1" stroke="#080B14" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               )}
-            </div>
+            </AriaCheckbox>
             <span className="text-sm text-text-secondary">
               I have read and agree to the terms of this Non-Disclosure Agreement
             </span>

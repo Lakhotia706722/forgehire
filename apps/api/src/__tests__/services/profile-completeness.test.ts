@@ -1,9 +1,9 @@
-import { ProfileCompletenessService } from '../../services/profile-completeness.service';
-import { getPrismaClient } from '../../config/database';
+import { ProfileCompletenessService } from "../../services/profile-completeness.service";
+import { getPrismaClient } from "../../config/database";
 
-jest.mock('../../config/database');
+jest.mock("../../config/database");
 
-describe('ProfileCompletenessService', () => {
+describe("ProfileCompletenessService", () => {
   let service: ProfileCompletenessService;
   let mockPrisma: any;
 
@@ -11,18 +11,18 @@ describe('ProfileCompletenessService', () => {
     mockPrisma = {
       engineerProfile: {
         findUnique: jest.fn(),
-        update: jest.fn()
-      }
+        update: jest.fn(),
+      },
     };
 
     (getPrismaClient as jest.Mock).mockReturnValue(mockPrisma);
     service = new ProfileCompletenessService();
   });
 
-  describe('calculateCompleteness', () => {
-    it('should calculate 0% for empty profile', async () => {
+  describe("calculateCompleteness", () => {
+    it("should calculate 0% for empty profile", async () => {
       mockPrisma.engineerProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
+        id: "profile-1",
         basicInfoComplete: false,
         skillsComplete: false,
         experienceComplete: false,
@@ -32,21 +32,21 @@ describe('ProfileCompletenessService', () => {
         kycComplete: false,
         skills: [],
         projects: [],
-        experiences: []
+        experiences: [],
       });
 
       mockPrisma.engineerProfile.update.mockResolvedValue({});
 
-      const result = await service.calculateCompleteness('profile-1');
+      const result = await service.calculateCompleteness("profile-1");
 
       expect(result.score).toBe(0);
       expect(result.canAccessAssessment).toBe(false);
       expect(result.missingFields.length).toBeGreaterThan(0);
     });
 
-    it('should calculate 100% for complete profile', async () => {
+    it("should calculate 100% for complete profile", async () => {
       mockPrisma.engineerProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
+        id: "profile-1",
         basicInfoComplete: true,
         skillsComplete: true,
         experienceComplete: true,
@@ -55,24 +55,24 @@ describe('ProfileCompletenessService', () => {
         paymentComplete: true,
         kycComplete: true,
         kycVerified: true,
-        upiId: 'test@upi',
-        skills: [{ id: '1' }, { id: '2' }, { id: '3' }],
-        projects: [{ id: '1' }, { id: '2' }],
-        experiences: [{ id: '1' }]
+        upiId: "test@upi",
+        skills: [{ id: "1" }, { id: "2" }, { id: "3" }],
+        projects: [{ id: "1" }, { id: "2" }],
+        experiences: [{ id: "1" }],
       });
 
       mockPrisma.engineerProfile.update.mockResolvedValue({});
 
-      const result = await service.calculateCompleteness('profile-1');
+      const result = await service.calculateCompleteness("profile-1");
 
       expect(result.score).toBe(100);
       expect(result.canAccessAssessment).toBe(true);
       expect(result.missingFields.length).toBe(0);
     });
 
-    it('should calculate 70% threshold correctly', async () => {
+    it("should calculate 70% threshold correctly", async () => {
       mockPrisma.engineerProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
+        id: "profile-1",
         basicInfoComplete: true, // 15%
         skillsComplete: true, // 20%
         experienceComplete: true, // 15%
@@ -80,22 +80,22 @@ describe('ProfileCompletenessService', () => {
         pricingComplete: false,
         paymentComplete: false,
         kycComplete: false,
-        skills: [{ id: '1' }, { id: '2' }, { id: '3' }],
-        projects: [{ id: '1' }, { id: '2' }],
-        experiences: [{ id: '1' }]
+        skills: [{ id: "1" }, { id: "2" }, { id: "3" }],
+        projects: [{ id: "1" }, { id: "2" }],
+        experiences: [{ id: "1" }],
       });
 
       mockPrisma.engineerProfile.update.mockResolvedValue({});
 
-      const result = await service.calculateCompleteness('profile-1');
+      const result = await service.calculateCompleteness("profile-1");
 
       expect(result.score).toBe(75); // 15 + 20 + 15 + 25
       expect(result.canAccessAssessment).toBe(true);
     });
 
-    it('should not allow assessment access below 70%', async () => {
+    it("should not allow assessment access below 70%", async () => {
       mockPrisma.engineerProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
+        id: "profile-1",
         basicInfoComplete: true, // 15%
         skillsComplete: true, // 20%
         experienceComplete: true, // 15%
@@ -103,22 +103,22 @@ describe('ProfileCompletenessService', () => {
         pricingComplete: false,
         paymentComplete: false,
         kycComplete: false,
-        skills: [{ id: '1' }, { id: '2' }, { id: '3' }],
+        skills: [{ id: "1" }, { id: "2" }, { id: "3" }],
         projects: [],
-        experiences: [{ id: '1' }]
+        experiences: [{ id: "1" }],
       });
 
       mockPrisma.engineerProfile.update.mockResolvedValue({});
 
-      const result = await service.calculateCompleteness('profile-1');
+      const result = await service.calculateCompleteness("profile-1");
 
       expect(result.score).toBe(50); // 15 + 20 + 15
       expect(result.canAccessAssessment).toBe(false);
     });
 
-    it('should handle partial skills completion', async () => {
+    it("should handle partial skills completion", async () => {
       mockPrisma.engineerProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
+        id: "profile-1",
         basicInfoComplete: false,
         skillsComplete: false,
         experienceComplete: false,
@@ -126,24 +126,24 @@ describe('ProfileCompletenessService', () => {
         pricingComplete: false,
         paymentComplete: false,
         kycComplete: false,
-        skills: [{ id: '1' }], // Only 1 skill, need 3
+        skills: [{ id: "1" }], // Only 1 skill, need 3
         projects: [],
-        experiences: []
+        experiences: [],
       });
 
       mockPrisma.engineerProfile.update.mockResolvedValue({});
 
-      const result = await service.calculateCompleteness('profile-1');
+      const result = await service.calculateCompleteness("profile-1");
 
       // Should get partial credit for 1/3 skills
       expect(result.score).toBeGreaterThan(0);
       expect(result.score).toBeLessThan(20);
-      expect(result.missingFields).toContain('More Skills');
+      expect(result.missingFields).toContain("More Skills");
     });
 
-    it('should handle partial projects completion', async () => {
+    it("should handle partial projects completion", async () => {
       mockPrisma.engineerProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
+        id: "profile-1",
         basicInfoComplete: false,
         skillsComplete: false,
         experienceComplete: false,
@@ -152,26 +152,26 @@ describe('ProfileCompletenessService', () => {
         paymentComplete: false,
         kycComplete: false,
         skills: [],
-        projects: [{ id: '1' }], // Only 1 project, need 2
-        experiences: []
+        projects: [{ id: "1" }], // Only 1 project, need 2
+        experiences: [],
       });
 
       mockPrisma.engineerProfile.update.mockResolvedValue({});
 
-      const result = await service.calculateCompleteness('profile-1');
+      const result = await service.calculateCompleteness("profile-1");
 
       // Should get partial credit for 1/2 projects
       expect(result.score).toBeGreaterThan(0);
       expect(result.score).toBeLessThan(25);
-      expect(result.missingFields).toContain('More Projects');
+      expect(result.missingFields).toContain("More Projects");
     });
   });
 
-  describe('updateStepCompletion', () => {
-    it('should update basic info step', async () => {
+  describe("updateStepCompletion", () => {
+    it("should update basic info step", async () => {
       mockPrisma.engineerProfile.update.mockResolvedValue({});
       mockPrisma.engineerProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
+        id: "profile-1",
         basicInfoComplete: true,
         skillsComplete: false,
         experienceComplete: false,
@@ -181,26 +181,26 @@ describe('ProfileCompletenessService', () => {
         kycComplete: false,
         skills: [],
         projects: [],
-        experiences: []
+        experiences: [],
       });
 
-      await service.updateStepCompletion('profile-1', 'basicInfo', true);
+      await service.updateStepCompletion("profile-1", "basicInfo", true);
 
       expect(mockPrisma.engineerProfile.update).toHaveBeenCalledWith({
-        where: { id: 'profile-1' },
-        data: { basicInfoComplete: true }
+        where: { id: "profile-1" },
+        data: { basicInfoComplete: true },
       });
     });
 
-    it('should throw error for invalid step', async () => {
+    it("should throw error for invalid step", async () => {
       await expect(
-        service.updateStepCompletion('profile-1', 'invalidStep', true)
-      ).rejects.toThrow('Invalid step');
+        service.updateStepCompletion("profile-1", "invalidStep", true),
+      ).rejects.toThrow("Invalid step");
     });
   });
 
-  describe('getBuilderProgress', () => {
-    it('should return progress with all steps', async () => {
+  describe("getBuilderProgress", () => {
+    it("should return progress with all steps", async () => {
       mockPrisma.engineerProfile.findUnique.mockResolvedValue({
         basicInfoComplete: true,
         skillsComplete: true,
@@ -209,10 +209,10 @@ describe('ProfileCompletenessService', () => {
         pricingComplete: false,
         paymentComplete: false,
         kycComplete: false,
-        completenessScore: 35
+        completenessScore: 35,
       });
 
-      const progress = await service.getBuilderProgress('profile-1');
+      const progress = await service.getBuilderProgress("profile-1");
 
       expect(progress.steps).toHaveLength(7);
       expect(progress.completedSteps).toBe(2);

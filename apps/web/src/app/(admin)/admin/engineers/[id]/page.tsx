@@ -8,6 +8,8 @@ import { NeuronScoreRing } from '@/components/ui/neuron-score-ring';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { avatarToneClass } from '@/lib/avatar-tone';
 import { useAdminEngineerDetail, useAdminScoreOverride, useAdminSuspendEngineer } from '@/lib/api-hooks';
 
 export default function AdminEngineerDetailPage({ params }: { params: { id: string } }) {
@@ -81,7 +83,6 @@ export default function AdminEngineerDetailPage({ params }: { params: { id: stri
   }
 
   const initials = engineer.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  const color = '#F59E0B';
 
   return (
     <div className="min-h-screen bg-bg-base">
@@ -97,13 +98,13 @@ export default function AdminEngineerDetailPage({ params }: { params: { id: stri
         <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center font-display font-bold text-bg-base text-xl" style={{ background: color }} aria-hidden="true">
+              <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center font-display font-bold text-bg-base text-xl', avatarToneClass(engineer.fullName))} aria-hidden="true">
                 {initials}
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <h1 className="font-display font-bold text-xl text-text-primary">{engineer.fullName}</h1>
-                  <TierBadge tier={engineer.neuronTier as any} />
+                  <TierBadge tier={engineer.neuronTier} />
                   {engineer.kycVerified && <Badge variant="green">KYC ✓</Badge>}
                   {engineer.flagged && <Badge variant="red">⚠ Flagged</Badge>}
                 </div>
@@ -120,13 +121,13 @@ export default function AdminEngineerDetailPage({ params }: { params: { id: stri
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Assessments', value: engineer.assessmentCount, color: '#00D4FF' },
-            { label: 'Contracts',   value: engineer.contractCount,   color: '#7B5EA7' },
-            { label: 'Products',    value: engineer.productCount,    color: '#F59E0B' },
-            { label: 'Completeness', value: `${engineer.completenessScore}%`, color: '#10B981' },
+            { label: 'Assessments', value: engineer.assessmentCount, valueClass: 'stat-value-cyan' },
+            { label: 'Contracts',   value: engineer.contractCount,   valueClass: 'stat-value-violet' },
+            { label: 'Products',    value: engineer.productCount,    valueClass: 'stat-value-amber' },
+            { label: 'Completeness', value: `${engineer.completenessScore}%`, valueClass: 'stat-value-green' },
           ].map((stat) => (
             <div key={stat.label} className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-4 text-center">
-              <p className="font-mono font-bold text-xl" style={{ color: stat.color }}>{stat.value}</p>
+              <p className={cn('font-mono font-bold text-xl', stat.valueClass)}>{stat.value}</p>
               <p className="text-xs text-text-muted mt-1">{stat.label}</p>
             </div>
           ))}

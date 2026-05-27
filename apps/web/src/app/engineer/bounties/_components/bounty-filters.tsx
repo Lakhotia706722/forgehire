@@ -4,7 +4,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { RangeSlider } from '@/components/ui/range-slider';
-import { formatReward } from '@/lib/bounty-data';
+import { AriaToggleButton, AriaSwitch, AriaRadio } from '@/components/ui/aria-tab-button';
 import type { TaskType, Difficulty } from '@/lib/bounty-data';
 
 const TASK_TYPES: TaskType[] = ['Bounty', 'Direct', 'Contest'];
@@ -88,10 +88,9 @@ export function BountyFilters({ filters, onChange, onApply, onReset }: BountyFil
         <p className="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">Type</p>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Task type filter">
           {TASK_TYPES.map((t) => (
-            <button
+            <AriaToggleButton
               key={t}
-              type="button"
-              aria-pressed={filters.types.includes(t)}
+              pressed={filters.types.includes(t)}
               onClick={() => onChange({ ...filters, types: toggle(filters.types, t) })}
               className={cn(
                 'px-3 py-1.5 rounded-full text-xs font-mono transition-all duration-150',
@@ -103,7 +102,7 @@ export function BountyFilters({ filters, onChange, onApply, onReset }: BountyFil
               )}
             >
               {t}
-            </button>
+            </AriaToggleButton>
           ))}
         </div>
       </div>
@@ -113,10 +112,9 @@ export function BountyFilters({ filters, onChange, onApply, onReset }: BountyFil
         <p className="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">Difficulty</p>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Difficulty filter">
           {DIFFICULTIES.map((d) => (
-            <button
+            <AriaToggleButton
               key={d}
-              type="button"
-              aria-pressed={filters.difficulties.includes(d)}
+              pressed={filters.difficulties.includes(d)}
               onClick={() => onChange({ ...filters, difficulties: toggle(filters.difficulties, d) })}
               className={cn(
                 'px-3 py-1.5 rounded-full text-xs font-mono transition-all duration-150',
@@ -126,7 +124,7 @@ export function BountyFilters({ filters, onChange, onApply, onReset }: BountyFil
               )}
             >
               {d}
-            </button>
+            </AriaToggleButton>
           ))}
         </div>
       </div>
@@ -187,25 +185,23 @@ export function BountyFilters({ filters, onChange, onApply, onReset }: BountyFil
 
       {/* Eligible only toggle */}
       <label className="flex items-center gap-3 cursor-pointer group">
-        <div
+        <AriaSwitch
+          checked={filters.eligibleOnly}
+          onClick={() => onChange({ ...filters, eligibleOnly: !filters.eligibleOnly })}
+          onKeyDown={(e) => e.key === 'Enter' && onChange({ ...filters, eligibleOnly: !filters.eligibleOnly })}
+          aria-label="Show eligible bounties only"
           className={cn(
             'relative w-10 h-5 rounded-full transition-colors duration-200',
             filters.eligibleOnly ? 'bg-accent-cyan' : 'bg-[rgba(255,255,255,0.1)]'
           )}
-          onClick={() => onChange({ ...filters, eligibleOnly: !filters.eligibleOnly })}
-          role="switch"
-          aria-checked={filters.eligibleOnly}
-          aria-label="Show eligible bounties only"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && onChange({ ...filters, eligibleOnly: !filters.eligibleOnly })}
         >
           <div
             className={cn(
-              'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200',
+              'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 pointer-events-none',
               filters.eligibleOnly ? 'translate-x-5' : 'translate-x-0.5'
             )}
           />
-        </div>
+        </AriaSwitch>
         <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">
           Eligible only (my score)
         </span>
@@ -217,23 +213,21 @@ export function BountyFilters({ filters, onChange, onApply, onReset }: BountyFil
         <div className="space-y-1.5" role="radiogroup" aria-label="Deadline filter">
           {DEADLINE_OPTIONS.map((opt) => (
             <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer group">
-              <div
+              <AriaRadio
+                checked={filters.deadline === opt.value}
+                onClick={() => onChange({ ...filters, deadline: opt.value })}
+                onKeyDown={(e) => e.key === 'Enter' && onChange({ ...filters, deadline: opt.value })}
                 className={cn(
                   'w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all',
                   filters.deadline === opt.value
                     ? 'border-accent-cyan bg-accent-cyan'
                     : 'border-[rgba(255,255,255,0.2)] group-hover:border-[rgba(0,212,255,0.4)]'
                 )}
-                onClick={() => onChange({ ...filters, deadline: opt.value })}
-                role="radio"
-                aria-checked={filters.deadline === opt.value}
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && onChange({ ...filters, deadline: opt.value })}
               >
                 {filters.deadline === opt.value && (
-                  <div className="w-1.5 h-1.5 rounded-full bg-bg-base" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-bg-base pointer-events-none" />
                 )}
-              </div>
+              </AriaRadio>
               <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">
                 {opt.label}
               </span>

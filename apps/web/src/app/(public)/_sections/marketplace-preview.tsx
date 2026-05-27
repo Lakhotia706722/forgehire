@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFeaturedProducts, type FeaturedProduct } from '@/lib/api-hooks';
@@ -22,21 +23,22 @@ const GRADIENTS = [
 ];
 
 function StarRating({ rating }: { rating: number }) {
+  const safeRating = Number.isFinite(rating) ? rating : 0;
   return (
-    <div className="flex items-center gap-1" aria-label={`Rating: ${rating} out of 5`}>
+    <div className="flex items-center gap-1" aria-label={`Rating: ${safeRating} out of 5`}>
       {[1, 2, 3, 4, 5].map((s) => (
         <svg
           key={s}
           width="12"
           height="12"
           viewBox="0 0 12 12"
-          fill={s <= Math.floor(rating) ? '#F59E0B' : 'rgba(255,255,255,0.1)'}
+          fill={s <= Math.floor(safeRating) ? '#F59E0B' : 'rgba(255,255,255,0.1)'}
           aria-hidden="true"
         >
           <path d="M6 1l1.39 2.82L10.5 4.27l-2.25 2.19.53 3.09L6 8.02 3.22 9.55l.53-3.09L1.5 4.27l3.11-.45L6 1z"/>
         </svg>
       ))}
-      <span className="text-xs font-mono text-text-muted ml-1">{rating.toFixed(1)}</span>
+      <span className="text-xs font-mono text-text-muted ml-1">{safeRating.toFixed(1)}</span>
     </div>
   );
 }
@@ -68,7 +70,7 @@ function EmptyProductCard() {
 }
 
 function formatPrice(product: FeaturedProduct): string {
-  const price = `₹${product.priceINR.toLocaleString('en-IN')}`;
+  const price = `₹${Number(product.priceINR ?? 0).toLocaleString('en-IN')}`;
   if (product.pricingModel === 'subscription') return `${price}/mo`;
   if (product.pricingModel === 'per_call') return `${price}/call`;
   return price;
@@ -110,7 +112,9 @@ export function MarketplacePreviewSection() {
 
 function ProductCard({ product: p, gradientIndex }: { product: FeaturedProduct; gradientIndex: number }) {
   const gradient = GRADIENTS[gradientIndex % GRADIENTS.length];
-  const categoryLabel = CATEGORY_LABELS[p.category] || p.category;
+  const categoryLabel = CATEGORY_LABELS[p.category] || p.category || 'Product';
+  const rating = Number(p.rating ?? 0);
+  const reviewCount = Number(p.reviewCount ?? 0);
 
   return (
     <article className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl overflow-hidden hover:border-[rgba(0,212,255,0.2)] hover:-translate-y-1 transition-all duration-300 group">
@@ -121,10 +125,12 @@ function ProductCard({ product: p, gradientIndex }: { product: FeaturedProduct; 
       >
         <div className="absolute inset-0 geo-pattern opacity-30" />
         {p.thumbnailUrl && !p.thumbnailUrl.includes('placeholder') ? (
-          <img
+          <Image
             src={p.thumbnailUrl}
             alt={p.name}
-            className="absolute inset-0 w-full h-full object-cover"
+            fill
+            unoptimized
+            className="object-cover"
           />
         ) : (
           <div className="relative z-10 w-12 h-12 rounded-xl bg-bg-elevated border border-[rgba(255,255,255,0.1)] flex items-center justify-center">
@@ -148,8 +154,8 @@ function ProductCard({ product: p, gradientIndex }: { product: FeaturedProduct; 
         <p className="text-text-muted text-xs mb-3 leading-relaxed line-clamp-2">{p.tagline}</p>
 
         <div className="flex items-center justify-between mb-4">
-          <StarRating rating={p.rating} />
-          <span className="text-xs text-text-muted font-mono">{p.reviewCount} reviews</span>
+          <StarRating rating={rating} />
+          <span className="text-xs text-text-muted font-mono">{reviewCount} reviews</span>
         </div>
 
         <div className="flex items-center justify-between">

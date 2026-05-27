@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 export interface FeeCalculation {
   subtotal: number;
@@ -14,16 +14,16 @@ export class FeeEngineService {
 
   // Fee percentages
   private fees = {
-    bounty: 0.10, // 10% on top (company pays)
-    task: 0.10, // 10% on top (company pays)
-    hourly: 0.10, // 10% deducted (engineer receives less)
-    project: 0.10, // 10% deducted (engineer receives less)
+    bounty: 0.1, // 10% on top (company pays)
+    task: 0.1, // 10% on top (company pays)
+    hourly: 0.1, // 10% deducted (engineer receives less)
+    project: 0.1, // 10% deducted (engineer receives less)
     marketplace_low: 0.15, // 15% for products <₹10K
-    marketplace_high: 0.20, // 20% for subscriptions/high-value
+    marketplace_high: 0.2, // 20% for subscriptions/high-value
     marketplace_threshold: 10000, // ₹10K threshold
     fulltime_low: 0.08, // 8% for CTC <₹10L
     fulltime_high: 0.12, // 12% for CTC ≥₹10L
-    fulltime_threshold: 1000000 // ₹10L threshold
+    fulltime_threshold: 1000000, // ₹10L threshold
   };
 
   constructor() {
@@ -44,7 +44,7 @@ export class FeeEngineService {
       platformFee,
       gstAmount,
       total,
-      netToEngineer: rewardAmount
+      netToEngineer: rewardAmount,
     };
   }
 
@@ -61,7 +61,7 @@ export class FeeEngineService {
       platformFee,
       gstAmount,
       total: billingAmount,
-      netToEngineer
+      netToEngineer,
     };
   }
 
@@ -78,14 +78,17 @@ export class FeeEngineService {
       platformFee,
       gstAmount,
       total: projectAmount,
-      netToEngineer
+      netToEngineer,
     };
   }
 
   /**
    * Calculate fees for marketplace product
    */
-  calculateMarketplaceFee(productPrice: number, isSubscription: boolean = false): FeeCalculation {
+  calculateMarketplaceFee(
+    productPrice: number,
+    isSubscription: boolean = false,
+  ): FeeCalculation {
     let feePercentage: number;
 
     if (isSubscription) {
@@ -105,7 +108,7 @@ export class FeeEngineService {
       platformFee,
       gstAmount,
       total: productPrice,
-      netToEngineer
+      netToEngineer,
     };
   }
 
@@ -113,9 +116,10 @@ export class FeeEngineService {
    * Calculate fees for full-time placement
    */
   calculateFullTimeFee(ctc: number): FeeCalculation {
-    const feePercentage = ctc < this.fees.fulltime_threshold
-      ? this.fees.fulltime_low
-      : this.fees.fulltime_high;
+    const feePercentage =
+      ctc < this.fees.fulltime_threshold
+        ? this.fees.fulltime_low
+        : this.fees.fulltime_high;
 
     const platformFee = ctc * feePercentage;
     const gstAmount = platformFee * this.gstRate;
@@ -126,7 +130,7 @@ export class FeeEngineService {
       platformFee,
       gstAmount,
       total,
-      netToEngineer: 0 // Not applicable for full-time
+      netToEngineer: 0, // Not applicable for full-time
     };
   }
 
@@ -141,7 +145,7 @@ export class FeeEngineService {
       subtotal: subscriptionAmount,
       platformFee: 0,
       gstAmount,
-      total
+      total,
     };
   }
 
@@ -157,38 +161,42 @@ export class FeeEngineService {
       data: {
         platformFee: data.feeCalculation.platformFee,
         gstAmount: data.feeCalculation.gstAmount,
-        netAmount: data.feeCalculation.netToEngineer
-      }
+        netAmount: data.feeCalculation.netToEngineer,
+      },
     });
   }
 
   /**
    * Get fee breakdown for display
    */
-  getFeeBreakdown(type: string, amount: number, metadata?: any): FeeCalculation {
+  getFeeBreakdown(
+    type: string,
+    amount: number,
+    metadata?: any,
+  ): FeeCalculation {
     switch (type) {
-      case 'bounty':
-      case 'task':
+      case "bounty":
+      case "task":
         return this.calculateBountyFee(amount);
-      
-      case 'hourly':
+
+      case "hourly":
         return this.calculateHourlyFee(amount);
-      
-      case 'project':
+
+      case "project":
         return this.calculateProjectFee(amount);
-      
-      case 'marketplace':
+
+      case "marketplace":
         return this.calculateMarketplaceFee(
           amount,
-          metadata?.isSubscription || false
+          metadata?.isSubscription || false,
         );
-      
-      case 'fulltime':
+
+      case "fulltime":
         return this.calculateFullTimeFee(amount);
-      
-      case 'subscription':
+
+      case "subscription":
         return this.calculateSubscriptionFee(amount);
-      
+
       default:
         throw new Error(`Unknown fee type: ${type}`);
     }
@@ -214,7 +222,7 @@ export class FeeEngineService {
       marketplace_high: `${this.fees.marketplace_high * 100}% (subscriptions/high-value)`,
       fulltime_low: `${this.fees.fulltime_low * 100}% (CTC <₹${this.fees.fulltime_threshold})`,
       fulltime_high: `${this.fees.fulltime_high * 100}% (CTC ≥₹${this.fees.fulltime_threshold})`,
-      gst: `${this.gstRate * 100}%`
+      gst: `${this.gstRate * 100}%`,
     };
   }
 

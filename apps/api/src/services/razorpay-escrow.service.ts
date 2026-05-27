@@ -1,5 +1,5 @@
-import Razorpay from 'razorpay';
-import { getEnv } from '../config/env';
+import Razorpay from "razorpay";
+import { getEnv } from "../config/env";
 
 export class RazorpayEscrowService {
   private razorpay: Razorpay;
@@ -8,7 +8,7 @@ export class RazorpayEscrowService {
     const env = getEnv();
     this.razorpay = new Razorpay({
       key_id: env.RAZORPAY_KEY_ID,
-      key_secret: env.RAZORPAY_KEY_SECRET
+      key_secret: env.RAZORPAY_KEY_SECRET,
     });
   }
 
@@ -18,7 +18,7 @@ export class RazorpayEscrowService {
   async createEscrowOrder(
     taskId: string,
     amount: number,
-    currency: string = 'INR'
+    currency: string = "INR",
   ): Promise<{ orderId: string; amount: number }> {
     try {
       const order = await this.razorpay.orders.create({
@@ -27,17 +27,17 @@ export class RazorpayEscrowService {
         receipt: `task_${taskId}`,
         notes: {
           taskId,
-          type: 'escrow'
-        }
+          type: "escrow",
+        },
       });
 
       return {
         orderId: (order as any).id,
-        amount: (order as any).amount / 100
+        amount: (order as any).amount / 100,
       };
     } catch (error) {
-      console.error('Escrow order creation error:', error);
-      throw new Error('Failed to create escrow order');
+      console.error("Escrow order creation error:", error);
+      throw new Error("Failed to create escrow order");
     }
   }
 
@@ -47,20 +47,20 @@ export class RazorpayEscrowService {
   async verifyEscrowPayment(
     orderId: string,
     paymentId: string,
-    signature: string
+    signature: string,
   ): Promise<boolean> {
     try {
-      const crypto = require('crypto');
+      const crypto = require("crypto");
       const env = getEnv();
 
       const generatedSignature = crypto
-        .createHmac('sha256', env.RAZORPAY_KEY_SECRET)
+        .createHmac("sha256", env.RAZORPAY_KEY_SECRET)
         .update(`${orderId}|${paymentId}`)
-        .digest('hex');
+        .digest("hex");
 
       return generatedSignature === signature;
     } catch (error) {
-      console.error('Payment verification error:', error);
+      console.error("Payment verification error:", error);
       return false;
     }
   }
@@ -72,30 +72,32 @@ export class RazorpayEscrowService {
     taskId: string,
     engineerUpiId: string,
     amount: number,
-    _currency: string = 'INR'
+    _currency: string = "INR",
   ): Promise<{ payoutId: string; status: string }> {
     try {
       // Note: Razorpay Payouts require RazorpayX account
       // This is a simplified implementation
       // In production, you would use Razorpay's Payout API
-      
+
       // For now, we'll create a transfer using the standard API
       // You'll need to implement actual payout logic based on your Razorpay setup
-      
+
       const payoutId = `payout_${Date.now()}_${taskId}`;
-      
+
       // TODO: Implement actual Razorpay payout API call
       // const payout = await this.razorpay.payouts.create({...});
-      
-      console.log(`Payout initiated: ${payoutId} for ₹${amount} to ${engineerUpiId}`);
-      
+
+      console.log(
+        `Payout initiated: ${payoutId} for ₹${amount} to ${engineerUpiId}`,
+      );
+
       return {
         payoutId,
-        status: 'processing'
+        status: "processing",
       };
     } catch (error) {
-      console.error('Escrow release error:', error);
-      throw new Error('Failed to release escrow');
+      console.error("Escrow release error:", error);
+      throw new Error("Failed to release escrow");
     }
   }
 
@@ -109,7 +111,7 @@ export class RazorpayEscrowService {
       amount: number;
       rank: number;
     }>,
-    currency: string = 'INR'
+    currency: string = "INR",
   ): Promise<Array<{ payoutId: string; status: string; rank: number }>> {
     const results = [];
 
@@ -119,19 +121,19 @@ export class RazorpayEscrowService {
           `${taskId}_rank${payout.rank}`,
           payout.engineerUpiId,
           payout.amount,
-          currency
+          currency,
         );
 
         results.push({
           ...result,
-          rank: payout.rank
+          rank: payout.rank,
         });
       } catch (error) {
         console.error(`Payout failed for rank ${payout.rank}:`, error);
         results.push({
-          payoutId: '',
-          status: 'failed',
-          rank: payout.rank
+          payoutId: "",
+          status: "failed",
+          rank: payout.rank,
         });
       }
     }
@@ -147,12 +149,12 @@ export class RazorpayEscrowService {
       // TODO: Implement actual Razorpay payout status check
       // const payout = await this.razorpay.payouts.fetch(payoutId);
       // return payout.status;
-      
+
       console.log(`Checking payout status: ${payoutId}`);
-      return 'processing';
+      return "processing";
     } catch (error) {
-      console.error('Get payout status error:', error);
-      return 'unknown';
+      console.error("Get payout status error:", error);
+      return "unknown";
     }
   }
 
@@ -161,21 +163,21 @@ export class RazorpayEscrowService {
    */
   async refundEscrow(
     paymentId: string,
-    amount: number
+    amount: number,
   ): Promise<{ refundId: string; status: string }> {
     try {
       const refund = await this.razorpay.payments.refund(paymentId, {
         amount: amount * 100, // Convert to paise
-        speed: 'normal'
+        speed: "normal",
       });
 
       return {
         refundId: refund.id,
-        status: refund.status
+        status: refund.status,
       };
     } catch (error) {
-      console.error('Refund error:', error);
-      throw new Error('Failed to process refund');
+      console.error("Refund error:", error);
+      throw new Error("Failed to process refund");
     }
   }
 }

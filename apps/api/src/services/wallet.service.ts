@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 export class WalletService {
   private prisma: PrismaClient;
@@ -12,7 +12,7 @@ export class WalletService {
    */
   async createWallet(userId: string) {
     const existing = await this.prisma.wallet.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (existing) {
@@ -23,8 +23,8 @@ export class WalletService {
       data: {
         userId,
         balance: 0,
-        currency: 'INR'
-      }
+        currency: "INR",
+      },
     });
   }
 
@@ -39,7 +39,7 @@ export class WalletService {
   }) {
     return await this.prisma.$transaction(async (tx) => {
       let wallet = await tx.wallet.findUnique({
-        where: { userId: data.userId }
+        where: { userId: data.userId },
       });
 
       if (!wallet) {
@@ -47,8 +47,8 @@ export class WalletService {
           data: {
             userId: data.userId,
             balance: 0,
-            currency: 'INR'
-          }
+            currency: "INR",
+          },
         });
       }
 
@@ -61,22 +61,22 @@ export class WalletService {
         data: {
           balance: balanceAfter,
           totalEarned: {
-            increment: data.amount
-          }
-        }
+            increment: data.amount,
+          },
+        },
       });
 
       // Create transaction record
       const transaction = await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
-          type: 'credit',
+          type: "credit",
           amount: data.amount,
           balanceBefore,
           balanceAfter,
           description: data.description,
-          paymentId: data.paymentId
-        }
+          paymentId: data.paymentId,
+        },
       });
 
       return { wallet: updatedWallet, transaction };
@@ -94,17 +94,17 @@ export class WalletService {
   }) {
     return await this.prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.findUnique({
-        where: { userId: data.userId }
+        where: { userId: data.userId },
       });
 
       if (!wallet) {
-        throw new Error('Wallet not found');
+        throw new Error("Wallet not found");
       }
 
       const balanceBefore = parseFloat(wallet.balance.toString());
 
       if (balanceBefore < data.amount) {
-        throw new Error('Insufficient wallet balance');
+        throw new Error("Insufficient wallet balance");
       }
 
       const balanceAfter = balanceBefore - data.amount;
@@ -113,21 +113,21 @@ export class WalletService {
       const updatedWallet = await tx.wallet.update({
         where: { userId: data.userId },
         data: {
-          balance: balanceAfter
-        }
+          balance: balanceAfter,
+        },
       });
 
       // Create transaction record
       const transaction = await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
-          type: 'debit',
+          type: "debit",
           amount: data.amount,
           balanceBefore,
           balanceAfter,
           description: data.description,
-          payoutId: data.payoutId
-        }
+          payoutId: data.payoutId,
+        },
       });
 
       return { wallet: updatedWallet, transaction };
@@ -139,7 +139,7 @@ export class WalletService {
    */
   async getBalance(userId: string): Promise<number> {
     const wallet = await this.prisma.wallet.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!wallet) {
@@ -154,7 +154,7 @@ export class WalletService {
    */
   async getWallet(userId: string) {
     let wallet = await this.prisma.wallet.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!wallet) {
@@ -169,7 +169,7 @@ export class WalletService {
    */
   async getTransactions(userId: string, limit = 50, cursor?: string) {
     const wallet = await this.prisma.wallet.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!wallet) {
@@ -181,7 +181,7 @@ export class WalletService {
       take: limit + 1,
       skip: cursor ? 1 : 0,
       cursor: cursor ? { id: cursor } : undefined,
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
 
     const hasMore = transactions.length > limit;
@@ -196,7 +196,7 @@ export class WalletService {
    */
   async getMonthlyWithdrawal(userId: string): Promise<number> {
     const wallet = await this.prisma.wallet.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!wallet) {
@@ -221,13 +221,13 @@ export class WalletService {
     await this.prisma.wallet.updateMany({
       where: {
         lastWithdrawalMonth: {
-          not: currentMonth
-        }
+          not: currentMonth,
+        },
       },
       data: {
         currentMonthWithdrawn: 0,
-        lastWithdrawalMonth: currentMonth
-      }
+        lastWithdrawalMonth: currentMonth,
+      },
     });
 
     return { success: true };
@@ -245,7 +245,7 @@ export class WalletService {
       totalEarned: parseFloat(wallet.totalEarned.toString()),
       totalWithdrawn: parseFloat(wallet.totalWithdrawn.toString()),
       monthlyWithdrawal,
-      currency: wallet.currency
+      currency: wallet.currency,
     };
   }
 }

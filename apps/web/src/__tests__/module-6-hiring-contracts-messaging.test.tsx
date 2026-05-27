@@ -257,10 +257,10 @@ describe('Module 6: Hiring, Contracts & Messaging', () => {
     it('supports keyboard navigation in conversation list', () => {
       render(<CompanyMessagesPage />);
       
-      const firstConv = screen.getAllByRole('listitem')[0];
-      firstConv.focus();
+      const firstConvBtn = screen.getByTestId('conv-item-conv-1');
+      firstConvBtn.focus();
       
-      expect(document.activeElement).toBe(firstConv);
+      expect(document.activeElement).toBe(firstConvBtn);
     });
 
     it('shows loading skeletons before data loads', async () => {

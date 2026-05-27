@@ -1,9 +1,13 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { ContractService } from '../services/contract.service';
-import { authenticate, requireCompany, requireEngineerOrCompany } from '../middleware/auth';
-import { successResponse } from '@neuronhire/shared';
-import { z } from 'zod';
-import { HiringMode } from '@prisma/client';
+import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import { ContractService } from "../services/contract.service";
+import {
+  authenticate,
+  requireCompany,
+  requireEngineerOrCompany,
+} from "../middleware/auth";
+import { successResponse } from "@neuronhire/shared";
+import { z } from "zod";
+import { HiringMode } from "@prisma/client";
 
 const createContractSchema = z.object({
   jobPostingId: z.string().uuid().optional(),
@@ -15,7 +19,7 @@ const createContractSchema = z.object({
   startDate: z.string(),
   endDate: z.string().optional(),
   rate: z.number().positive(),
-  currency: z.string().default('INR'),
+  currency: z.string().default("INR"),
   ctc: z.number().positive().optional(),
   stipendAmount: z.number().positive().optional(),
   durationMonths: z.number().positive().optional(),
@@ -43,7 +47,7 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
 
   // Create contract
   fastify.post(
-    '/contracts',
+    "/contracts",
     { preHandler: [authenticate, requireCompany] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as any).user;
@@ -55,7 +59,9 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
       });
 
       if (!companyProfile) {
-        return reply.code(404).send({ success: false, error: 'Company profile not found' });
+        return reply
+          .code(404)
+          .send({ success: false, error: "Company profile not found" });
       }
 
       const contract = await contractService.createContract({
@@ -67,12 +73,12 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
       });
 
       return reply.code(201).send(successResponse(contract));
-    }
+    },
   );
 
   // Get all my contracts
   fastify.get(
-    '/contracts',
+    "/contracts",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as any).user;
@@ -85,12 +91,12 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
       });
 
       return successResponse(contracts);
-    }
+    },
   );
 
   // Get contract by ID
   fastify.get(
-    '/contracts/:id',
+    "/contracts/:id",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as any).user;
@@ -98,27 +104,32 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
 
       const contract = await contractService.getContract(id, user.id);
       return successResponse(contract);
-    }
+    },
   );
 
   // Sign contract
   fastify.post(
-    '/contracts/:id/sign',
+    "/contracts/:id/sign",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as any).user;
       const { id } = request.params as any;
       const body = signContractSchema.parse(request.body);
-      const ipAddress = request.ip || '0.0.0.0';
+      const ipAddress = request.ip || "0.0.0.0";
 
-      const contract = await contractService.signContract(id, user.id, body.signature, ipAddress);
+      const contract = await contractService.signContract(
+        id,
+        user.id,
+        body.signature,
+        ipAddress,
+      );
       return successResponse(contract);
-    }
+    },
   );
 
   // Submit milestone
   fastify.post(
-    '/contracts/:id/milestone/:mid/submit',
+    "/contracts/:id/milestone/:mid/submit",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { mid } = request.params as any;
@@ -128,7 +139,7 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
       const milestone = await prisma.milestonePayment.update({
         where: { id: mid },
         data: {
-          status: 'submitted',
+          status: "submitted",
           submittedAt: new Date(),
           deliverables: deliverables || undefined,
           notes,
@@ -136,12 +147,12 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
       });
 
       return successResponse(milestone);
-    }
+    },
   );
 
   // Approve milestone
   fastify.post(
-    '/contracts/:id/milestone/:mid/approve',
+    "/contracts/:id/milestone/:mid/approve",
     { preHandler: [authenticate, requireCompany] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { mid } = request.params as any;
@@ -150,32 +161,36 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
       const milestone = await prisma.milestonePayment.update({
         where: { id: mid },
         data: {
-          status: 'approved',
+          status: "approved",
           approvedAt: new Date(),
         },
       });
 
       return successResponse(milestone);
-    }
+    },
   );
 
   // Create amendment
   fastify.post(
-    '/contracts/:id/amendment',
+    "/contracts/:id/amendment",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as any).user;
       const { id } = request.params as any;
       const body = amendmentSchema.parse(request.body);
 
-      const amendment = await contractService.createAmendment(id, user.id, body);
+      const amendment = await contractService.createAmendment(
+        id,
+        user.id,
+        body,
+      );
       return reply.code(201).send(successResponse(amendment));
-    }
+    },
   );
 
   // Get contract document URL
   fastify.get(
-    '/contracts/:id/document',
+    "/contracts/:id/document",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as any).user;
@@ -187,12 +202,12 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
         contractPdfUrl: contract.contractPdfUrl,
         finalContractUrl: contract.finalContractUrl,
       });
-    }
+    },
   );
 
   // Raise dispute on contract
   fastify.post(
-    '/contracts/:id/dispute',
+    "/contracts/:id/dispute",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as any).user;
@@ -208,11 +223,11 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
           raisedByUserId: user.id,
           reason,
           evidence: evidence || undefined,
-          status: 'open',
+          status: "open",
         },
       });
 
       return reply.code(201).send(successResponse(dispute));
-    }
+    },
   );
 }

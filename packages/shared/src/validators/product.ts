@@ -161,11 +161,11 @@ export const productSearchSchema = z.object({
     'apis_microservices'
   ]).optional(),
   pricingModel: z.enum(['one_time', 'subscription', 'freemium', 'per_call']).optional(),
-  minPrice: z.number().min(0).optional(),
-  maxPrice: z.number().min(0).optional(),
+  minPrice: z.coerce.number().min(0).optional(),
+  maxPrice: z.coerce.number().min(0).optional(),
   aiModel: z.string().optional(),
   industry: z.string().optional(),
-  minRating: z.number().min(0).max(5).optional(),
+  minRating: z.coerce.number().min(0).max(5).optional(),
   hasDemo: z.boolean().optional(),
   
   // Search
@@ -177,7 +177,7 @@ export const productSearchSchema = z.object({
   
   // Pagination
   cursor: z.string().optional(),
-  limit: z.number().min(1).max(100).default(20)
+  limit: z.coerce.number().min(1).max(100).default(20),
 }).refine(
   (data) => {
     if (data.minPrice && data.maxPrice) {

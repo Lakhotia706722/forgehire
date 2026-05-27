@@ -4,6 +4,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { AriaToggleButton } from '@/components/ui/aria-tab-button';
 import { TASK_CATEGORIES } from '@/lib/bounty-data';
 import type { PostTaskState } from '@/lib/bounty-data';
 
@@ -65,10 +66,9 @@ export function Step2Details({ state, onChange }: Step2Props) {
         <label className="block text-sm font-medium text-text-secondary mb-2">Categories</label>
         <div className="flex flex-wrap gap-2">
           {TASK_CATEGORIES.map((cat) => (
-            <button
+            <AriaToggleButton
               key={cat}
-              type="button"
-              aria-pressed={state.categories.includes(cat)}
+              pressed={state.categories.includes(cat)}
               onClick={() => toggleCategory(cat)}
               className={cn(
                 'text-xs px-3 py-1.5 rounded-full border transition-all duration-150',
@@ -78,7 +78,7 @@ export function Step2Details({ state, onChange }: Step2Props) {
               )}
             >
               {cat}
-            </button>
+            </AriaToggleButton>
           ))}
         </div>
       </div>

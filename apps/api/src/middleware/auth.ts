@@ -1,13 +1,15 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
-import { getPrismaClient } from '../config/database';
-import { AuthenticationError, AuthorizationError } from '@neuronhire/shared';
-import { UserRole } from '@prisma/client';
-import jwt from 'jsonwebtoken';
-import { getEnv } from '../config/env';
+import { FastifyRequest, FastifyReply } from "fastify";
+import { getPrismaClient } from "../config/database";
+import { AuthenticationError, AuthorizationError } from "@neuronhire/shared";
+import { UserRole } from "@prisma/client";
+import jwt from "jsonwebtoken";
+import { getEnv } from "../config/env";
 
 export interface AuthenticatedRequest extends FastifyRequest {
   user?: {
     id: string;
+    /** Alias for `id` — used by many route handlers */
+    userId: string;
     clerkId: string;
     email: string;
     role: UserRole;
@@ -16,13 +18,13 @@ export interface AuthenticatedRequest extends FastifyRequest {
 
 export async function authenticate(
   request: AuthenticatedRequest,
-  _reply: FastifyReply
+  _reply: FastifyReply,
 ): Promise<void> {
   try {
     const authHeader = request.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new AuthenticationError('Missing or invalid authorization header');
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      throw new AuthenticationError("Missing or invalid authorization header");
     }
 
     const token = authHeader.substring(7);
@@ -33,48 +35,53 @@ export async function authenticate(
     try {
       decoded = jwt.verify(token, env.JWT_SECRET) as typeof decoded;
     } catch {
-      throw new AuthenticationError('Invalid or expired token');
+      throw new AuthenticationError("Invalid or expired token");
     }
 
-    const clerkId = decoded.sub ?? decoded.clerkId;
-    if (!clerkId) {
-      throw new AuthenticationError('Invalid token payload');
-    }
-
-    // Get user from database
     const prisma = getPrismaClient();
-    const user = await prisma.user.findUnique({
-      where: { clerkId }
-    });
+    let user = decoded.userId
+      ? await prisma.user.findUnique({ where: { id: decoded.userId } })
+      : null;
 
     if (!user) {
-      throw new AuthenticationError('User not found');
+      const clerkId = decoded.sub ?? decoded.clerkId;
+      if (!clerkId) {
+        throw new AuthenticationError("Invalid token payload");
+      }
+      user = await prisma.user.findUnique({ where: { clerkId } });
     }
 
-    // Attach user to request
+    if (!user) {
+      throw new AuthenticationError("User not found");
+    }
+
     request.user = {
       id: user.id,
+      userId: user.id,
       clerkId: user.clerkId,
       email: user.email,
-      role: user.role
+      role: user.role,
     };
   } catch (error) {
     if (error instanceof AuthenticationError) {
       throw error;
     }
-    throw new AuthenticationError('Authentication failed');
+    throw new AuthenticationError("Authentication failed");
   }
 }
 
 export function requireRole(...allowedRoles: UserRole[]) {
-  return async (request: AuthenticatedRequest, _reply: FastifyReply): Promise<void> => {
+  return async (
+    request: AuthenticatedRequest,
+    _reply: FastifyReply,
+  ): Promise<void> => {
     if (!request.user) {
-      throw new AuthenticationError('User not authenticated');
+      throw new AuthenticationError("User not authenticated");
     }
 
     if (!allowedRoles.includes(request.user.role)) {
       throw new AuthorizationError(
-        `Access denied. Required roles: ${allowedRoles.join(', ')}`
+        `Access denied. Required roles: ${allowedRoles.join(", ")}`,
       );
     }
   };
@@ -83,4 +90,7 @@ export function requireRole(...allowedRoles: UserRole[]) {
 export const requireEngineer = requireRole(UserRole.engineer);
 export const requireCompany = requireRole(UserRole.company);
 export const requireAdmin = requireRole(UserRole.admin);
-export const requireEngineerOrCompany = requireRole(UserRole.engineer, UserRole.company);
+export const requireEngineerOrCompany = requireRole(
+  UserRole.engineer,
+  UserRole.company,
+);

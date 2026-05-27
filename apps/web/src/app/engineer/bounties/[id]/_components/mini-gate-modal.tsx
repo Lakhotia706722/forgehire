@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { AriaRadio } from '@/components/ui/aria-tab-button';
 import { MINI_GATE_QUESTIONS } from '@/lib/bounty-data';
 
 const MINI_GATE_SECONDS = 15 * 60; // 15 minutes
@@ -118,7 +119,7 @@ export function MiniGateModal({ open, onClose, onPass, requiredScore }: MiniGate
       )}
 
       {phase === 'test' && (
-        <div className="flex flex-col" style={{ minHeight: 480 }}>
+        <div className="flex flex-col min-h-[480px]">
           {/* Test header */}
           <div className="flex items-center justify-between px-6 py-3 border-b border-[rgba(255,255,255,0.06)] bg-bg-elevated">
             <span className="text-xs font-mono text-text-muted">
@@ -142,10 +143,9 @@ export function MiniGateModal({ open, onClose, onPass, requiredScore }: MiniGate
             <p className="text-text-primary text-sm font-medium leading-relaxed">{q.text}</p>
             <div className="space-y-2.5" role="radiogroup" aria-label="Answer options">
               {q.options.map((opt, i) => (
-                <button
+                <AriaRadio
                   key={i}
-                  role="radio"
-                  aria-checked={q.selectedOption === i}
+                  checked={q.selectedOption === i}
                   onClick={() => handleAnswer(i)}
                   className={cn(
                     'w-full text-left px-4 py-3 rounded-xl border text-sm transition-all duration-150',
@@ -155,7 +155,7 @@ export function MiniGateModal({ open, onClose, onPass, requiredScore }: MiniGate
                   )}
                 >
                   {opt}
-                </button>
+                </AriaRadio>
               ))}
             </div>
           </div>

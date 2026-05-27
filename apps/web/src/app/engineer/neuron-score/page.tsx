@@ -58,9 +58,9 @@ export default function NeuronScorePage() {
             <NeuronScoreRing score={score} size={140} strokeWidth={8} animate />
             <div className="text-center sm:text-left">
               <div className="flex items-center gap-3 justify-center sm:justify-start mb-2">
-                <TierBadge tier={tier as any} />
+                <TierBadge tier={tier} />
               </div>
-              <p className="font-display text-5xl font-bold text-text-primary font-mono">{score}</p>
+              <p className="text-5xl font-bold text-text-primary font-mono">{score}</p>
               <p className="text-text-muted text-sm mt-1">out of 1,000</p>
               <p className="text-text-secondary text-sm mt-3 max-w-xs">
                 You&apos;re in the top 5% of AI engineers on NeuronHire. Keep delivering quality work to maintain your Elite status.
@@ -119,14 +119,14 @@ export default function NeuronScorePage() {
           <h2 className="font-display font-semibold text-text-primary text-lg mb-4">How to Improve</h2>
           <div className="space-y-3">
             {[
-              { action: 'Complete more contracts on time', impact: '+15 pts', color: '#10B981' },
-              { action: 'Publish a product to the marketplace', impact: '+20 pts', color: '#00D4FF' },
-              { action: 'Get 5-star reviews from clients', impact: '+10 pts each', color: '#F59E0B' },
-              { action: 'Contribute to community forums', impact: '+5 pts', color: '#7B5EA7' },
+              { action: 'Complete more contracts on time', impact: '+15 pts', impactClass: 'dim-pct-green' },
+              { action: 'Publish a product to the marketplace', impact: '+20 pts', impactClass: 'dim-pct-cyan' },
+              { action: 'Get 5-star reviews from clients', impact: '+10 pts each', impactClass: 'dim-pct-amber' },
+              { action: 'Contribute to community forums', impact: '+5 pts', impactClass: 'dim-pct-violet' },
             ].map((tip) => (
               <div key={tip.action} className="flex items-center justify-between p-3 bg-bg-elevated rounded-xl">
                 <p className="text-sm text-text-secondary">{tip.action}</p>
-                <span className="text-xs font-mono font-semibold" style={{ color: tip.color }}>{tip.impact}</span>
+                <span className={cn('text-xs font-mono font-semibold', tip.impactClass)}>{tip.impact}</span>
               </div>
             ))}
           </div>

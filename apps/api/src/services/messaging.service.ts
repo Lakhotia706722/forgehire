@@ -1,12 +1,13 @@
-import { PrismaClient, MessageRequestStatus } from '@prisma/client';
-import { S3UploadService } from './s3-upload.service';
+import { PrismaClient, MessageRequestStatus } from "@prisma/client";
+import { S3UploadService } from "./s3-upload.service";
 
 export class MessagingService {
   private prisma: PrismaClient;
   private s3Service: S3UploadService;
 
   // Regex patterns for off-platform detection
-  private phoneRegex = /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\d{10}/g;
+  private phoneRegex =
+    /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\d{10}/g;
   private emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
   private whatsappRegex = /whatsapp|wa\.me|chat\.whatsapp\.com/gi;
 
@@ -18,26 +19,30 @@ export class MessagingService {
   /**
    * Send message request
    */
-  async sendMessageRequest(fromUserId: string, toUserId: string, message: string) {
+  async sendMessageRequest(
+    fromUserId: string,
+    toUserId: string,
+    message: string,
+  ) {
     // Check if request already exists
     const existing = await this.prisma.messageRequest.findUnique({
       where: {
         fromUserId_toUserId: {
           fromUserId,
-          toUserId
-        }
-      }
+          toUserId,
+        },
+      },
     });
 
     if (existing) {
       if (existing.status === MessageRequestStatus.pending) {
-        throw new Error('Message request already sent');
+        throw new Error("Message request already sent");
       }
       if (existing.status === MessageRequestStatus.approved) {
-        throw new Error('Already connected - send message directly');
+        throw new Error("Already connected - send message directly");
       }
       if (existing.status === MessageRequestStatus.declined) {
-        throw new Error('Previous request was declined');
+        throw new Error("Previous request was declined");
       }
     }
 
@@ -46,7 +51,7 @@ export class MessagingService {
         fromUserId,
         toUserId,
         message,
-        status: MessageRequestStatus.pending
+        status: MessageRequestStatus.pending,
       },
       include: {
         fromUser: {
@@ -56,17 +61,17 @@ export class MessagingService {
             role: true,
             engineerProfile: {
               select: {
-                fullName: true
-              }
+                fullName: true,
+              },
             },
             companyProfile: {
               select: {
-                companyName: true
-              }
-            }
-          }
-        }
-      }
+                companyName: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -76,32 +81,34 @@ export class MessagingService {
   async respondToMessageRequest(
     requestId: string,
     userId: string,
-    approve: boolean
+    approve: boolean,
   ) {
     const request = await this.prisma.messageRequest.findUnique({
-      where: { id: requestId }
+      where: { id: requestId },
     });
 
     if (!request) {
-      throw new Error('Message request not found');
+      throw new Error("Message request not found");
     }
 
     if (request.toUserId !== userId) {
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     if (request.status !== MessageRequestStatus.pending) {
-      throw new Error('Request already responded to');
+      throw new Error("Request already responded to");
     }
 
-    const status = approve ? MessageRequestStatus.approved : MessageRequestStatus.declined;
+    const status = approve
+      ? MessageRequestStatus.approved
+      : MessageRequestStatus.declined;
 
     const updatedRequest = await this.prisma.messageRequest.update({
       where: { id: requestId },
       data: {
         status,
-        respondedAt: new Date()
-      }
+        respondedAt: new Date(),
+      },
     });
 
     // If approved, create conversation
@@ -123,9 +130,9 @@ export class MessagingService {
       where: {
         participant1Id_participant2Id: {
           participant1Id,
-          participant2Id
-        }
-      }
+          participant2Id,
+        },
+      },
     });
 
     if (existing) {
@@ -135,8 +142,8 @@ export class MessagingService {
     return await this.prisma.conversation.create({
       data: {
         participant1Id,
-        participant2Id
-      }
+        participant2Id,
+      },
     });
   }
 
@@ -149,7 +156,7 @@ export class MessagingService {
     content: string,
     fileUrl?: string,
     fileName?: string,
-    fileSize?: number
+    fileSize?: number,
   ) {
     // Check if conversation exists
     const [participant1Id, participant2Id] = [senderId, recipientId].sort();
@@ -158,9 +165,9 @@ export class MessagingService {
       where: {
         participant1Id_participant2Id: {
           participant1Id,
-          participant2Id
-        }
-      }
+          participant2Id,
+        },
+      },
     });
 
     if (!conversation) {
@@ -169,14 +176,16 @@ export class MessagingService {
         where: {
           OR: [
             { fromUserId: senderId, toUserId: recipientId },
-            { fromUserId: recipientId, toUserId: senderId }
+            { fromUserId: recipientId, toUserId: senderId },
           ],
-          status: MessageRequestStatus.approved
-        }
+          status: MessageRequestStatus.approved,
+        },
       });
 
       if (!request) {
-        throw new Error('No approved message request found. Send a message request first.');
+        throw new Error(
+          "No approved message request found. Send a message request first.",
+        );
       }
 
       conversation = await this.createConversation(senderId, recipientId);
@@ -193,14 +202,14 @@ export class MessagingService {
         fileUrl,
         fileName,
         fileSize,
-        flagged: violation !== null
-      }
+        flagged: violation !== null,
+      },
     });
 
     // Update conversation last message time
     await this.prisma.conversation.update({
       where: { id: conversation.id },
-      data: { lastMessageAt: new Date() }
+      data: { lastMessageAt: new Date() },
     });
 
     // Handle violation
@@ -216,13 +225,13 @@ export class MessagingService {
    */
   detectOffPlatformContent(content: string): string | null {
     if (this.phoneRegex.test(content)) {
-      return 'phone';
+      return "phone";
     }
     if (this.emailRegex.test(content)) {
-      return 'email';
+      return "email";
     }
     if (this.whatsappRegex.test(content)) {
-      return 'whatsapp';
+      return "whatsapp";
     }
     return null;
   }
@@ -233,26 +242,26 @@ export class MessagingService {
   private async handleOffPlatformViolation(
     userId: string,
     violationType: string,
-    messageId: string
+    messageId: string,
   ) {
     // Check previous violations
     const previousViolations = await this.prisma.offPlatformViolation.count({
-      where: { userId }
+      where: { userId },
     });
 
-    const level = previousViolations === 0 ? 'warning' : 'review';
+    const level = previousViolations === 0 ? "warning" : "review";
 
     await this.prisma.offPlatformViolation.create({
       data: {
         userId,
         violationType,
-        detectedContent: 'Content flagged',
+        detectedContent: "Content flagged",
         messageId,
         level,
-        warningIssued: level === 'warning',
-        warningIssuedAt: level === 'warning' ? new Date() : undefined,
-        reviewRequired: level === 'review'
-      }
+        warningIssued: level === "warning",
+        warningIssuedAt: level === "warning" ? new Date() : undefined,
+        reviewRequired: level === "review",
+      },
     });
 
     // TODO: Send notification to user about violation
@@ -264,10 +273,7 @@ export class MessagingService {
   async getUserConversations(userId: string) {
     const conversations = await this.prisma.conversation.findMany({
       where: {
-        OR: [
-          { participant1Id: userId },
-          { participant2Id: userId }
-        ]
+        OR: [{ participant1Id: userId }, { participant2Id: userId }],
       },
       include: {
         participant1: {
@@ -276,15 +282,15 @@ export class MessagingService {
             email: true,
             engineerProfile: {
               select: {
-                fullName: true
-              }
+                fullName: true,
+              },
             },
             companyProfile: {
               select: {
-                companyName: true
-              }
-            }
-          }
+                companyName: true,
+              },
+            },
+          },
         },
         participant2: {
           select: {
@@ -292,28 +298,29 @@ export class MessagingService {
             email: true,
             engineerProfile: {
               select: {
-                fullName: true
-              }
+                fullName: true,
+              },
             },
             companyProfile: {
               select: {
-                companyName: true
-              }
-            }
-          }
+                companyName: true,
+              },
+            },
+          },
         },
         messages: {
-          orderBy: { createdAt: 'desc' },
-          take: 1
-        }
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
-      orderBy: { lastMessageAt: 'desc' }
+      orderBy: { lastMessageAt: "desc" },
     });
 
-    return conversations.map(conv => ({
+    return conversations.map((conv) => ({
       ...conv,
-      otherParticipant: conv.participant1Id === userId ? conv.participant2 : conv.participant1,
-      lastMessage: conv.messages[0] || null
+      otherParticipant:
+        conv.participant1Id === userId ? conv.participant2 : conv.participant1,
+      lastMessage: conv.messages[0] || null,
     }));
   }
 
@@ -324,18 +331,21 @@ export class MessagingService {
     conversationId: string,
     userId: string,
     limit = 50,
-    cursor?: string
+    cursor?: string,
   ) {
     const conversation = await this.prisma.conversation.findUnique({
-      where: { id: conversationId }
+      where: { id: conversationId },
     });
 
     if (!conversation) {
-      throw new Error('Conversation not found');
+      throw new Error("Conversation not found");
     }
 
-    if (conversation.participant1Id !== userId && conversation.participant2Id !== userId) {
-      throw new Error('Unauthorized');
+    if (
+      conversation.participant1Id !== userId &&
+      conversation.participant2Id !== userId
+    ) {
+      throw new Error("Unauthorized");
     }
 
     const messages = await this.prisma.message.findMany({
@@ -343,7 +353,7 @@ export class MessagingService {
       take: limit + 1,
       skip: cursor ? 1 : 0,
       cursor: cursor ? { id: cursor } : undefined,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
         sender: {
           select: {
@@ -351,17 +361,17 @@ export class MessagingService {
             email: true,
             engineerProfile: {
               select: {
-                fullName: true
-              }
+                fullName: true,
+              },
             },
             companyProfile: {
               select: {
-                companyName: true
-              }
-            }
-          }
-        }
-      }
+                companyName: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     const hasMore = messages.length > limit;
@@ -371,7 +381,7 @@ export class MessagingService {
     return {
       items,
       nextCursor,
-      hasMore
+      hasMore,
     };
   }
 
@@ -382,7 +392,7 @@ export class MessagingService {
     const maxSize = 50 * 1024 * 1024; // 50MB
 
     if (file.length > maxSize) {
-      throw new Error('File size exceeds 50MB limit');
+      throw new Error("File size exceeds 50MB limit");
     }
 
     const key = `messages/${Date.now()}-${fileName}`;
@@ -391,7 +401,7 @@ export class MessagingService {
     return {
       url,
       fileName,
-      fileSize: file.length
+      fileSize: file.length,
     };
   }
 
@@ -402,7 +412,7 @@ export class MessagingService {
     return await this.prisma.messageRequest.findMany({
       where: {
         toUserId: userId,
-        status: MessageRequestStatus.pending
+        status: MessageRequestStatus.pending,
       },
       include: {
         fromUser: {
@@ -413,19 +423,19 @@ export class MessagingService {
             engineerProfile: {
               select: {
                 fullName: true,
-                neuronScore: true
-              }
+                neuronScore: true,
+              },
             },
             companyProfile: {
               select: {
                 companyName: true,
-                trustScore: true
-              }
-            }
-          }
-        }
+                trustScore: true,
+              },
+            },
+          },
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
   }
 
@@ -437,20 +447,20 @@ export class MessagingService {
     senderId: string,
     content: string,
     fileUrl?: string,
-    fileName?: string
+    fileName?: string,
   ) {
     // Check if user is participant
     const participant = await this.prisma.projectChatParticipant.findUnique({
       where: {
         roomId_userId: {
           roomId,
-          userId: senderId
-        }
-      }
+          userId: senderId,
+        },
+      },
     });
 
     if (!participant) {
-      throw new Error('Not a participant of this project room');
+      throw new Error("Not a participant of this project room");
     }
 
     return await this.prisma.projectChatMessage.create({
@@ -459,7 +469,7 @@ export class MessagingService {
         senderId,
         content,
         fileUrl,
-        fileName
+        fileName,
       },
       include: {
         sender: {
@@ -468,17 +478,17 @@ export class MessagingService {
             email: true,
             engineerProfile: {
               select: {
-                fullName: true
-              }
+                fullName: true,
+              },
             },
             companyProfile: {
               select: {
-                companyName: true
-              }
-            }
-          }
-        }
-      }
+                companyName: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -491,19 +501,19 @@ export class MessagingService {
       where: {
         roomId_userId: {
           roomId,
-          userId
-        }
-      }
+          userId,
+        },
+      },
     });
 
     if (!participant) {
-      throw new Error('Not a participant of this project room');
+      throw new Error("Not a participant of this project room");
     }
 
     return await this.prisma.projectChatMessage.findMany({
       where: { roomId },
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
         sender: {
           select: {
@@ -511,17 +521,17 @@ export class MessagingService {
             email: true,
             engineerProfile: {
               select: {
-                fullName: true
-              }
+                fullName: true,
+              },
             },
             companyProfile: {
               select: {
-                companyName: true
-              }
-            }
-          }
-        }
-      }
+                companyName: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 }

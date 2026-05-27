@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { avatarToneClass } from '@/lib/avatar-tone';
 import type { SearchEngineer } from '@/lib/hiring-data';
 
 interface SmartMatchingPanelProps {
@@ -63,8 +64,10 @@ export function SmartMatchingPanel({ jobId, matchedEngineers, onInvite }: SmartM
             <div key={eng.id} className="bg-bg-elevated border border-[rgba(255,255,255,0.04)] rounded-xl p-3 hover:border-[rgba(0,212,255,0.2)] transition-all group">
               <div className="flex items-start gap-3 mb-2">
                 <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs shrink-0"
-                  style={{ background: eng.avatarColor }}
+                  className={cn(
+                    'w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-xs shrink-0',
+                    avatarToneClass(eng.name),
+                  )}
                   aria-hidden="true"
                 >
                   {eng.initials}
@@ -168,8 +171,10 @@ export function SmartMatchingPanel({ jobId, matchedEngineers, onInvite }: SmartM
                 <div key={eng.id} className="bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl p-4">
                   <div className="flex items-start gap-3 mb-2">
                     <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-sm shrink-0"
-                      style={{ background: eng.avatarColor }}
+                      className={cn(
+                        'w-10 h-10 rounded-full flex items-center justify-center font-display font-bold text-bg-base text-sm shrink-0',
+                        avatarToneClass(eng.name),
+                      )}
                       aria-hidden="true"
                     >
                       {eng.initials}
