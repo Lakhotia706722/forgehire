@@ -13,6 +13,9 @@ const RESERVED_ENGINEER_SEGMENTS = new Set([
   'contracts',
   'assessment',
   'onboarding',
+  'notifications',
+  'analytics',
+  'neuron-score',
 ]);
 
 const RESERVED_COMPANY_SEGMENTS = new Set([
@@ -25,6 +28,9 @@ const RESERVED_COMPANY_SEGMENTS = new Set([
   'analytics',
   'post-task',
   'notifications',
+  'onboarding',
+  'billing',
+  'profile',
 ]);
 
 /** Public profile pages only (single segment id, not app sections). */

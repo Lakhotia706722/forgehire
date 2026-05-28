@@ -224,10 +224,15 @@ export class AuthService {
       expiresIn: this.env.JWT_ACCESS_EXPIRY as any,
     });
 
-    // Generate refresh token
-    const refreshToken = jwt.sign({ userId: user.id }, this.env.JWT_SECRET, {
+    // Generate refresh token with a unique jti to avoid duplicate-token collisions
+    // when multiple exchange requests happen within the same second.
+    const refreshToken = jwt.sign(
+      { userId: user.id, jti: uuidv4() },
+      this.env.JWT_SECRET,
+      {
       expiresIn: this.env.JWT_REFRESH_EXPIRY as any,
-    });
+      },
+    );
 
     // Store refresh token in database
     const expiresAt = new Date();

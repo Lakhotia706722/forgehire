@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { authenticate, AuthenticatedRequest } from "../middleware/auth";
 import { getPrismaClient } from "../config/database";
 import { EngineerProfileService } from "../services/engineer-profile.service";
+import { DPDPComplianceService } from "../services/dpdp-compliance.service";
 import { z } from "zod";
 
 const updateProfileSchema = z.object({
@@ -30,6 +31,10 @@ const updateProfileSchema = z.object({
 export async function settingsRoutes(fastify: FastifyInstance): Promise<void> {
   const prisma = getPrismaClient();
   const profileService = new EngineerProfileService();
+  const dpdpService = new DPDPComplianceService();
+  const accountDeletionSchema = z.object({
+    reason: z.string().max(500).optional(),
+  });
 
   // Get engineer settings
   fastify.get(
@@ -188,6 +193,67 @@ export async function settingsRoutes(fastify: FastifyInstance): Promise<void> {
 
       await prisma.refreshToken.deleteMany({ where: { id, userId: user.id } });
       return reply.send({ revoked: true });
+    },
+  );
+
+  // Request user data export
+  fastify.post(
+    "/engineer/settings/data-export",
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const user = (request as AuthenticatedRequest).user!;
+      const data = await dpdpService.exportUserData(user.id);
+      return reply.send({
+        success: true,
+        data,
+        message: "Data export generated",
+      });
+    },
+  );
+
+  // Request account deletion (30-day grace)
+  fastify.post(
+    "/engineer/settings/account-deletion",
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const user = (request as AuthenticatedRequest).user!;
+      const body = accountDeletionSchema.parse(request.body);
+      const result = await dpdpService.requestAccountDeletion(
+        user.id,
+        body.reason,
+      );
+      return reply.code(201).send({
+        success: true,
+        data: {
+          id: result.id,
+          scheduledFor: result.scheduledFor,
+          status: result.status,
+        },
+      });
+    },
+  );
+
+  // Get account deletion status
+  fastify.get(
+    "/engineer/settings/account-deletion-status",
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const user = (request as AuthenticatedRequest).user!;
+      const requestRecord = await prisma.accountDeletionRequest.findFirst({
+        where: { userId: user.id },
+        orderBy: { requestedAt: "desc" },
+      });
+      return reply.send({
+        success: true,
+        data: requestRecord
+          ? {
+              requested: true,
+              status: requestRecord.status,
+              scheduledFor: requestRecord.scheduledFor,
+              requestedAt: requestRecord.requestedAt,
+            }
+          : { requested: false },
+      });
     },
   );
 }

@@ -29,7 +29,7 @@ export default function EngineerWalletPage() {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [filterType, setFilterType] = React.useState<string>('all');
 
-  const { data: wallet, isLoading: walletLoading } = useWallet();
+  const { data: wallet, isLoading: walletLoading, isError: walletError } = useWallet();
   const { data: txData, isLoading: txLoading } = useWalletTransactions(undefined, 20);
   const { data: earningsData, isLoading: earningsLoading } = useEarningsChart(
     chartPeriod === '30days' ? '30days' : chartPeriod === 'year' ? 'year' : '6months'
@@ -53,6 +53,12 @@ export default function EngineerWalletPage() {
   return (
     <div className="min-h-screen bg-bg-base">
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-8 space-y-8">
+        {/* Error banner */}
+        {walletError && (
+          <div className="bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-xl p-4 text-sm text-red-400">
+            Could not load wallet data. Showing cached or default values — please refresh to retry.
+          </div>
+        )}
         {/* Hero Balance Card */}
         <div className="relative bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-8 overflow-hidden">
           {/* Subtle grid pattern */}
@@ -201,6 +207,9 @@ export default function EngineerWalletPage() {
         open={showWithdrawModal}
         onClose={() => setShowWithdrawModal(false)}
         availableBalance={balance.available}
+        requiresKycForWithdrawal={Boolean(wallet?.requiresKycForWithdrawal)}
+        kycThreshold={wallet?.kycThreshold ?? 50000}
+        minimumPayout={wallet?.minimumPayout ?? 500}
       />
 
       {/* Transaction History Modal */}
@@ -222,24 +231,58 @@ interface WithdrawModalProps {
   open: boolean;
   onClose: () => void;
   availableBalance: number;
+  requiresKycForWithdrawal: boolean;
+  kycThreshold: number;
+  minimumPayout: number;
 }
 
-function WithdrawModal({ open, onClose, availableBalance }: WithdrawModalProps) {
+function WithdrawModal({
+  open,
+  onClose,
+  availableBalance,
+  requiresKycForWithdrawal,
+  kycThreshold,
+  minimumPayout,
+}: WithdrawModalProps) {
   const [amount, setAmount] = React.useState('');
   const [method, setMethod] = React.useState<'upi' | 'neft'>('upi');
   const [upiId, setUpiId] = React.useState('');
+  const [accountNumber, setAccountNumber] = React.useState('');
+  const [ifscCode, setIfscCode] = React.useState('');
+  const [accountHolderName, setAccountHolderName] = React.useState('');
   const [success, setSuccess] = React.useState(false);
   const withdraw = useWithdraw();
 
   const amountNum = parseFloat(amount) || 0;
-  const showKycBanner = amountNum > 50000;
+  const showKycBanner = amountNum > 50000 || (requiresKycForWithdrawal && amountNum > 0);
+  const belowMinimum = amountNum > 0 && amountNum < minimumPayout;
   const conversionRate = 83;
   const amountUSD = (amountNum / conversionRate).toFixed(2);
+  const methodDestinationValid =
+    method === 'upi'
+      ? Boolean(upiId.trim())
+      : Boolean(accountNumber.trim() && ifscCode.trim() && accountHolderName.trim());
+  const canWithdraw =
+    amountNum > 0 &&
+    amountNum <= availableBalance &&
+    !showKycBanner &&
+    !belowMinimum &&
+    methodDestinationValid;
 
   async function handleWithdraw() {
-    if (amountNum <= 0 || amountNum > availableBalance) return;
+    if (!canWithdraw) return;
     try {
-      await withdraw.mutateAsync({ amount: amountNum, method, upiId });
+      await withdraw.mutateAsync({
+        amount: amountNum,
+        method,
+        ...(method === 'upi'
+          ? { upiId: upiId.trim() }
+          : {
+              accountNumber: accountNumber.trim(),
+              ifscCode: ifscCode.trim().toUpperCase(),
+              accountHolderName: accountHolderName.trim(),
+            }),
+      });
       setSuccess(true);
     } catch (e: any) {
       // toast handled by mutation
@@ -249,6 +292,10 @@ function WithdrawModal({ open, onClose, availableBalance }: WithdrawModalProps) 
   function handleClose() {
     setSuccess(false);
     setAmount('');
+    setUpiId('');
+    setAccountNumber('');
+    setIfscCode('');
+    setAccountHolderName('');
     onClose();
   }
 
@@ -277,9 +324,11 @@ function WithdrawModal({ open, onClose, availableBalance }: WithdrawModalProps) 
               </svg>
               <div className="flex-1">
                 <p className="text-xs text-accent-red font-semibold">KYC Required</p>
-                <p className="text-xs text-text-secondary mt-0.5">Complete KYC to withdraw amounts over ₹50,000</p>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  Complete KYC to withdraw amounts over ₹{kycThreshold.toLocaleString('en-IN')}
+                </p>
               </div>
-              <Button size="sm" variant="danger">Complete KYC</Button>
+              <Button size="sm" variant="danger" onClick={onClose}>Complete KYC</Button>
             </div>
           )}
 
@@ -306,6 +355,11 @@ function WithdrawModal({ open, onClose, availableBalance }: WithdrawModalProps) 
                 Max: {formatCurrency(availableBalance)}
               </button>
             </div>
+            {belowMinimum && (
+              <p className="text-xs text-accent-red mt-2">
+                Minimum withdrawal amount is ₹{minimumPayout.toLocaleString('en-IN')}.
+              </p>
+            )}
           </div>
 
           <div>
@@ -332,16 +386,44 @@ function WithdrawModal({ open, onClose, availableBalance }: WithdrawModalProps) 
           </div>
 
           <div>
-            <label htmlFor="withdraw-destination" className="block text-sm font-medium text-text-secondary mb-2">
-              {method === 'upi' ? 'UPI ID' : 'Bank Account'}
-            </label>
-            <input
-              id="withdraw-destination"
-              type="text"
-              value={upiId}
-              onChange={(e) => setUpiId(e.target.value)}
-              className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-[rgba(0,212,255,0.3)]"
-            />
+            {method === 'upi' ? (
+              <>
+                <label htmlFor="withdraw-destination" className="block text-sm font-medium text-text-secondary mb-2">
+                  UPI ID
+                </label>
+                <input
+                  id="withdraw-destination"
+                  type="text"
+                  value={upiId}
+                  onChange={(e) => setUpiId(e.target.value)}
+                  className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-[rgba(0,212,255,0.3)]"
+                />
+              </>
+            ) : (
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={accountHolderName}
+                  onChange={(e) => setAccountHolderName(e.target.value)}
+                  placeholder="Account holder name"
+                  className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)]"
+                />
+                <input
+                  type="text"
+                  value={accountNumber}
+                  onChange={(e) => setAccountNumber(e.target.value)}
+                  placeholder="Bank account number"
+                  className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)]"
+                />
+                <input
+                  type="text"
+                  value={ifscCode}
+                  onChange={(e) => setIfscCode(e.target.value)}
+                  placeholder="IFSC code"
+                  className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)]"
+                />
+              </div>
+            )}
           </div>
 
           <div className="p-3 bg-[rgba(0,212,255,0.06)] border border-[rgba(0,212,255,0.2)] rounded-xl text-xs text-accent-cyan">
@@ -354,7 +436,7 @@ function WithdrawModal({ open, onClose, availableBalance }: WithdrawModalProps) 
               size="lg"
               className="flex-1"
               loading={withdraw.isPending}
-              disabled={amountNum <= 0 || amountNum > availableBalance || showKycBanner}
+              disabled={!canWithdraw}
               onClick={handleWithdraw}
               data-testid="confirm-withdraw-btn"
             >

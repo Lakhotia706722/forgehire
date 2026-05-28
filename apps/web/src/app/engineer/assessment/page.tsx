@@ -1,42 +1,82 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { PreAssessment } from './_components/pre-assessment';
 import { AssessmentTopbar } from './_components/assessment-topbar';
 import { MCQSection } from './_components/mcq-section';
 import { CodingSection } from './_components/coding-section';
 import { ScenarioSection } from './_components/scenario-section';
 import { TabSwitchWarning, InactivityWarning, CopyPasteToast } from './_components/anti-cheat-overlays';
-import { AssessmentReport } from './_components/assessment-report';
-import {
-  MOCK_MCQ, MOCK_CODING_TASKS,
-  type AssessmentSection, type MCQQuestion, type CodingTask,
-} from './_components/assessment-store';
+import { apiFetch } from '@/lib/api-fetch';
+import { useProctoring } from '@/hooks/use-proctoring';
+import type { AssessmentSection, MCQQuestion, CodingTask } from './_components/assessment-store';
 
 const TOTAL_SECONDS = 90 * 60; // 90 minutes
-const INACTIVITY_TIMEOUT = 5 * 60; // 5 minutes
-
-type Phase = 'pre' | 'active' | 'submitting' | 'report';
+type Phase = 'pre' | 'active' | 'submitting';
+type AssessmentGenerateResponse = {
+  assessmentId: string;
+  questions: Array<{
+    id: string;
+    question: string;
+    options: string[];
+  }>;
+  codingTasks: Array<{
+    id: string;
+    title: string;
+    description: string;
+    starterCode?: string;
+    testCases?: Array<{ input: unknown; expectedOutput: unknown }>;
+  }>;
+};
 
 export default function AssessmentPage() {
+  const router = useRouter();
   const [phase, setPhase] = React.useState<Phase>('pre');
+  const [assessmentId, setAssessmentId] = React.useState<string | null>(null);
   const [section, setSection] = React.useState<AssessmentSection>('mcq');
   const [secondsLeft, setSecondsLeft] = React.useState(TOTAL_SECONDS);
-  const [mcqQuestions, setMcqQuestions] = React.useState<MCQQuestion[]>(MOCK_MCQ);
+  const [mcqQuestions, setMcqQuestions] = React.useState<MCQQuestion[]>([]);
   const [currentMCQ, setCurrentMCQ] = React.useState(0);
-  const [codingTasks, setCodingTasks] = React.useState<CodingTask[]>(MOCK_CODING_TASKS);
+  const [codingTasks, setCodingTasks] = React.useState<CodingTask[]>([]);
+  const [codingTaskCases, setCodingTaskCases] = React.useState<
+    Record<string, Array<{ input: unknown; expectedOutput: unknown }>>
+  >({});
   const [currentCodingTask, setCurrentCodingTask] = React.useState(0);
   const [scenarioText, setScenarioText] = React.useState('');
-  const [tabSwitchCount, setTabSwitchCount] = React.useState(0);
-  const [showTabWarning, setShowTabWarning] = React.useState(false);
-  const [showInactivity, setShowInactivity] = React.useState(false);
-  const [inactivityLeft, setInactivityLeft] = React.useState(120);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const [showCopyToast, setShowCopyToast] = React.useState(false);
 
   const timerRef = React.useRef<ReturnType<typeof setInterval>>();
-  const inactivityRef = React.useRef<ReturnType<typeof setTimeout>>();
-  const inactivityTimerRef = React.useRef<ReturnType<typeof setInterval>>();
-  const lastActivityRef = React.useRef(Date.now());
+
+  const handleSubmit = React.useCallback(async (autoSubmitted = false) => {
+    if (!assessmentId) return;
+    clearInterval(timerRef.current);
+    setPhase('submitting');
+    try {
+      await apiFetch(`/api/assessment/${assessmentId}/submit`, {
+        method: 'POST',
+        body: JSON.stringify({
+          mcqResponses: mcqQuestions.map((q) => q.selectedOption),
+          codingSubmissions: codingTasks.map((t) => ({ id: t.id, code: t.code })),
+          caseResponse: scenarioText,
+          autoSubmitted,
+        }),
+      });
+      router.push(`/engineer/assessment/result?id=${assessmentId}`);
+    } catch {
+      router.push(`/engineer/assessment/result?id=${assessmentId}`);
+    }
+  }, [assessmentId, mcqQuestions, codingTasks, scenarioText, router]);
+
+  const proctor = useProctoring({
+    assessmentId,
+    enabled: phase === 'active',
+    onForceSubmit: () => {
+      void handleSubmit(true);
+    },
+  });
 
   // ── Countdown timer ──────────────────────────────────────────
   React.useEffect(() => {
@@ -54,28 +94,9 @@ export default function AssessmentPage() {
     }, 1000);
 
     return () => clearInterval(timerRef.current);
-  }, [phase]);
+  }, [phase, handleSubmit]);
 
-  // ── Tab visibility detection ──────────────────────────────────
-  React.useEffect(() => {
-    if (phase !== 'active') return;
-
-    function handleVisibilityChange() {
-      if (document.hidden) {
-        setTabSwitchCount((c) => {
-          const newCount = c + 1;
-          setShowTabWarning(true);
-          if (newCount >= 3) handleSubmit();
-          return newCount;
-        });
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [phase]);
-
-  // ── Copy-paste prevention ─────────────────────────────────────
+  // ── Copy/paste toast feedback ─────────────────────────────────
   React.useEffect(() => {
     if (phase !== 'active') return;
 
@@ -85,9 +106,6 @@ export default function AssessmentPage() {
       setTimeout(() => setShowCopyToast(false), 3000);
     }
     function handlePaste(e: ClipboardEvent) {
-      // Allow paste in Monaco editor (it handles its own events)
-      const target = e.target as HTMLElement;
-      if (target.closest('[data-testid="monaco-editor-container"]')) return;
       e.preventDefault();
       setShowCopyToast(true);
       setTimeout(() => setShowCopyToast(false), 3000);
@@ -100,44 +118,6 @@ export default function AssessmentPage() {
       document.removeEventListener('paste', handlePaste);
     };
   }, [phase]);
-
-  // ── Inactivity detection ──────────────────────────────────────
-  React.useEffect(() => {
-    if (phase !== 'active') return;
-
-    function resetInactivity() {
-      lastActivityRef.current = Date.now();
-      if (showInactivity) {
-        setShowInactivity(false);
-        clearInterval(inactivityTimerRef.current);
-      }
-      clearTimeout(inactivityRef.current);
-      inactivityRef.current = setTimeout(() => {
-        setShowInactivity(true);
-        setInactivityLeft(120);
-        inactivityTimerRef.current = setInterval(() => {
-          setInactivityLeft((prev) => {
-            if (prev <= 1) {
-              clearInterval(inactivityTimerRef.current);
-              handleSubmit();
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-      }, INACTIVITY_TIMEOUT * 1000);
-    }
-
-    const events = ['mousemove', 'keydown', 'click', 'scroll'];
-    events.forEach((e) => document.addEventListener(e, resetInactivity));
-    resetInactivity();
-
-    return () => {
-      events.forEach((e) => document.removeEventListener(e, resetInactivity));
-      clearTimeout(inactivityRef.current);
-      clearInterval(inactivityTimerRef.current);
-    };
-  }, [phase, showInactivity]);
 
   // ── Assessment keyboard shortcuts ────────────────────────────
   // Enter = select highlighted MCQ option, Alt+N = next, Alt+P = previous
@@ -183,17 +163,54 @@ export default function AssessmentPage() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [phase, section, currentMCQ, mcqQuestions]);
 
-  function handleBegin() {
-    setPhase('active');
-    // Request fullscreen
-    document.documentElement.requestFullscreen?.().catch(() => {});
-  }
-
-  function handleSubmit() {
-    clearInterval(timerRef.current);
-    setPhase('submitting');
-    // Simulate report generation (2s)
-    setTimeout(() => setPhase('report'), 2000);
+  async function handleBegin() {
+    setLoading(true);
+    setError(null);
+    try {
+      const generated = await apiFetch<AssessmentGenerateResponse>('/api/assessment/generate', {
+        method: 'POST',
+      });
+      setAssessmentId(generated.assessmentId);
+      await apiFetch(`/api/assessment/${generated.assessmentId}/start`, {
+        method: 'POST',
+      });
+      setMcqQuestions(
+        generated.questions.map((q, i) => ({
+          id: q.id,
+          number: i + 1,
+          text: q.question,
+          options: q.options,
+          selectedOption: null,
+          flagged: false,
+        })),
+      );
+      setCodingTasks(
+        generated.codingTasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          examples: [],
+          constraints: [],
+          code: task.starterCode ?? '',
+          output: '',
+          running: false,
+        })),
+      );
+      setCodingTaskCases(
+        generated.codingTasks.reduce<Record<string, Array<{ input: unknown; expectedOutput: unknown }>>>(
+          (acc, task) => {
+            acc[task.id] = task.testCases ?? [];
+            return acc;
+          },
+          {},
+        ),
+      );
+      setPhase('active');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to start assessment');
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleAnswer(questionId: string, optionIndex: number) {
@@ -214,25 +231,65 @@ export default function AssessmentPage() {
     );
   }
 
-  function handleRunCode(taskId: string) {
+  async function handleRunCode(taskId: string) {
+    if (!assessmentId) return;
+    const task = codingTasks.find((t) => t.id === taskId);
+    if (!task) return;
     setCodingTasks((prev) =>
       prev.map((t) => t.id === taskId ? { ...t, running: true, output: '' } : t)
     );
-    // Simulate code execution
-    setTimeout(() => {
+    try {
+      const result = await apiFetch<{
+        stdout: string;
+        stderr: string;
+        passed: Array<{ testCase: number }>;
+        failed: Array<{ testCase: number; error?: string }>;
+      }>('/api/assessment/run-code', {
+        method: 'POST',
+        body: JSON.stringify({
+          code: task.code,
+          language: 'python',
+          testCases: (codingTaskCases[task.id] ?? []).map((tc) => ({
+            input: tc.input,
+            expectedOutput: tc.expectedOutput,
+            hidden: false,
+          })),
+        }),
+      });
+      const output = [
+        result.stdout,
+        result.stderr,
+        `Passed: ${result.passed.length}, Failed: ${result.failed.length}`,
+      ]
+        .filter(Boolean)
+        .join('\n');
       setCodingTasks((prev) =>
         prev.map((t) => t.id === taskId ? {
           ...t,
           running: false,
-          output: '✓ Test case 1 passed\n✓ Test case 2 passed\n✗ Test case 3 failed: Expected [1, 2] but got [2, 1]\n\nPassed: 2/3 test cases',
+          output,
         } : t)
       );
-    }, 1500);
+    } catch (e) {
+      setCodingTasks((prev) =>
+        prev.map((t) => t.id === taskId ? {
+          ...t,
+          running: false,
+          output: e instanceof Error ? e.message : 'Run failed',
+        } : t)
+      );
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────
   if (phase === 'pre') {
-    return <PreAssessment onBegin={handleBegin} />;
+    return (
+      <div>
+        <PreAssessment onBegin={() => { void handleBegin(); }} />
+        {loading && <p className="text-center text-xs text-text-muted -mt-8 pb-8">Generating your assessment...</p>}
+        {error && <p className="text-center text-xs text-accent-red -mt-8 pb-8">{error}</p>}
+      </div>
+    );
   }
 
   if (phase === 'submitting') {
@@ -260,17 +317,13 @@ export default function AssessmentPage() {
     );
   }
 
-  if (phase === 'report') {
-    return <AssessmentReport />;
-  }
-
   // Active assessment
   return (
     <div className="flex flex-col h-screen bg-bg-base overflow-hidden">
       <AssessmentTopbar
         section={section}
         secondsLeft={secondsLeft}
-        tabSwitchCount={tabSwitchCount}
+        tabSwitchCount={proctor.tabSwitchCount}
       />
 
       {/* Section content — below fixed topbar */}
@@ -326,7 +379,9 @@ export default function AssessmentPage() {
           )}
         </div>
         <button
-          onClick={handleSubmit}
+          onClick={() => {
+            void handleSubmit();
+          }}
           className="text-xs px-4 py-2 rounded-lg bg-accent-red text-white font-medium hover:brightness-110 transition-all"
         >
           Submit Assessment
@@ -334,22 +389,37 @@ export default function AssessmentPage() {
       </div>
 
       {/* Anti-cheat overlays */}
-      {showTabWarning && (
+      {proctor.showTabWarning && (
         <TabSwitchWarning
-          count={tabSwitchCount}
-          onReturn={() => setShowTabWarning(false)}
+          count={proctor.tabSwitchCount}
+          onReturn={proctor.acknowledgeTabWarning}
         />
       )}
-      {showInactivity && (
+      {proctor.showInactivityWarning && (
         <InactivityWarning
-          secondsLeft={inactivityLeft}
-          onDismiss={() => {
-            setShowInactivity(false);
-            clearInterval(inactivityTimerRef.current);
-          }}
+          secondsLeft={proctor.inactivityCountdown}
+          onDismiss={proctor.dismissInactivityWarning}
         />
       )}
       {showCopyToast && <CopyPasteToast />}
+      {proctor.showFullscreenOverlay && (
+        <div className="fixed inset-0 z-[120] bg-black/75 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-bg-elevated border border-[rgba(255,255,255,0.15)] rounded-xl p-6 max-w-md text-center">
+            <p className="text-text-primary font-semibold mb-2">Fullscreen required</p>
+            <p className="text-text-secondary text-sm mb-4">
+              Re-enter fullscreen to continue the assessment.
+            </p>
+            <button
+              className="px-4 py-2 rounded bg-accent-cyan text-bg-base text-sm font-medium"
+              onClick={() => {
+                document.documentElement.requestFullscreen?.().catch(() => {});
+              }}
+            >
+              Enter Fullscreen
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

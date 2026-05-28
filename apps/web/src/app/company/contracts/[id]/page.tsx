@@ -7,8 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { type MilestoneStatus } from '@/lib/hiring-data';
 import { avatarToneClass, initialsFromName } from '@/lib/avatar-tone';
 import { Progress } from '@/components/ui/progress';
-import { useContractDetail } from '@/lib/api-hooks';
+import {
+  useContractDetail,
+  useApproveContractMilestone,
+  useRaiseContractDispute,
+} from '@/lib/api-hooks';
 import { Skeleton } from '@/components/ui/skeleton';
+import { apiFetch } from '@/lib/api-fetch';
+import { toast } from 'sonner';
 
 function formatCountdown72h(submittedAt: string): string {
   const deadline = new Date(new Date(submittedAt).getTime() + 72 * 60 * 60 * 1000);
@@ -78,10 +84,17 @@ const MILESTONE_UI: Record<
 };
 
 export default function CompanyContractTrackerPage({ params }: { params: { id: string } }) {
-  const { data: contract, isLoading, error } = useContractDetail(params.id);
+  const { data: contract, isLoading, error, refetch } = useContractDetail(params.id);
+  const approveMilestone = useApproveContractMilestone(params.id);
+  const raiseDispute = useRaiseContractDispute(params.id);
   const [showDispute, setShowDispute] = React.useState(false);
+  const [showAmendment, setShowAmendment] = React.useState(false);
   const [countdown, setCountdown] = React.useState<Record<string, string>>({});
-  const [approvingMilestone, setApprovingMilestone] = React.useState<string | null>(null);
+  const [disputeReason, setDisputeReason] = React.useState('Deliverables not meeting requirements');
+  const [disputeDescription, setDisputeDescription] = React.useState('');
+  const [amendmentReason, setAmendmentReason] = React.useState('');
+  const [amendmentChanges, setAmendmentChanges] = React.useState('');
+  const [requestingAmendment, setRequestingAmendment] = React.useState(false);
 
   const submittedMilestoneIds = contract?.milestones
     .filter((m) => m.status === 'submitted' && m.submittedAt)
@@ -106,14 +119,53 @@ export default function CompanyContractTrackerPage({ params }: { params: { id: s
   }, [submittedMilestoneIds]);
 
   async function handleApproveMilestone(milestoneId: string) {
-    setApprovingMilestone(milestoneId);
     try {
-      await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001'}/api/contracts/${params.id}/milestone/${milestoneId}/approve`,
-        { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } },
-      );
+      await approveMilestone.mutateAsync(milestoneId);
+      toast.success('Milestone approved');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to approve milestone');
+    }
+  }
+
+  async function handleSubmitDispute() {
+    if (disputeDescription.trim().length < 10) {
+      toast.error('Dispute description must be at least 10 characters');
+      return;
+    }
+    try {
+      await raiseDispute.mutateAsync({
+        reason: `${disputeReason}: ${disputeDescription.trim()}`,
+      });
+      setShowDispute(false);
+      setDisputeDescription('');
+      toast.success('Dispute submitted');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to submit dispute');
+    }
+  }
+
+  async function handleRequestAmendment() {
+    if (amendmentReason.trim().length < 5 || amendmentChanges.trim().length < 10) {
+      toast.error('Please add reason and scope changes');
+      return;
+    }
+    setRequestingAmendment(true);
+    try {
+      await apiFetch(`/api/contracts/${params.id}/amendment`, {
+        method: 'POST',
+        body: JSON.stringify({
+          reason: amendmentReason.trim(),
+          changes: { scope: amendmentChanges.trim() },
+        }),
+      });
+      setShowAmendment(false);
+      setAmendmentReason('');
+      setAmendmentChanges('');
+      toast.success('Scope change requested');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to request scope change');
     } finally {
-      setApprovingMilestone(null);
+      setRequestingAmendment(false);
     }
   }
 
@@ -129,7 +181,12 @@ export default function CompanyContractTrackerPage({ params }: { params: { id: s
   if (error || !contract) {
     return (
       <div className="min-h-screen bg-bg-base flex items-center justify-center">
-        <p className="text-text-muted">Failed to load contract</p>
+        <div className="text-center">
+          <p className="text-text-muted">Failed to load contract</p>
+          <Button className="mt-3" size="sm" variant="secondary" onClick={() => { void refetch(); }}>
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
@@ -158,6 +215,11 @@ export default function CompanyContractTrackerPage({ params }: { params: { id: s
                 <Badge variant="gray">{contract.hiringMode.replace('_', ' ')}</Badge>
               </div>
               <h1 className="font-display font-bold text-xl text-text-primary">{contract.title}</h1>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setShowAmendment(true)}>
+                Request Scope Change
+              </Button>
             </div>
           </div>
 
@@ -252,7 +314,7 @@ export default function CompanyContractTrackerPage({ params }: { params: { id: s
                           <Button
                             size="sm"
                             className="flex-1 h-8 text-xs"
-                            loading={approvingMilestone === m.id}
+                            loading={approveMilestone.isPending}
                             onClick={() => handleApproveMilestone(m.id)}
                             data-testid={`approve-btn-${m.id}`}
                           >
@@ -308,11 +370,20 @@ export default function CompanyContractTrackerPage({ params }: { params: { id: s
             <h2 className="font-display font-semibold text-accent-red">Raise Dispute</h2>
             <div>
               <label className="block text-xs text-text-muted mb-1.5">Reason</label>
-              <select className="w-full bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[rgba(0,212,255,0.3)] [color-scheme:dark]" aria-label="Dispute reason">
-                <option>Deliverables not meeting requirements</option>
-                <option>Incomplete work submitted</option>
-                <option>Quality below agreed standard</option>
-                <option>Other</option>
+              <select
+                value={disputeReason}
+                onChange={(e) => setDisputeReason(e.target.value)}
+                className="w-full bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[rgba(0,212,255,0.3)] [color-scheme:dark]"
+                aria-label="Dispute reason"
+              >
+                {[
+                  'Deliverables not meeting requirements',
+                  'Incomplete work submitted',
+                  'Quality below agreed standard',
+                  'Other',
+                ].map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -320,6 +391,8 @@ export default function CompanyContractTrackerPage({ params }: { params: { id: s
               <textarea
                 id="dispute-description"
                 rows={3}
+                value={disputeDescription}
+                onChange={(e) => setDisputeDescription(e.target.value)}
                 placeholder="Describe the issue in detail..."
                 aria-label="Dispute description"
                 className="w-full bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)] resize-none"
@@ -335,8 +408,54 @@ export default function CompanyContractTrackerPage({ params }: { params: { id: s
               />
             </div>
             <div className="flex gap-3">
-              <Button variant="danger" size="md" className="flex-1">Submit Dispute</Button>
+              <Button
+                variant="danger"
+                size="md"
+                className="flex-1"
+                loading={raiseDispute.isPending}
+                onClick={() => { void handleSubmitDispute(); }}
+              >
+                Submit Dispute
+              </Button>
               <Button variant="ghost" size="md" onClick={() => setShowDispute(false)}>Cancel</Button>
+            </div>
+          </div>
+        )}
+
+        {showAmendment && (
+          <div className="bg-bg-surface border border-[rgba(255,255,255,0.08)] rounded-2xl p-5 space-y-4">
+            <h2 className="font-display font-semibold text-text-primary">Request Scope Change</h2>
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5">Reason</label>
+              <input
+                value={amendmentReason}
+                onChange={(e) => setAmendmentReason(e.target.value)}
+                placeholder="Why is the change needed?"
+                className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2.5 text-sm text-text-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5">Requested Changes</label>
+              <textarea
+                rows={4}
+                value={amendmentChanges}
+                onChange={(e) => setAmendmentChanges(e.target.value)}
+                placeholder="Describe milestone/scope changes..."
+                className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary resize-none"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                size="md"
+                className="flex-1"
+                loading={requestingAmendment}
+                onClick={() => { void handleRequestAmendment(); }}
+              >
+                Submit Amendment Request
+              </Button>
+              <Button variant="ghost" size="md" onClick={() => setShowAmendment(false)}>
+                Cancel
+              </Button>
             </div>
           </div>
         )}

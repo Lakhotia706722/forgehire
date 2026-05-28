@@ -4,7 +4,6 @@ import { getRedisClient } from "../config/redis";
 import {
   authenticate,
   requireAdmin,
-  AuthenticatedRequest,
 } from "../middleware/auth";
 import { withDbFallback } from "../utils/with-db-fallback";
 

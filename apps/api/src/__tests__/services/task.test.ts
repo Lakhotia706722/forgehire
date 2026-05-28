@@ -1,5 +1,5 @@
 import { TaskService } from "../../services/task.service";
-import { PrismaClient, TaskStatus, UserRole } from "@prisma/client";
+import { PrismaClient, SubmissionStatus, TaskStatus, UserRole } from "@prisma/client";
 import { hasTestDatabase } from "../db-test-flag";
 
 // Mock dependencies
@@ -344,6 +344,475 @@ describeOrSkip("TaskService", () => {
 
       expect(validTotal).toBe(100);
       expect(invalidTotal).not.toBe(100);
+    });
+  });
+
+  describe("Submission Finalization Guards", () => {
+    async function createSubmissionWithStatus(status: SubmissionStatus) {
+      const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      const company = await prisma.user.create({
+        include: { companyProfile: true, engineerProfile: true },
+        data: {
+          clerkId: `clerk_test_company_guard_${suffix}`,
+          email: `company_guard_${suffix}@test.com`,
+          role: UserRole.company,
+          companyProfile: {
+            create: {
+              companyName: `Guard Test Company ${suffix}`,
+              trustScore: 82,
+            },
+          },
+        },
+      });
+
+      const engineer = await prisma.user.create({
+        include: { companyProfile: true, engineerProfile: true },
+        data: {
+          clerkId: `clerk_test_engineer_guard_${suffix}`,
+          email: `engineer_guard_${suffix}@test.com`,
+          role: UserRole.engineer,
+          engineerProfile: {
+            create: {
+              fullName: `Guard Engineer ${suffix}`,
+              neuronScore: 700,
+              completenessScore: 90,
+            },
+          },
+        },
+      });
+
+      const task = await prisma.task.create({
+        data: {
+          userId: company.id,
+          companyProfileId: company.companyProfile!.id,
+          title: `Submission guard task ${suffix}`,
+          type: "bounty",
+          category: ["AI"],
+          problemStatement: "Guard state transitions for submission decisions",
+          expectedOutcome: "State transitions are blocked correctly",
+          deliverables: [{ title: "Tests", description: "Guard transition tests" }],
+          techRequirements: ["TypeScript"],
+          timeline: 7,
+          rewardAmount: 10000,
+          paymentType: "fixed",
+          selectionCriteria: [{ name: "Correctness", weight: 100 }],
+          difficulty: "easy",
+          status: TaskStatus.in_review,
+          escrowDeposited: true,
+        },
+      });
+
+      const submission = await prisma.taskSubmission.create({
+        data: {
+          taskId: task.id,
+          userId: engineer.id,
+          engineerProfileId: engineer.engineerProfile!.id,
+          description: "Initial submission",
+          status,
+        },
+      });
+
+      return { company, engineer, task, submission };
+    }
+
+    async function cleanupSubmissionFixture(fixture: {
+      company: { id: string };
+      engineer: { id: string };
+      task: { id: string };
+      submission: { id: string };
+    }) {
+      await prisma.taskSubmission
+        .delete({ where: { id: fixture.submission.id } })
+        .catch(() => {});
+      await prisma.task.delete({ where: { id: fixture.task.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: fixture.company.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: fixture.engineer.id } }).catch(() => {});
+    }
+
+    it.each([
+      SubmissionStatus.accepted,
+      SubmissionStatus.rejected,
+      SubmissionStatus.winner,
+    ])(
+      "should block evaluateSubmission for finalized status %s",
+      async (finalizedStatus) => {
+        const fixture = await createSubmissionWithStatus(finalizedStatus);
+
+        await expect(
+          taskService.evaluateSubmission(
+            fixture.submission.id,
+            fixture.company.id,
+            {
+              submissionId: fixture.submission.id,
+              score: 88,
+              feedback: "Re-evaluation attempt",
+            },
+          ),
+        ).rejects.toThrow(
+          `Cannot evaluate finalized submission with status: ${finalizedStatus}`,
+        );
+
+        await cleanupSubmissionFixture(fixture);
+      },
+    );
+  });
+
+  describe("Winner Selection Guards", () => {
+    async function createWinnerSelectionFixture() {
+      const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      const company = await prisma.user.create({
+        include: { companyProfile: true },
+        data: {
+          clerkId: `clerk_test_company_winner_${suffix}`,
+          email: `company_winner_${suffix}@test.com`,
+          role: UserRole.company,
+          companyProfile: {
+            create: {
+              companyName: `Winner Guard Company ${suffix}`,
+              trustScore: 85,
+            },
+          },
+        },
+      });
+
+      const engineerA = await prisma.user.create({
+        include: { engineerProfile: true },
+        data: {
+          clerkId: `clerk_test_engineer_winner_a_${suffix}`,
+          email: `engineer_winner_a_${suffix}@test.com`,
+          role: UserRole.engineer,
+          engineerProfile: {
+            create: {
+              fullName: `Winner Guard Engineer A ${suffix}`,
+              neuronScore: 740,
+              completenessScore: 91,
+              upiId: "winner-a@upi",
+            },
+          },
+        },
+      });
+
+      const engineerB = await prisma.user.create({
+        include: { engineerProfile: true },
+        data: {
+          clerkId: `clerk_test_engineer_winner_b_${suffix}`,
+          email: `engineer_winner_b_${suffix}@test.com`,
+          role: UserRole.engineer,
+          engineerProfile: {
+            create: {
+              fullName: `Winner Guard Engineer B ${suffix}`,
+              neuronScore: 760,
+              completenessScore: 93,
+              upiId: "winner-b@upi",
+            },
+          },
+        },
+      });
+
+      const task = await prisma.task.create({
+        data: {
+          userId: company.id,
+          companyProfileId: company.companyProfile!.id,
+          title: `Winner guard task ${suffix}`,
+          type: "bounty",
+          category: ["AI"],
+          problemStatement: "Validate winner selection transitions",
+          expectedOutcome: "Winner selection guard coverage",
+          deliverables: [{ title: "Guard tests", description: "No invalid winner transitions" }],
+          techRequirements: ["TypeScript"],
+          timeline: 10,
+          rewardAmount: 25000,
+          paymentType: "fixed",
+          selectionCriteria: [{ name: "Quality", weight: 100 }],
+          difficulty: "medium",
+          status: TaskStatus.in_review,
+          escrowDeposited: true,
+        },
+      });
+
+      const rejectedSubmission = await prisma.taskSubmission.create({
+        data: {
+          taskId: task.id,
+          userId: engineerA.id,
+          engineerProfileId: engineerA.engineerProfile!.id,
+          description: "Rejected attempt",
+          status: SubmissionStatus.rejected,
+        },
+      });
+
+      const winnerSubmission = await prisma.taskSubmission.create({
+        data: {
+          taskId: task.id,
+          userId: engineerB.id,
+          engineerProfileId: engineerB.engineerProfile!.id,
+          description: "Existing winner",
+          status: SubmissionStatus.winner,
+          isWinner: true,
+        },
+      });
+
+      const anotherSubmission = await prisma.taskSubmission.create({
+        data: {
+          taskId: task.id,
+          userId: engineerA.id,
+          engineerProfileId: engineerA.engineerProfile!.id,
+          description: "Another pending submission",
+          status: SubmissionStatus.pending,
+        },
+      });
+
+      return {
+        company,
+        task,
+        engineerA,
+        engineerB,
+        rejectedSubmission,
+        winnerSubmission,
+        anotherSubmission,
+      };
+    }
+
+    async function cleanupWinnerFixture(fixture: {
+      company: { id: string };
+      task: { id: string };
+      engineerA: { id: string };
+      engineerB: { id: string };
+      rejectedSubmission: { id: string };
+      winnerSubmission: { id: string };
+      anotherSubmission: { id: string };
+    }) {
+      await prisma.taskSubmission
+        .deleteMany({
+          where: {
+            id: {
+              in: [
+                fixture.rejectedSubmission.id,
+                fixture.winnerSubmission.id,
+                fixture.anotherSubmission.id,
+              ],
+            },
+          },
+        })
+        .catch(() => {});
+      await prisma.task.delete({ where: { id: fixture.task.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: fixture.company.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: fixture.engineerA.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: fixture.engineerB.id } }).catch(() => {});
+    }
+
+    it("should reject selecting a rejected submission as winner", async () => {
+      const fixture = await createWinnerSelectionFixture();
+
+      await expect(
+        taskService.selectWinner(fixture.task.id, fixture.company.id, {
+          submissionId: fixture.rejectedSubmission.id,
+          rank: 1,
+        }),
+      ).rejects.toThrow("Rejected submissions cannot be selected as winner");
+
+      await cleanupWinnerFixture(fixture);
+    });
+
+    it("should reject selecting another winner when one already exists", async () => {
+      const fixture = await createWinnerSelectionFixture();
+
+      await expect(
+        taskService.selectWinner(fixture.task.id, fixture.company.id, {
+          submissionId: fixture.anotherSubmission.id,
+          rank: 1,
+        }),
+      ).rejects.toThrow("Winner already selected for this task");
+
+      await cleanupWinnerFixture(fixture);
+    });
+  });
+
+  describe("Multi-winner Selection Guards", () => {
+    async function createContestFixture(taskStatus: TaskStatus = TaskStatus.in_review) {
+      const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      const company = await prisma.user.create({
+        include: { companyProfile: true },
+        data: {
+          clerkId: `clerk_test_company_contest_${suffix}`,
+          email: `company_contest_${suffix}@test.com`,
+          role: UserRole.company,
+          companyProfile: {
+            create: {
+              companyName: `Contest Guard Company ${suffix}`,
+              trustScore: 87,
+            },
+          },
+        },
+      });
+
+      const engineerA = await prisma.user.create({
+        include: { engineerProfile: true },
+        data: {
+          clerkId: `clerk_test_engineer_contest_a_${suffix}`,
+          email: `engineer_contest_a_${suffix}@test.com`,
+          role: UserRole.engineer,
+          engineerProfile: {
+            create: {
+              fullName: `Contest Engineer A ${suffix}`,
+              neuronScore: 810,
+              completenessScore: 95,
+              upiId: "contest-a@upi",
+            },
+          },
+        },
+      });
+
+      const engineerB = await prisma.user.create({
+        include: { engineerProfile: true },
+        data: {
+          clerkId: `clerk_test_engineer_contest_b_${suffix}`,
+          email: `engineer_contest_b_${suffix}@test.com`,
+          role: UserRole.engineer,
+          engineerProfile: {
+            create: {
+              fullName: `Contest Engineer B ${suffix}`,
+              neuronScore: 790,
+              completenessScore: 92,
+              upiId: "contest-b@upi",
+            },
+          },
+        },
+      });
+
+      const task = await prisma.task.create({
+        data: {
+          userId: company.id,
+          companyProfileId: company.companyProfile!.id,
+          title: `Contest guard task ${suffix}`,
+          type: "bounty",
+          category: ["AI"],
+          problemStatement: "Validate multi-winner transitions",
+          expectedOutcome: "No invalid contest winner selection",
+          deliverables: [{ title: "Contest", description: "Multi winner guard tests" }],
+          techRequirements: ["TypeScript"],
+          timeline: 14,
+          rewardAmount: 30000,
+          paymentType: "fixed",
+          selectionCriteria: [{ name: "Quality", weight: 100 }],
+          difficulty: "medium",
+          status: taskStatus,
+          escrowDeposited: true,
+          isContest: true,
+          maxWinners: 2,
+          contestRanks: [
+            { rank: 1, percentage: 60 },
+            { rank: 2, percentage: 40 },
+          ],
+        },
+      });
+
+      const submissionA = await prisma.taskSubmission.create({
+        data: {
+          taskId: task.id,
+          userId: engineerA.id,
+          engineerProfileId: engineerA.engineerProfile!.id,
+          description: "Contest submission A",
+          status: SubmissionStatus.pending,
+        },
+      });
+
+      const submissionB = await prisma.taskSubmission.create({
+        data: {
+          taskId: task.id,
+          userId: engineerB.id,
+          engineerProfileId: engineerB.engineerProfile!.id,
+          description: "Contest submission B",
+          status: SubmissionStatus.pending,
+        },
+      });
+
+      return { company, engineerA, engineerB, task, submissionA, submissionB };
+    }
+
+    async function cleanupContestFixture(fixture: {
+      company: { id: string };
+      engineerA: { id: string };
+      engineerB: { id: string };
+      task: { id: string };
+      submissionA: { id: string };
+      submissionB: { id: string };
+    }) {
+      await prisma.taskSubmission
+        .deleteMany({
+          where: { id: { in: [fixture.submissionA.id, fixture.submissionB.id] } },
+        })
+        .catch(() => {});
+      await prisma.task.delete({ where: { id: fixture.task.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: fixture.company.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: fixture.engineerA.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: fixture.engineerB.id } }).catch(() => {});
+    }
+
+    it("should reject multi-winner selection for finalized task", async () => {
+      const fixture = await createContestFixture(TaskStatus.completed);
+
+      await expect(
+        taskService.selectMultipleWinners(fixture.task.id, fixture.company.id, {
+          winners: [
+            { submissionId: fixture.submissionA.id, rank: 1 },
+            { submissionId: fixture.submissionB.id, rank: 2 },
+          ],
+        }),
+      ).rejects.toThrow("Task is already finalized");
+
+      await cleanupContestFixture(fixture);
+    });
+
+    it("should reject duplicate submission IDs in winners payload", async () => {
+      const fixture = await createContestFixture();
+
+      await expect(
+        taskService.selectMultipleWinners(fixture.task.id, fixture.company.id, {
+          winners: [
+            { submissionId: fixture.submissionA.id, rank: 1 },
+            { submissionId: fixture.submissionA.id, rank: 2 },
+          ],
+        }),
+      ).rejects.toThrow("Duplicate submission in winners payload");
+
+      await cleanupContestFixture(fixture);
+    });
+
+    it("should reject duplicate ranks in winners payload", async () => {
+      const fixture = await createContestFixture();
+
+      await expect(
+        taskService.selectMultipleWinners(fixture.task.id, fixture.company.id, {
+          winners: [
+            { submissionId: fixture.submissionA.id, rank: 1 },
+            { submissionId: fixture.submissionB.id, rank: 1 },
+          ],
+        }),
+      ).rejects.toThrow("Duplicate rank in winners payload");
+
+      await cleanupContestFixture(fixture);
+    });
+
+    it("should reject rejected submissions in multi-winner payload", async () => {
+      const fixture = await createContestFixture();
+      await prisma.taskSubmission.update({
+        where: { id: fixture.submissionB.id },
+        data: { status: SubmissionStatus.rejected },
+      });
+
+      await expect(
+        taskService.selectMultipleWinners(fixture.task.id, fixture.company.id, {
+          winners: [
+            { submissionId: fixture.submissionA.id, rank: 1 },
+            { submissionId: fixture.submissionB.id, rank: 2 },
+          ],
+        }),
+      ).rejects.toThrow(`Submission ${fixture.submissionB.id} is rejected`);
+
+      await cleanupContestFixture(fixture);
     });
   });
 });

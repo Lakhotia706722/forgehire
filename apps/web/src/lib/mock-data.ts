@@ -447,3 +447,83 @@ export const MOCK_COMPANY: CompanyProfile = {
     { id: 'cr2', engineerName: 'Priya Nair', engineerInitials: 'PN', rating: 5, text: 'Best client I\'ve had on NeuronHire. They know what they want and give you the autonomy to build it right.', date: 'Sep 2024' },
   ],
 };
+
+export const MOCK_ENGINEERS: EngineerProfile[] = [
+  MOCK_ENGINEER,
+  {
+    ...MOCK_ENGINEER,
+    id: 'priya-nair',
+    name: 'Priya Nair',
+    headline: 'MLOps Engineer · LLM Infra · Kubernetes',
+    avatarInitials: 'PN',
+    avatarColor: '#00D4FF',
+    neuronScore: 865,
+    tier: 'Professional',
+    location: 'Pune, India',
+    hourlyRateINR: 3600,
+    hourlyRateUSD: 43,
+    availability: 'soon',
+    availabilityLabel: 'Available in 2 weeks',
+    rating: 4.9,
+    reviewCount: 31,
+    projectCount: 19,
+  },
+  {
+    ...MOCK_ENGINEER,
+    id: 'rohit-gupta',
+    name: 'Rohit Gupta',
+    headline: 'Applied AI Engineer · Vision + NLP',
+    avatarInitials: 'RG',
+    avatarColor: '#7B5EA7',
+    neuronScore: 802,
+    tier: 'Verified',
+    location: 'Delhi, India',
+    hourlyRateINR: 2800,
+    hourlyRateUSD: 34,
+    availability: 'available',
+    availabilityLabel: 'Available Now',
+    rating: 4.8,
+    reviewCount: 18,
+    projectCount: 14,
+  },
+];
+
+export const MOCK_COMPANIES: CompanyProfile[] = [
+  MOCK_COMPANY,
+  {
+    ...MOCK_COMPANY,
+    id: 'zepto-ai',
+    name: 'Zepto AI Labs',
+    industry: 'Retail AI',
+    logoInitials: 'ZA',
+    logoColor: '#7B5EA7',
+    location: 'Mumbai, India',
+    trustScore: 91,
+  },
+  {
+    ...MOCK_COMPANY,
+    id: 'finmind',
+    name: 'FinMind Systems',
+    industry: 'FinTech',
+    logoInitials: 'FS',
+    logoColor: '#F59E0B',
+    location: 'Hyderabad, India',
+    trustScore: 88,
+  },
+];
+
+export function getMockEngineerById(id: string): EngineerProfile | null {
+  const lowerId = id.toLowerCase();
+  return (
+    MOCK_ENGINEERS.find((engineer) => engineer.id.toLowerCase() === lowerId) ??
+    null
+  );
+}
+
+export function getMockCompanyById(id: string): CompanyProfile | null {
+  const lowerId = id.toLowerCase();
+  return (
+    MOCK_COMPANIES.find((company) => company.id.toLowerCase() === lowerId) ??
+    null
+  );
+}

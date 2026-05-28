@@ -20,6 +20,14 @@ const DELAY_CLASS = [
 ] as const;
 
 export function TabActivity({ activities, engineerName, engineerInitials }: TabActivityProps) {
+  if (!activities.length) {
+    return (
+      <div className="text-center py-16 text-text-muted">
+        <p className="text-sm">No build-in-public updates yet.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4" role="feed" aria-label="Build in public activity">
       {activities.map((post, i) => (

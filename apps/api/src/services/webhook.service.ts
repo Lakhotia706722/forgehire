@@ -4,6 +4,7 @@ import { getEnv } from "../config/env";
 import { PayoutService } from "./payout.service";
 import { PlatformSubscriptionService } from "./platform-subscription.service";
 import { EscrowService } from "./escrow.service";
+import { MarketplacePurchaseService } from "./marketplace-purchase.service";
 
 export class WebhookService {
   private prisma: PrismaClient;
@@ -11,6 +12,7 @@ export class WebhookService {
   private payoutService: PayoutService;
   private subscriptionService: PlatformSubscriptionService;
   private escrowService: EscrowService;
+  private marketplacePurchaseService: MarketplacePurchaseService;
 
   constructor() {
     this.prisma = new PrismaClient();
@@ -18,6 +20,7 @@ export class WebhookService {
     this.payoutService = new PayoutService();
     this.subscriptionService = new PlatformSubscriptionService();
     this.escrowService = new EscrowService();
+    this.marketplacePurchaseService = new MarketplacePurchaseService();
   }
 
   /**
@@ -47,7 +50,6 @@ export class WebhookService {
     });
 
     if (existing && existing.processed) {
-      console.log(`Event ${idempotencyKey} already processed`);
       return { success: true, message: "Event already processed" };
     }
 
@@ -179,7 +181,7 @@ export class WebhookService {
         break;
 
       default:
-        console.log(`Unhandled event type: ${event}`);
+        return;
     }
   }
 
@@ -188,6 +190,7 @@ export class WebhookService {
    */
   private async handlePaymentCaptured(payment: any) {
     const razorpayPaymentId = payment.id;
+    const razorpayOrderId = payment.order_id as string | undefined;
 
     // Find payment record
     const paymentRecord = await this.prisma.payment.findFirst({
@@ -202,6 +205,13 @@ export class WebhookService {
           completedAt: new Date(),
         },
       });
+    }
+
+    if (razorpayOrderId) {
+      await this.marketplacePurchaseService.completePurchaseByOrderId(
+        razorpayOrderId,
+        razorpayPaymentId,
+      );
     }
   }
 
@@ -379,9 +389,7 @@ export class WebhookService {
     });
 
     if (paymentRecord && paymentRecord.type === "escrow_deposit") {
-      // Verify and mark escrow as funded
-      // This should be handled by the escrow service after payment verification
-      console.log(`Order ${razorpayOrderId} paid - escrow deposit`);
+      return;
     }
   }
 
@@ -462,7 +470,7 @@ export class WebhookService {
         break;
 
       default:
-        console.log(`Unhandled ClearTax event: ${event}`);
+        return;
     }
   }
 

@@ -40,7 +40,7 @@ export default function MyBountiesPage() {
     companyColor: colorFromName(s.companyName),
     companyInitials: initials(s.companyName),
     reward: s.reward,
-    status: s.status === 'pending' ? 'participating' : s.status,
+    status: s.status,
     submittedAt: s.submittedAt,
   }));
 

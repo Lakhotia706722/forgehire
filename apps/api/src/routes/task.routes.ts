@@ -1,9 +1,12 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { TaskService } from "../services/task.service";
-import { authenticate, requireRole } from "../middleware/auth";
+import { authenticate, requireRole, tryAuthenticate } from "../middleware/auth";
 import { UserRole } from "@prisma/client";
+import { getMongoDB } from "../config/mongodb";
+import { getRedisClient } from "../config/redis";
 import {
   createTaskSchema,
+  updateTaskSchema,
   depositEscrowSchema,
   participateTaskSchema,
   submitTaskSchema,
@@ -15,9 +18,71 @@ import {
   signNDASchema,
   taskSearchSchema,
 } from "@neuronhire/shared";
+import { z } from "zod";
+import { TaskAIEnrichmentService } from "../services/task-ai-enrichment.service";
+
+export function getTaskRouteErrorStatus(errorMessage: string): number {
+  const message = errorMessage.toLowerCase();
+  if (
+    message.includes("unauthorized") ||
+    (message.includes("only") && message.includes("can"))
+  ) {
+    return 403;
+  }
+  if (message.includes("not found")) return 404;
+  if (
+    message.includes("already") ||
+    message.includes("duplicate") ||
+    message.includes("finalized") ||
+    message.includes("rejected") ||
+    message.includes("cannot be updated") ||
+    message.includes("cannot be closed") ||
+    message.includes("must participate") ||
+    message.includes("not open for participation") ||
+    message.includes("not accepting submissions") ||
+    message.includes("not accepting questions") ||
+    message.includes("retake") ||
+    message.includes("below minimum")
+  ) {
+    return 409;
+  }
+  return 400;
+}
 
 export async function taskRoutes(fastify: FastifyInstance) {
   const taskService = new TaskService();
+  const taskAIService = new TaskAIEnrichmentService();
+  const miniGateSubmitSchema = z.object({
+    testId: z.string().uuid(),
+    answers: z.array(
+      z.object({
+        questionId: z.string(),
+        selectedOption: z.number().int().min(0),
+      }),
+    ),
+  });
+  const rejectParticipationSchema = z.object({
+    rejectionReason: z.string().max(1000).optional().nullable(),
+  });
+  const taskAIPreviewSchema = z.object({
+    title: z.string().min(5),
+    type: z.enum(["bounty", "direct", "contest"]),
+    problemStatement: z.string().min(50),
+    expectedOutcome: z.string().min(20),
+    deliverables: z
+      .array(
+        z.object({
+          title: z.string().min(1),
+          description: z.string().optional().default(""),
+        }),
+      )
+      .min(1),
+    techRequirements: z.array(z.string().min(1)).min(1),
+    timeline: z.number().int().min(1),
+    rewardAmount: z.number().min(1000),
+    difficulty: z.enum(["easy", "medium", "hard", "expert"]).optional(),
+    category: z.array(z.string()).optional(),
+  });
 
   // Create task
   fastify.post(
@@ -38,9 +103,46 @@ export async function taskRoutes(fastify: FastifyInstance) {
           message: "Task created successfully. AI enrichment in progress.",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to select winner";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
+        });
+      }
+    },
+  );
+
+  // AI preview for task quality/reward/timeline guidance
+  fastify.post(
+    "/tasks/ai-preview",
+    {
+      preHandler: [authenticate, requireRole(UserRole.company)],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const payload = taskAIPreviewSchema.parse(request.body);
+        const enrichment = await taskAIService.enrichTask(payload);
+        return reply.code(200).send({
+          success: true,
+          data: {
+            estimatedTimeline: `${Math.max(1, enrichment.estimatedTimeline - 2)}-${enrichment.estimatedTimeline + 2} days`,
+            suggestedRewardRange: {
+              min: enrichment.suggestedReward.min,
+              max: enrichment.suggestedReward.max,
+            },
+            qualityScore: enrichment.postingQuality,
+            qualityIssues: enrichment.vagueDeliverables,
+            recommendedTaskType: enrichment.recommendedType,
+            suggestedSkillTags: enrichment.autoTaggedSkills,
+            similarCompletedBounties: [],
+            suggestions: enrichment.suggestions,
+          },
+        });
+      } catch (error: any) {
+        const message = error?.message ?? "Failed to generate AI preview";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
+          success: false,
+          error: message,
         });
       }
     },
@@ -54,19 +156,20 @@ export async function taskRoutes(fastify: FastifyInstance) {
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        // const userId = (request as any).user.userId;
-        // const { id } = (request.params as any);
-        // const data = updateTaskSchema.parse((request.body as any));
-
-        // Implementation would go here
+        const userId = (request as any).user.userId;
+        const { id } = request.params as { id: string };
+        const data = updateTaskSchema.parse(request.body as any);
+        const task = await taskService.updateTask(id, userId, data);
         return reply.code(200).send({
           success: true,
-          message: "Task update not yet implemented",
+          data: task,
+          message: "Task updated successfully. AI enrichment queued.",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to select winners";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
       }
     },
@@ -91,9 +194,36 @@ export async function taskRoutes(fastify: FastifyInstance) {
           message: "Escrow order created. Complete payment to publish task.",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to update task";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
+        });
+      }
+    },
+  );
+
+  // Close task
+  fastify.post(
+    "/tasks/:id/close",
+    {
+      preHandler: [authenticate, requireRole(UserRole.company)],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (request as any).user.userId;
+        const { id } = request.params as { id: string };
+        const task = await taskService.closeTask(id, userId);
+        return reply.code(200).send({
+          success: true,
+          data: task,
+          message: "Task closed successfully.",
+        });
+      } catch (error: any) {
+        const message = error?.message ?? "Failed to close task";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
+          success: false,
+          error: message,
         });
       }
     },
@@ -119,9 +249,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
           message: "Escrow deposited successfully. Task is now live!",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to participate in task";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
       }
     },
@@ -139,9 +270,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
         const submissions = await taskService.getEngineerSubmissions(userId);
         return reply.code(200).send({ success: true, data: submissions });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to submit work";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
       }
     },
@@ -171,9 +303,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
           data: tasks,
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to evaluate submission";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
       }
     },
@@ -183,7 +316,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/tasks",
     {
-      preHandler: [],
+      preHandler: [tryAuthenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -248,7 +381,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/tasks/:id",
     {
-      preHandler: [],
+      preHandler: [tryAuthenticate],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -294,9 +427,70 @@ export async function taskRoutes(fastify: FastifyInstance) {
           message: "Successfully registered for task",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to participate in task";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
+        });
+      }
+    },
+  );
+
+  // Approve participation (company)
+  fastify.post(
+    "/tasks/:id/participations/:participationId/approve",
+    { preHandler: [authenticate, requireRole(UserRole.company)] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (request as any).user.userId;
+        const { id, participationId } = request.params as {
+          id: string;
+          participationId: string;
+        };
+        const updated = await taskService.approveParticipation(id, participationId, userId);
+        return reply.code(200).send({
+          success: true,
+          data: updated,
+          message: "Participant approved",
+        });
+      } catch (error: any) {
+        const message = error?.message ?? "Failed to approve participant";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
+          success: false,
+          error: message,
+        });
+      }
+    },
+  );
+
+  // Reject participation (company)
+  fastify.post(
+    "/tasks/:id/participations/:participationId/reject",
+    { preHandler: [authenticate, requireRole(UserRole.company)] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (request as any).user.userId;
+        const { id, participationId } = request.params as {
+          id: string;
+          participationId: string;
+        };
+        const body = rejectParticipationSchema.parse(request.body as any);
+        const updated = await taskService.rejectParticipation(
+          id,
+          participationId,
+          userId,
+          body.rejectionReason,
+        );
+        return reply.code(200).send({
+          success: true,
+          data: updated,
+          message: "Participant rejected",
+        });
+      } catch (error: any) {
+        const message = error?.message ?? "Failed to reject participant";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
+          success: false,
+          error: message,
         });
       }
     },
@@ -322,9 +516,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
           message: "Work submitted successfully",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to submit work";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
       }
     },
@@ -333,10 +528,24 @@ export async function taskRoutes(fastify: FastifyInstance) {
   // List submissions for a task (company view)
   fastify.get(
     "/tasks/:id/submissions",
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireRole(UserRole.company)] },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = (request as any).user.userId;
       const { id } = request.params as any;
       const prisma = (taskService as any).prisma;
+
+      const task = await prisma.task.findUnique({
+        where: { id },
+        select: { id: true, userId: true },
+      });
+      if (!task) {
+        return reply
+          .code(404)
+          .send({ success: false, error: "Task not found" });
+      }
+      if (task.userId !== userId) {
+        return reply.code(403).send({ success: false, error: "Unauthorized" });
+      }
 
       const submissions = await prisma.taskSubmission.findMany({
         where: { taskId: id },
@@ -370,6 +579,8 @@ export async function taskRoutes(fastify: FastifyInstance) {
     "/tasks/:id/submissions/:submissionId",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = (request as any).user as { userId?: string; role?: UserRole };
+      const userId = (user?.userId ?? "") as string;
       const { id, submissionId } = request.params as any;
       const prisma = (taskService as any).prisma;
 
@@ -388,6 +599,26 @@ export async function taskRoutes(fastify: FastifyInstance) {
           .send({ success: false, error: "Submission not found" });
       }
 
+      if (user?.role === UserRole.company) {
+        const task = await prisma.task.findUnique({
+          where: { id },
+          select: { userId: true },
+        });
+        if (!task || task.userId !== userId) {
+          return reply.code(403).send({ success: false, error: "Unauthorized" });
+        }
+      } else if (user?.role === UserRole.engineer) {
+        const engineer = await prisma.engineerProfile.findUnique({
+          where: { userId },
+          select: { id: true },
+        });
+        if (!engineer || submission.engineerProfileId !== engineer.id) {
+          return reply.code(403).send({ success: false, error: "Unauthorized" });
+        }
+      } else {
+        return reply.code(403).send({ success: false, error: "Unauthorized" });
+      }
+
       return reply.send({
         success: true,
         data: {
@@ -402,8 +633,12 @@ export async function taskRoutes(fastify: FastifyInstance) {
           description: submission.description,
           demoUrl: submission.demoUrl,
           githubUrl: submission.githubUrl,
+          videoUrl: submission.videoUrl,
+          architectureDiagram: submission.architectureDiagram,
           performanceMetrics: submission.performanceMetrics,
           screenshots: submission.screenshots,
+          feedback: submission.feedback,
+          criteriaScores: submission.criteriaScores,
         },
       });
     },
@@ -412,15 +647,43 @@ export async function taskRoutes(fastify: FastifyInstance) {
   // Approve submission (company)
   fastify.post(
     "/tasks/:id/submissions/:submissionId/approve",
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireRole(UserRole.company)] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { submissionId } = request.params as any;
+      const userId = (request as any).user.userId;
+      const { id, submissionId } = request.params as any;
       const prisma = (taskService as any).prisma;
+
+      const existing = await prisma.taskSubmission.findUnique({
+        where: { id: submissionId },
+        include: {
+          task: { select: { id: true, userId: true, companyProfileId: true } },
+          engineerProfile: { select: { id: true } },
+        },
+      });
+      if (!existing || existing.task.id !== id) {
+        return reply
+          .code(404)
+          .send({ success: false, error: "Submission not found" });
+      }
+      if (existing.task.userId !== userId) {
+        return reply.code(403).send({ success: false, error: "Unauthorized" });
+      }
+      if (["accepted", "rejected", "winner"].includes(existing.status)) {
+        const error = `Submission already finalized with status: ${existing.status}`;
+        return reply.code(getTaskRouteErrorStatus(error)).send({
+          success: false,
+          error,
+        });
+      }
 
       const updated = await prisma.taskSubmission.update({
         where: { id: submissionId },
         data: { status: "accepted", reviewedAt: new Date() },
       });
+      await getRedisClient().del(
+        `dashboard:company:${existing.task.companyProfileId}`,
+        `dashboard:engineer:v2:${existing.engineerProfile.id}`,
+      );
 
       return reply.send({ success: true, data: updated });
     },
@@ -429,16 +692,44 @@ export async function taskRoutes(fastify: FastifyInstance) {
   // Reject submission (company)
   fastify.post(
     "/tasks/:id/submissions/:submissionId/reject",
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireRole(UserRole.company)] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { submissionId } = request.params as any;
+      const userId = (request as any).user.userId;
+      const { id, submissionId } = request.params as any;
       const { feedback } = request.body as any;
       const prisma = (taskService as any).prisma;
+
+      const existing = await prisma.taskSubmission.findUnique({
+        where: { id: submissionId },
+        include: {
+          task: { select: { id: true, userId: true, companyProfileId: true } },
+          engineerProfile: { select: { id: true } },
+        },
+      });
+      if (!existing || existing.task.id !== id) {
+        return reply
+          .code(404)
+          .send({ success: false, error: "Submission not found" });
+      }
+      if (existing.task.userId !== userId) {
+        return reply.code(403).send({ success: false, error: "Unauthorized" });
+      }
+      if (["accepted", "rejected", "winner"].includes(existing.status)) {
+        const error = `Submission already finalized with status: ${existing.status}`;
+        return reply.code(getTaskRouteErrorStatus(error)).send({
+          success: false,
+          error,
+        });
+      }
 
       const updated = await prisma.taskSubmission.update({
         where: { id: submissionId },
         data: { status: "rejected", feedback, reviewedAt: new Date() },
       });
+      await getRedisClient().del(
+        `dashboard:company:${existing.task.companyProfileId}`,
+        `dashboard:engineer:v2:${existing.engineerProfile.id}`,
+      );
 
       return reply.send({ success: true, data: updated });
     },
@@ -453,13 +744,41 @@ export async function taskRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).user.userId;
-        const { submissionId } = request.params as any;
+        const { id, submissionId } = request.params as any;
         const data = evaluateSubmissionSchema.parse(request.body as any);
+        const prisma = (taskService as any).prisma;
+
+        const existing = await prisma.taskSubmission.findUnique({
+          where: { id: submissionId },
+          include: {
+            task: { select: { id: true, userId: true, companyProfileId: true } },
+            engineerProfile: { select: { id: true } },
+          },
+        });
+        if (!existing || existing.task.id !== id) {
+          return reply
+            .code(404)
+            .send({ success: false, error: "Submission not found" });
+        }
+        if (existing.task.userId !== userId) {
+          return reply.code(403).send({ success: false, error: "Unauthorized" });
+        }
+        if (["accepted", "rejected", "winner"].includes(existing.status)) {
+          const error = `Submission already finalized with status: ${existing.status}`;
+          return reply.code(getTaskRouteErrorStatus(error)).send({
+            success: false,
+            error,
+          });
+        }
 
         const submission = await taskService.evaluateSubmission(
           submissionId,
           userId,
           data,
+        );
+        await getRedisClient().del(
+          `dashboard:company:${existing.task.companyProfileId}`,
+          `dashboard:engineer:v2:${existing.engineerProfile.id}`,
         );
 
         return reply.code(200).send({
@@ -468,9 +787,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
           message: "Submission evaluated successfully",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to evaluate submission";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
       }
     },
@@ -496,9 +816,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
           message: "Winner selected. Payout initiated.",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to select winner";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
       }
     },
@@ -528,9 +849,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
           message: "Winners selected. Payouts initiated.",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to select winners";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
       }
     },
@@ -559,9 +881,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
           message: "Question posted successfully",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to post question";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
       }
     },
@@ -591,9 +914,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
           message: "Question answered successfully",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to answer question";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
       }
     },
@@ -618,9 +942,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
           message: "NDA generated. Please review and sign.",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to generate NDA";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
       }
     },
@@ -639,9 +964,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
         // Get IP address from request
         const ipAddress = request.ip || "0.0.0.0";
-
-        const bodyData = signNDASchema.parse(request.body as any);
-        const data = { ...bodyData, ipAddress };
+        const data = signNDASchema.parse({
+          ...(request.body as any),
+          ipAddress,
+        });
 
         const nda = await taskService.signNDA(id, userId, data);
 
@@ -652,10 +978,101 @@ export async function taskRoutes(fastify: FastifyInstance) {
             "NDA signed successfully. You can now view full task details.",
         });
       } catch (error: any) {
-        return reply.code(400).send({
+        const message = error?.message ?? "Failed to sign NDA";
+        return reply.code(getTaskRouteErrorStatus(message)).send({
           success: false,
-          error: error.message,
+          error: message,
         });
+      }
+    },
+  );
+
+  // Gate questions for mini-gate test
+  fastify.get(
+    "/tasks/:id/gate-questions",
+    { preHandler: [authenticate] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (request as any).user?.userId as string | undefined;
+        const { id } = request.params as { id: string };
+        if (!userId) {
+          return reply.code(401).send({ success: false, error: "Unauthorized" });
+        }
+
+        // Get task to resolve relevant categories
+        const task = await taskService.getTask(id, undefined);
+        const categories: string[] = (task as any)?.category ?? [];
+
+        const db = getMongoDB();
+        const collection = db.collection("question_bank");
+
+        // Try to sample from task categories first, fall back to general
+        let questions: unknown[] = [];
+        if (categories.length > 0) {
+          questions = await collection
+            .aggregate([
+              { $match: { category: { $in: categories } } },
+              { $sample: { size: 10 } },
+            ])
+            .toArray();
+        }
+
+        if (questions.length < 10) {
+          const needed = 10 - questions.length;
+          const existing = questions.map((q: any) => q._id?.toString());
+          const fallback = await collection
+            .aggregate([
+              { $match: { _id: { $nin: existing } } },
+              { $sample: { size: needed } },
+            ])
+            .toArray();
+          questions = [...questions, ...fallback];
+        }
+
+        const formatted = questions.map((q: any, i: number) => ({
+          id: q.id ?? q._id?.toString() ?? `q${i}`,
+          number: i + 1,
+          text: q.question ?? q.text ?? `Question ${i + 1}`,
+          options: q.options ?? [],
+          correctAnswer: q.correctAnswer ?? 0,
+        }));
+        const test = await taskService.startMiniGateTest(id, userId);
+        await (taskService as any).prisma.miniGateTest.update({
+          where: { id: test.id },
+          data: { questions: formatted as any },
+        });
+
+        return reply.code(200).send({
+          success: true,
+          data: {
+            testId: test.id,
+            questions: formatted.map(({ correctAnswer: _correctAnswer, ...q }) => q),
+          },
+        });
+      } catch (error: any) {
+        const message = error?.message ?? "Failed to load mini-gate questions";
+        return reply
+          .code(getTaskRouteErrorStatus(message))
+          .send({ success: false, error: message });
+      }
+    },
+  );
+
+  fastify.post(
+    "/tasks/:id/gate-submit",
+    { preHandler: [authenticate, requireRole(UserRole.engineer)] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (request as any).user.userId;
+        const { id } = request.params as { id: string };
+        const data = miniGateSubmitSchema.parse(request.body as unknown);
+        const result = await taskService.submitMiniGateTest(id, userId, data);
+        return reply.code(200).send({ success: true, data: result });
+      } catch (error: any) {
+        const message = error?.message ?? "Failed to submit mini-gate test";
+        return reply
+          .code(getTaskRouteErrorStatus(message))
+          .send({ success: false, error: message });
       }
     },
   );

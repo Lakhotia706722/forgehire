@@ -10,33 +10,47 @@ import type { PostTaskState, AIEnrichmentResult } from '@/lib/bounty-data';
 interface Step5Props {
   state: PostTaskState;
   onChange: (patch: Partial<PostTaskState>) => void;
+  onAnalyzeAI?: () => Promise<AIEnrichmentResult>;
   onPublish: () => void;
+  publishing?: boolean;
 }
 
-export function Step5ReviewAI({ state, onChange, onPublish }: Step5Props) {
+export function Step5ReviewAI({ state, onChange, onAnalyzeAI, onPublish, publishing = false }: Step5Props) {
   const [analyzing, setAnalyzing] = React.useState(false);
 
   async function handleAnalyze() {
     setAnalyzing(true);
-    // Simulate AI API call
-    await new Promise((r) => setTimeout(r, 2000));
-    const result: AIEnrichmentResult = {
-      estimatedDays: [14, 21],
-      suggestedReward: [
-        Math.round(parseFloat(state.rewardAmount || '0') * 0.9),
-        Math.round(parseFloat(state.rewardAmount || '0') * 1.2),
-      ],
-      postingQuality: 7.8,
-      deliverableGaps: state.deliverables.length < 3 ? ['Add more specific deliverables with acceptance criteria'] : [],
-      recommendedType: state.type ?? 'Bounty',
-      suggestions: [
-        'Add performance benchmarks to expected outcome',
-        'Specify the tech stack more precisely',
-        'Consider adding a staging environment to access provided',
-      ],
-    };
-    onChange({ aiResult: result });
-    setAnalyzing(false);
+    try {
+      const result = onAnalyzeAI
+        ? await onAnalyzeAI()
+        : await new Promise<AIEnrichmentResult>((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+            estimatedDays: [14, 21],
+            suggestedReward: [
+              Math.round(parseFloat(state.rewardAmount || '0') * 0.9),
+              Math.round(parseFloat(state.rewardAmount || '0') * 1.2),
+            ],
+            postingQuality: 7.8,
+            deliverableGaps:
+              state.deliverables.length < 3
+                ? ['Add more specific deliverables with acceptance criteria']
+                : [],
+            recommendedType: state.type ?? 'Bounty',
+            suggestions: [
+              'Add performance benchmarks to expected outcome',
+              'Specify the tech stack more precisely',
+              'Consider adding a staging environment to access provided',
+            ],
+                }),
+              2000,
+            ),
+          );
+      onChange({ aiResult: result });
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   const r = state.aiResult;
@@ -100,6 +114,7 @@ export function Step5ReviewAI({ state, onChange, onPublish }: Step5Props) {
           size="md"
           className="w-full border-[rgba(123,94,167,0.4)] text-accent-violet hover:bg-[rgba(123,94,167,0.06)]"
           loading={analyzing}
+          disabled={analyzing}
           onClick={handleAnalyze}
           data-testid="analyze-ai-btn"
         >
@@ -172,13 +187,14 @@ export function Step5ReviewAI({ state, onChange, onPublish }: Step5Props) {
           size="lg"
           className="w-full"
           onClick={onPublish}
-          disabled={!state.title || !state.type || !state.rewardAmount || !state.deadline}
+          disabled={!state.title || !state.type || !state.rewardAmount || !state.deadline || publishing}
+          loading={publishing}
           data-testid="publish-btn"
         >
-          Deposit Escrow & Publish
+          {publishing ? 'Publishing…' : 'Deposit Escrow & Publish'}
         </Button>
         <p className="text-xs text-text-muted text-center mt-2">
-          You&apos;ll be redirected to Razorpay to deposit the escrow amount.
+          Your task will be submitted for AI enrichment and listed once escrow is funded.
         </p>
       </div>
     </div>

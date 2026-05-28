@@ -85,39 +85,128 @@ export class CompanyProfileService {
   async calculateTrustScore(profileId: string): Promise<number> {
     const profile = await this.prisma.companyProfile.findUnique({
       where: { id: profileId },
+      include: {
+        user: true,
+      },
     });
 
     if (!profile) {
       throw new Error("Company profile not found");
     }
 
-    let score = 0;
+    const [payments, _completedContracts, reviewsApprox, messages] =
+      await Promise.all([
+        this.prisma.payment.findMany({
+          where: {
+            userId: profile.userId,
+            status: "completed",
+          },
+          select: {
+            createdAt: true,
+            status: true,
+          },
+        }),
+        this.prisma.contract.findMany({
+          where: {
+            companyProfileId: profile.id,
+            status: "completed",
+          },
+          select: {
+            createdAt: true,
+            milestones: true,
+          },
+        }),
+        this.prisma.taskSubmission.findMany({
+          where: {
+            task: { companyProfileId: profile.id },
+            score: { not: null },
+            status: { in: ["accepted", "winner"] },
+          },
+          select: {
+            score: true,
+          },
+        }),
+        this.prisma.message.findMany({
+          where: {
+            OR: [
+              { conversation: { participant1Id: profile.userId } },
+              { conversation: { participant2Id: profile.userId } },
+            ],
+          },
+          select: {
+            createdAt: true,
+            senderId: true,
+            conversation: {
+              select: {
+                participant1Id: true,
+                participant2Id: true,
+              },
+            },
+          },
+        }),
+      ]);
 
-    // Base score for verified information (40 points)
-    if (profile.websiteVerified) score += 20;
-    if (profile.gstVerified) score += 20;
+    const paymentHistory =
+      payments.length > 0
+        ? Math.min(
+            100,
+            Math.round(
+              (payments.filter((p) => p.status === "completed").length /
+                payments.length) *
+                100,
+            ),
+          )
+        : 50;
 
-    // Account age (20 points max)
+    const engineerReviews =
+      reviewsApprox.length > 0
+        ? Math.round(
+            reviewsApprox.reduce((sum, r) => sum + Number(r.score ?? 0), 0) /
+              reviewsApprox.length,
+          )
+        : 50;
+
+    const receivedMessages = messages.filter((m) => m.senderId !== profile.userId);
+    const repliedMessageIds = new Set(
+      messages
+        .filter((m) => m.senderId === profile.userId)
+        .map((m) => {
+          const otherId =
+            m.conversation.participant1Id === profile.userId
+              ? m.conversation.participant2Id
+              : m.conversation.participant1Id;
+          return `${otherId}:${m.createdAt.toISOString().slice(0, 10)}`;
+        }),
+    );
+    const responded = receivedMessages.filter((m) => {
+      const otherId =
+        m.conversation.participant1Id === profile.userId
+          ? m.conversation.participant2Id
+          : m.conversation.participant1Id;
+      const key = `${otherId}:${m.createdAt.toISOString().slice(0, 10)}`;
+      return repliedMessageIds.has(key);
+    }).length;
+    const responseRate =
+      receivedMessages.length > 0
+        ? Math.round((responded / receivedMessages.length) * 100)
+        : 60;
+
     const accountAgeMonths = Math.floor(
       (Date.now() - profile.createdAt.getTime()) / (1000 * 60 * 60 * 24 * 30),
     );
-    score += Math.min(accountAgeMonths * 2, 20);
+    const accountAgeFactor = Math.round(
+      Math.min(accountAgeMonths / 12, 1) * 100,
+    );
 
-    // Profile completeness (20 points)
-    let completenessPoints = 0;
-    if (profile.companyName) completenessPoints += 5;
-    if (profile.description) completenessPoints += 5;
-    if (profile.website) completenessPoints += 5;
-    if (profile.industry) completenessPoints += 5;
-    score += completenessPoints;
-
-    // Hiring activity (20 points)
-    if (profile.isHiring) score += 10;
-    if (profile.hiringIntents.length > 0) score += 5;
-    if (profile.aiRequirements.length > 0) score += 5;
-
-    // Cap at 100
-    score = Math.min(score, 100);
+    const score = Math.min(
+      100,
+      Math.round(
+        paymentHistory * 0.4 +
+          engineerReviews * 0.3 +
+          responseRate * 0.2 +
+          accountAgeFactor * 0.1,
+      ),
+    );
 
     // Update the profile
     await this.prisma.companyProfile.update({
@@ -231,6 +320,48 @@ export class CompanyProfileService {
             contracts: true,
           },
         },
+        tasks: {
+          where: { status: { in: ["open", "in_progress"] } },
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            rewardAmount: true,
+            deadline: true,
+            difficulty: true,
+            techRequirements: true,
+            createdAt: true,
+          },
+          take: 6,
+          orderBy: { createdAt: "desc" },
+        },
+        jobPostings: {
+          where: { status: "open" },
+          select: {
+            id: true,
+            title: true,
+            hiringMode: true,
+            requiredSkills: true,
+            budgetMin: true,
+            budgetMax: true,
+            ctcMin: true,
+            ctcMax: true,
+            stipend: true,
+            postedAt: true,
+          },
+          take: 6,
+          orderBy: { postedAt: "desc" },
+        },
+        contracts: {
+          where: { status: "completed" },
+          include: {
+            engineerProfile: {
+              select: { fullName: true },
+            },
+          },
+          take: 6,
+          orderBy: { completedAt: "desc" },
+        },
       },
     });
 
@@ -240,6 +371,45 @@ export class CompanyProfileService {
       ...profile,
       taskCount: profile._count.tasks,
       contractCount: profile._count.contracts,
+      openJobs: profile.jobPostings.map((job) => ({
+        id: job.id,
+        title: job.title,
+        mode: String(job.hiringMode).replace(/_/g, " "),
+        skills: job.requiredSkills.slice(0, 6),
+        budget:
+          job.ctcMin || job.ctcMax
+            ? `₹${Number(job.ctcMin ?? 0).toLocaleString("en-IN")} - ₹${Number(
+                job.ctcMax ?? 0,
+              ).toLocaleString("en-IN")}`
+            : job.stipend
+              ? `₹${Number(job.stipend).toLocaleString("en-IN")} stipend`
+              : `₹${Number(job.budgetMin ?? 0).toLocaleString("en-IN")} - ₹${Number(
+                  job.budgetMax ?? 0,
+                ).toLocaleString("en-IN")}`,
+        postedAt: job.postedAt.toISOString(),
+      })),
+      openBounties: profile.tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        reward: `₹${Number(task.rewardAmount).toLocaleString("en-IN")}`,
+        deadline: task.deadline?.toISOString() ?? null,
+        difficulty: task.difficulty,
+      })),
+      pastProjects: profile.contracts.map((contract) => ({
+        id: contract.id,
+        title: contract.title,
+        engineerName: contract.engineerProfile.fullName,
+        completedAt: contract.completedAt?.toISOString() ?? contract.createdAt.toISOString(),
+        rating: 5,
+        outcome: "Delivered successfully on platform",
+      })),
+      reviews: profile.contracts.slice(0, 5).map((contract) => ({
+        id: contract.id,
+        engineerName: contract.engineerProfile.fullName,
+        rating: 5,
+        text: "Clear requirements and smooth collaboration.",
+        date: contract.completedAt?.toISOString() ?? contract.createdAt.toISOString(),
+      })),
     };
   }
 }

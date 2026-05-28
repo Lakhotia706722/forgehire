@@ -10,12 +10,41 @@ import { HireModal } from '../_components/hire-modal';
 import { usePublicEngineerProfile } from '@/lib/api-hooks';
 import { mapApiEngineerToPublicProfile } from '@/lib/map-api-engineer-profile';
 import { avatarToneClass } from '@/lib/avatar-tone';
+import { apiFetch } from '@/lib/api-fetch';
 
 export default function CompanyEngineerViewPage({ params }: { params: { id: string } }) {
   const { data, isLoading, isError } = usePublicEngineerProfile(params.id);
   const [showHireModal, setShowHireModal] = React.useState(false);
+  const [jobRequirements, setJobRequirements] = React.useState('');
+  const [hiringMatch, setHiringMatch] = React.useState<{
+    skillMatchScore: number;
+    budgetFit: string;
+    availabilityConfidence: string;
+    recommendationReason: string;
+  } | null>(null);
 
   const engineer = data ? mapApiEngineerToPublicProfile(data) : null;
+  React.useEffect(() => {
+    const value = jobRequirements.trim();
+    if (value.length < 10) {
+      setHiringMatch(null);
+      return;
+    }
+    const timeout = setTimeout(async () => {
+      try {
+        const result = await apiFetch<{
+          skillMatchScore: number;
+          budgetFit: string;
+          availabilityConfidence: string;
+          recommendationReason: string;
+        }>(`/api/engineers/${params.id}/hiring-match?jobRequirements=${encodeURIComponent(value)}`);
+        setHiringMatch(result);
+      } catch {
+        setHiringMatch(null);
+      }
+    }, 350);
+    return () => clearTimeout(timeout);
+  }, [jobRequirements, params.id]);
 
   if (isLoading) {
     return (
@@ -119,6 +148,36 @@ export default function CompanyEngineerViewPage({ params }: { params: { id: stri
           <h2 className="font-display font-semibold text-text-primary text-lg mb-3">About</h2>
           <p className="text-text-secondary text-sm leading-relaxed">{engineer.bio || 'No bio provided.'}</p>
         </div>
+
+        <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6 space-y-4">
+          <h2 className="font-display font-semibold text-text-primary text-lg">Smart Hiring Suggestion</h2>
+          <textarea
+            value={jobRequirements}
+            onChange={(e) => setJobRequirements(e.target.value)}
+            rows={3}
+            placeholder="Paste job requirements to get skill match and budget fit insights..."
+            className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary"
+          />
+          {hiringMatch ? (
+            <div className="grid sm:grid-cols-2 gap-3 text-sm">
+              <div className="bg-bg-elevated rounded-xl p-3">
+                <p className="text-xs text-text-muted">Skill Match</p>
+                <p className="font-mono text-accent-cyan mt-1">{hiringMatch.skillMatchScore}%</p>
+              </div>
+              <div className="bg-bg-elevated rounded-xl p-3">
+                <p className="text-xs text-text-muted">Budget Fit</p>
+                <p className="text-text-primary mt-1">{hiringMatch.budgetFit}</p>
+              </div>
+              <div className="bg-bg-elevated rounded-xl p-3 sm:col-span-2">
+                <p className="text-xs text-text-muted">Availability Confidence</p>
+                <p className="text-text-primary mt-1">{hiringMatch.availabilityConfidence}</p>
+                <p className="text-xs text-text-secondary mt-2">{hiringMatch.recommendationReason}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-text-muted">Enter requirements (min 10 chars) to see match insights.</p>
+          )}
+        </div>
       </div>
 
       {showHireModal && (
@@ -127,6 +186,8 @@ export default function CompanyEngineerViewPage({ params }: { params: { id: stri
           onClose={() => setShowHireModal(false)}
           engineerName={engineer.name}
           engineerHourlyRate={engineer.hourlyRateINR}
+          engineerProfileId={params.id}
+          engineerUserId={String(data?.userId ?? '')}
         />
       )}
     </div>

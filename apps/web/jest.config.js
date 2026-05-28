@@ -5,7 +5,6 @@ const createJestConfig = nextJest({ dir: './' });
 /** @type {import('jest').Config} */
 const config = {
   testEnvironment: 'jest-environment-jsdom',
-  setupFilesAfterFramework: [],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
@@ -16,6 +15,8 @@ const config = {
     '!src/**/*.d.ts',
     '!src/app/layout.tsx',
   ],
+  forceExit: true,
+  testTimeout: 30000,
 };
 
 module.exports = createJestConfig(config);

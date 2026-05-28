@@ -578,6 +578,37 @@ export class EngineerProfileService {
             reviewCount: true,
           },
         },
+        activities: {
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+          },
+        },
+        taskSubmissions: {
+          where: {
+            status: { in: ["accepted", "winner"] },
+            score: { not: null },
+          },
+          orderBy: { reviewedAt: "desc" },
+          take: 20,
+          select: {
+            id: true,
+            score: true,
+            feedback: true,
+            reviewedAt: true,
+            task: {
+              select: {
+                title: true,
+                companyProfile: {
+                  select: { companyName: true },
+                },
+              },
+            },
+          },
+        },
       },
     });
 

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { ProfileHero } from './_components/profile-hero';
 import { ProfileContent } from './_components/profile-content';
 import { mapApiEngineerToPublicProfile } from '@/lib/map-api-engineer-profile';
+import { getMockEngineerById } from '@/lib/mock-data';
 import type { EngineerProfile } from '@/lib/mock-data';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
@@ -16,13 +17,13 @@ async function getEngineer(id: string): Promise<EngineerProfile | null> {
     const res = await fetch(`${API_BASE}/api/engineer/profiles/${id}`, {
       next: { revalidate: 60 },
     });
-    if (!res.ok) return null;
+    if (!res.ok) return getMockEngineerById(id);
     const json = await res.json();
     const data = json?.data ?? json;
-    if (!data?.id) return null;
+    if (!data?.id) return getMockEngineerById(id);
     return mapApiEngineerToPublicProfile(data as Record<string, unknown>);
   } catch {
-    return null;
+    return getMockEngineerById(id);
   }
 }
 

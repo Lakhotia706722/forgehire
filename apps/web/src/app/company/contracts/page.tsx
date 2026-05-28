@@ -3,6 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useMyContracts } from '@/lib/api-hooks';
@@ -21,7 +22,7 @@ function initials(name: string) {
 
 export default function CompanyContractsPage() {
   const [filter, setFilter] = React.useState<'all' | 'active' | 'completed'>('all');
-  const { data: contracts = [], isLoading, isError } = useMyContracts(filter === 'all' ? undefined : filter);
+  const { data: contracts = [], isLoading, isError, refetch } = useMyContracts(filter === 'all' ? undefined : filter);
 
   const filtered = filter === 'all'
     ? contracts
@@ -54,6 +55,9 @@ export default function CompanyContractsPage() {
         {isError ? (
           <div className="text-center py-20">
             <p className="text-text-muted text-sm">Could not load contracts.</p>
+            <Button className="mt-3" size="sm" variant="secondary" onClick={() => { void refetch(); }}>
+              Retry
+            </Button>
           </div>
         ) : isLoading ? (
           <div className="space-y-4">

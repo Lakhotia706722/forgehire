@@ -39,7 +39,7 @@ const EMPTY_PROFILE: ProfileForm = {
 };
 
 export default function CompanyProfilePage() {
-  const { data: apiProfile, isLoading: loading } = useCompanyProfile();
+  const { data: apiProfile, isLoading: loading, isError: profileError } = useCompanyProfile();
   const updateProfile = useUpdateCompanyProfile();
   const [profile, setProfile] = React.useState<ProfileForm>(EMPTY_PROFILE);
   const [isDirty, setIsDirty] = React.useState(false);
@@ -93,6 +93,25 @@ export default function CompanyProfilePage() {
           <Skeleton className="h-8 w-48" />
           <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6 space-y-4">
             {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (profileError) {
+    return (
+      <div className="min-h-screen bg-bg-base flex items-start justify-center px-4 py-12">
+        <div className="w-full max-w-4xl">
+          <div className="bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-xl p-6 text-center">
+            <p className="text-red-400 font-medium mb-2">Could not load company profile</p>
+            <p className="text-sm text-text-muted mb-4">Please check your connection and try again.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-sm text-accent-cyan hover:underline"
+            >
+              Reload page
+            </button>
           </div>
         </div>
       </div>

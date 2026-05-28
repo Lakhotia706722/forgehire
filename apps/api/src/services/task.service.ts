@@ -8,8 +8,10 @@ import {
 import { RazorpayEscrowService } from "./razorpay-escrow.service";
 import { TaskAIEnrichmentService } from "./task-ai-enrichment.service";
 import { NDAGeneratorService } from "./nda-generator.service";
+import { getRedisClient } from "../config/redis";
 import {
   CreateTaskInput,
+  UpdateTaskInput,
   DepositEscrowInput,
   ParticipateTaskInput,
   SubmitTaskInput,
@@ -33,6 +35,23 @@ export class TaskService {
     this.escrowService = new RazorpayEscrowService();
     this.enrichmentService = new TaskAIEnrichmentService();
     this.ndaService = new NDAGeneratorService();
+  }
+
+  private async invalidateDashboardCaches(
+    companyProfileId?: string | null,
+    engineerProfileIds: string[] = [],
+  ) {
+    try {
+      const redis = getRedisClient();
+      const keys: string[] = [];
+      if (companyProfileId) keys.push(`dashboard:company:${companyProfileId}`);
+      for (const id of engineerProfileIds) {
+        if (id) keys.push(`dashboard:engineer:v2:${id}`);
+      }
+      if (keys.length > 0) await redis.del(...keys);
+    } catch {
+      // Best-effort cache invalidation.
+    }
   }
 
   async createTask(userId: string, data: CreateTaskInput) {
@@ -91,7 +110,126 @@ export class TaskService {
     });
 
     await this.enrichmentService.queueEnrichment(task.id, data);
+    await this.invalidateDashboardCaches(user.companyProfile.id);
     return task;
+  }
+
+  async updateTask(taskId: string, userId: string, data: UpdateTaskInput) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+    });
+    if (!task) {
+      throw new Error("Task not found");
+    }
+    if (task.userId !== userId) {
+      throw new Error("Unauthorized");
+    }
+    if (task.status === TaskStatus.completed || task.status === TaskStatus.cancelled) {
+      throw new Error("Completed or cancelled tasks cannot be updated");
+    }
+
+    const updateData: Prisma.TaskUpdateInput = {};
+
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.type !== undefined) updateData.type = data.type;
+    if (data.category !== undefined) updateData.category = data.category;
+    if (data.problemStatement !== undefined) updateData.problemStatement = data.problemStatement;
+    if (data.currentState !== undefined) updateData.currentState = data.currentState ?? null;
+    if (data.expectedOutcome !== undefined) updateData.expectedOutcome = data.expectedOutcome;
+    if (data.deliverables !== undefined) {
+      updateData.deliverables = data.deliverables as unknown as Prisma.InputJsonValue;
+    }
+    if (data.techRequirements !== undefined) updateData.techRequirements = data.techRequirements;
+    if (data.timeline !== undefined) {
+      updateData.timeline = data.timeline;
+      const deadline = new Date();
+      deadline.setDate(deadline.getDate() + data.timeline);
+      updateData.deadline = deadline;
+    }
+    if (data.rewardAmount !== undefined) updateData.rewardAmount = data.rewardAmount;
+    if (data.paymentType !== undefined) updateData.paymentType = data.paymentType;
+    if (data.currency !== undefined) updateData.currency = data.currency;
+    if (data.selectionCriteria !== undefined) {
+      updateData.selectionCriteria =
+        data.selectionCriteria as unknown as Prisma.InputJsonValue;
+    }
+    if (data.minNeuronScore !== undefined) updateData.minNeuronScore = data.minNeuronScore;
+    if (data.ndaRequired !== undefined) updateData.ndaRequired = data.ndaRequired;
+    if (data.difficulty !== undefined) updateData.difficulty = data.difficulty;
+    if (data.isContest !== undefined) updateData.isContest = data.isContest;
+    if (data.contestRanks !== undefined) {
+      updateData.contestRanks = data.contestRanks
+        ? (data.contestRanks as unknown as Prisma.InputJsonValue)
+        : Prisma.JsonNull;
+    }
+    if (data.maxWinners !== undefined) updateData.maxWinners = data.maxWinners;
+
+    updateData.aiEnriched = false;
+    updateData.autoTaggedSkills = [];
+    updateData.vagueDeliverables = [];
+    updateData.aiSuggestions = Prisma.JsonNull;
+    updateData.postingQuality = null;
+    updateData.estimatedTimeline = null;
+    updateData.suggestedReward = Prisma.JsonNull;
+    updateData.recommendedType = null;
+
+    const updatedTask = await this.prisma.task.update({
+      where: { id: taskId },
+      data: updateData,
+    });
+
+    await this.enrichmentService.queueEnrichment(taskId, {
+      title: updatedTask.title,
+      type: updatedTask.type,
+      category: updatedTask.category,
+      problemStatement: updatedTask.problemStatement,
+      currentState: updatedTask.currentState,
+      expectedOutcome: updatedTask.expectedOutcome,
+      deliverables: updatedTask.deliverables as any[],
+      techRequirements: updatedTask.techRequirements,
+      timeline: updatedTask.timeline,
+      rewardAmount: Number(updatedTask.rewardAmount),
+      paymentType: updatedTask.paymentType,
+      currency: updatedTask.currency,
+      selectionCriteria: updatedTask.selectionCriteria as any[],
+      minNeuronScore: updatedTask.minNeuronScore,
+      ndaRequired: updatedTask.ndaRequired,
+      difficulty: updatedTask.difficulty,
+      isContest: updatedTask.isContest,
+      contestRanks: updatedTask.contestRanks as any[] | null,
+      maxWinners: updatedTask.maxWinners,
+    });
+
+    await this.invalidateDashboardCaches(task.companyProfileId);
+    return updatedTask;
+  }
+
+  async closeTask(taskId: string, userId: string) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+    });
+    if (!task) {
+      throw new Error("Task not found");
+    }
+    if (task.userId !== userId) {
+      throw new Error("Unauthorized");
+    }
+    if (task.status === TaskStatus.completed) {
+      throw new Error("Completed task cannot be closed");
+    }
+    if (task.status === TaskStatus.cancelled) {
+      return task;
+    }
+
+    const updated = await this.prisma.task.update({
+      where: { id: taskId },
+      data: {
+        status: TaskStatus.cancelled,
+        completedAt: new Date(),
+      },
+    });
+    await this.invalidateDashboardCaches(task.companyProfileId);
+    return updated;
   }
 
   async enrichTask(taskId: string) {
@@ -410,18 +548,20 @@ export class TaskService {
       throw new Error("Task not found");
     }
 
-    await this.prisma.task.update({
-      where: { id: taskId },
-      data: { viewCount: { increment: 1 } },
-    });
+    const canViewParticipantDetails = Boolean(userId && task.userId === userId);
+    const sanitizedParticipations = canViewParticipantDetails
+      ? task.participations
+      : [];
 
-    if (task.ndaRequired && userId) {
+    let hasParticipated = false;
+    let hasSignedNda = !task.ndaRequired;
+    if (userId) {
       const engineerProfile = await this.prisma.engineerProfile.findUnique({
         where: { userId },
       });
 
       if (engineerProfile) {
-        const ndaSignature = await this.prisma.taskNDASignature.findUnique({
+        const participation = await this.prisma.taskParticipation.findUnique({
           where: {
             taskId_engineerProfileId: {
               taskId,
@@ -429,20 +569,46 @@ export class TaskService {
             },
           },
         });
+        hasParticipated = Boolean(participation);
 
-        if (!ndaSignature || !ndaSignature.signed) {
-          return {
-            ...task,
-            problemStatement: "NDA required - sign to view full details",
-            currentState: null,
-            deliverables: [],
-            selectionCriteria: [],
-          };
+        if (task.ndaRequired) {
+          const ndaSignature = await this.prisma.taskNDASignature.findUnique({
+            where: {
+              taskId_engineerProfileId: {
+                taskId,
+                engineerProfileId: engineerProfile.id,
+              },
+            },
+          });
+          hasSignedNda = Boolean(ndaSignature?.signed);
         }
       }
     }
 
-    return task;
+    await this.prisma.task.update({
+      where: { id: taskId },
+      data: { viewCount: { increment: 1 } },
+    });
+
+    if (task.ndaRequired && userId && !hasSignedNda) {
+      return {
+        ...task,
+        participations: sanitizedParticipations,
+        problemStatement: "NDA required - sign to view full details",
+        currentState: null,
+        deliverables: [],
+        selectionCriteria: [],
+        hasParticipated,
+        hasSignedNda,
+      };
+    }
+
+    return {
+      ...task,
+      participations: sanitizedParticipations,
+      hasParticipated,
+      hasSignedNda,
+    };
   }
 
   async participateInTask(
@@ -476,9 +642,21 @@ export class TaskService {
     }
 
     if (user.engineerProfile.neuronScore < task.minNeuronScore) {
-      throw new Error(
-        `NeuronScore ${user.engineerProfile.neuronScore} is below minimum required ${task.minNeuronScore}. Take a mini-gate test to qualify.`,
-      );
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const passedMiniGate = await this.prisma.miniGateTest.findFirst({
+        where: {
+          engineerProfileId: user.engineerProfile.id,
+          taskId,
+          passed: true,
+          submittedAt: { gte: twentyFourHoursAgo },
+        },
+        orderBy: { submittedAt: "desc" },
+      });
+      if (!passedMiniGate) {
+        throw new Error(
+          `NeuronScore ${user.engineerProfile.neuronScore} is below minimum required ${task.minNeuronScore}. Take and pass a mini-gate test to qualify.`,
+        );
+      }
     }
 
     const existing = await this.prisma.taskParticipation.findUnique({
@@ -510,7 +688,172 @@ export class TaskService {
       data: { participantCount: { increment: 1 } },
     });
 
+    await this.invalidateDashboardCaches(task.companyProfileId, [
+      user.engineerProfile.id,
+    ]);
     return participation;
+  }
+
+  async approveParticipation(taskId: string, participationId: string, userId: string) {
+    const participation = await this.prisma.taskParticipation.findUnique({
+      where: { id: participationId },
+      include: { task: true },
+    });
+    if (!participation || participation.taskId !== taskId) {
+      throw new Error("Participation not found");
+    }
+    if (participation.task.userId !== userId) {
+      throw new Error("Unauthorized");
+    }
+    if (
+      participation.task.status === TaskStatus.completed ||
+      participation.task.status === TaskStatus.cancelled
+    ) {
+      throw new Error("Cannot update participants for finalized task");
+    }
+    if (participation.approved) {
+      throw new Error("Participant already approved");
+    }
+    if (participation.rejected) {
+      throw new Error("Rejected participant cannot be approved");
+    }
+
+    const updated = await this.prisma.taskParticipation.update({
+      where: { id: participationId },
+      data: {
+        approved: true,
+        rejected: false,
+        rejectionReason: null,
+      },
+    });
+    await this.invalidateDashboardCaches(participation.task.companyProfileId, [
+      participation.engineerProfileId,
+    ]);
+    return updated;
+  }
+
+  async rejectParticipation(
+    taskId: string,
+    participationId: string,
+    userId: string,
+    rejectionReason?: string | null,
+  ) {
+    const participation = await this.prisma.taskParticipation.findUnique({
+      where: { id: participationId },
+      include: { task: true },
+    });
+    if (!participation || participation.taskId !== taskId) {
+      throw new Error("Participation not found");
+    }
+    if (participation.task.userId !== userId) {
+      throw new Error("Unauthorized");
+    }
+    if (
+      participation.task.status === TaskStatus.completed ||
+      participation.task.status === TaskStatus.cancelled
+    ) {
+      throw new Error("Cannot update participants for finalized task");
+    }
+    if (participation.rejected) {
+      throw new Error("Participant already rejected");
+    }
+    if (participation.approved) {
+      throw new Error("Approved participant cannot be rejected");
+    }
+
+    const updated = await this.prisma.taskParticipation.update({
+      where: { id: participationId },
+      data: {
+        approved: false,
+        rejected: true,
+        rejectionReason: rejectionReason?.trim() || null,
+      },
+    });
+    await this.invalidateDashboardCaches(participation.task.companyProfileId, [
+      participation.engineerProfileId,
+    ]);
+    return updated;
+  }
+
+  async startMiniGateTest(taskId: string, userId: string) {
+    const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) throw new Error("Task not found");
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { engineerProfile: true },
+    });
+    if (!user?.engineerProfile) throw new Error("Engineer profile not found");
+
+    const previousFailed = await this.prisma.miniGateTest.findFirst({
+      where: {
+        engineerProfileId: user.engineerProfile.id,
+        taskId,
+        passed: false,
+        submittedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+      orderBy: { submittedAt: "desc" },
+    });
+    if (previousFailed) {
+      throw new Error("You can retake this mini-gate test after 24 hours");
+    }
+
+    return this.prisma.miniGateTest.create({
+      data: {
+        engineerProfileId: user.engineerProfile.id,
+        taskId,
+        domain: (task.category?.[0] as string | undefined) ?? "general",
+        questions: [],
+      },
+    });
+  }
+
+  async submitMiniGateTest(
+    taskId: string,
+    userId: string,
+    data: { testId: string; answers: Array<{ questionId: string; selectedOption: number }> },
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { engineerProfile: true },
+    });
+    if (!user?.engineerProfile) throw new Error("Engineer profile not found");
+
+    const test = await this.prisma.miniGateTest.findUnique({
+      where: { id: data.testId },
+    });
+    if (!test || test.taskId !== taskId || test.engineerProfileId !== user.engineerProfile.id) {
+      throw new Error("Mini-gate test session not found");
+    }
+    if (test.submittedAt) {
+      throw new Error("Mini-gate test already submitted");
+    }
+
+    const questions = Array.isArray(test.questions) ? (test.questions as Array<{ id: string; correctAnswer?: number }>) : [];
+    const answerMap = new Map(data.answers.map((a) => [a.questionId, a.selectedOption]));
+    const correct = questions.filter((q) => {
+      const selected = answerMap.get(q.id);
+      return typeof q.correctAnswer === "number" && selected === q.correctAnswer;
+    }).length;
+    const score = questions.length > 0 ? Math.round((correct / questions.length) * 100) : 0;
+    const passed = score >= 60;
+
+    const updated = await this.prisma.miniGateTest.update({
+      where: { id: test.id },
+      data: {
+        responses: data.answers as unknown as Prisma.InputJsonValue,
+        score,
+        passed,
+        submittedAt: new Date(),
+      },
+    });
+
+    return {
+      id: updated.id,
+      score,
+      passed,
+      retakeAfterHours: passed ? 0 : 24,
+    };
   }
 
   async submitTask(taskId: string, userId: string, data: SubmitTaskInput) {
@@ -551,6 +894,19 @@ export class TaskService {
       throw new Error("Must participate before submitting");
     }
 
+    const existingSubmission = await this.prisma.taskSubmission.findFirst({
+      where: {
+        taskId,
+        engineerProfileId: user.engineerProfile.id,
+      },
+      select: { id: true, status: true },
+    });
+    if (existingSubmission) {
+      throw new Error(
+        `Submission already exists for this task (status: ${existingSubmission.status})`,
+      );
+    }
+
     const submission = await this.prisma.taskSubmission.create({
       data: {
         taskId,
@@ -578,6 +934,9 @@ export class TaskService {
       },
     });
 
+    await this.invalidateDashboardCaches(task.companyProfileId, [
+      user.engineerProfile.id,
+    ]);
     return submission;
   }
 
@@ -597,6 +956,15 @@ export class TaskService {
 
     if (submission.task.userId !== userId) {
       throw new Error("Unauthorized - only task creator can evaluate");
+    }
+    if (
+      submission.status === SubmissionStatus.accepted ||
+      submission.status === SubmissionStatus.rejected ||
+      submission.status === SubmissionStatus.winner
+    ) {
+      throw new Error(
+        `Cannot evaluate finalized submission with status: ${submission.status}`,
+      );
     }
 
     return await this.prisma.taskSubmission.update({
@@ -630,6 +998,9 @@ export class TaskService {
     if (!task.escrowDeposited) {
       throw new Error("Escrow not deposited");
     }
+    if (task.status === TaskStatus.completed || task.status === TaskStatus.cancelled) {
+      throw new Error("Task is already finalized");
+    }
 
     const submission = await this.prisma.taskSubmission.findUnique({
       where: { id: data.submissionId },
@@ -638,6 +1009,20 @@ export class TaskService {
 
     if (!submission || submission.taskId !== taskId) {
       throw new Error("Submission not found");
+    }
+    if (submission.status === SubmissionStatus.rejected) {
+      throw new Error("Rejected submissions cannot be selected as winner");
+    }
+    if (submission.status === SubmissionStatus.winner || submission.isWinner) {
+      throw new Error("Submission is already marked as winner");
+    }
+
+    const existingWinner = await this.prisma.taskSubmission.findFirst({
+      where: { taskId, isWinner: true },
+      select: { id: true },
+    });
+    if (existingWinner) {
+      throw new Error("Winner already selected for this task");
     }
 
     if (!submission.engineerProfile.upiId) {
@@ -671,6 +1056,9 @@ export class TaskService {
       },
     });
 
+    await this.invalidateDashboardCaches(task.companyProfileId, [
+      submission.engineerProfileId,
+    ]);
     return { success: true, payoutId: payout.payoutId };
   }
 
@@ -694,6 +1082,9 @@ export class TaskService {
     if (!task.isContest) {
       throw new Error("Task is not a contest");
     }
+    if (task.status === TaskStatus.completed || task.status === TaskStatus.cancelled) {
+      throw new Error("Task is already finalized");
+    }
 
     if (!task.escrowDeposited) {
       throw new Error("Escrow not deposited");
@@ -705,6 +1096,14 @@ export class TaskService {
 
     if (data.winners.length > (task.maxWinners || 1)) {
       throw new Error(`Maximum ${task.maxWinners} winners allowed`);
+    }
+    const submissionIds = data.winners.map((winner) => winner.submissionId);
+    if (new Set(submissionIds).size !== submissionIds.length) {
+      throw new Error("Duplicate submission in winners payload");
+    }
+    const ranks = data.winners.map((winner) => winner.rank);
+    if (new Set(ranks).size !== ranks.length) {
+      throw new Error("Duplicate rank in winners payload");
     }
 
     const contestRanks = task.contestRanks as Array<{
@@ -724,6 +1123,12 @@ export class TaskService {
           if (!submission || submission.taskId !== taskId) {
             throw new Error(`Submission ${winner.submissionId} not found`);
           }
+          if (submission.status === SubmissionStatus.rejected) {
+            throw new Error(`Submission ${winner.submissionId} is rejected`);
+          }
+          if (submission.status === SubmissionStatus.winner || submission.isWinner) {
+            throw new Error(`Submission ${winner.submissionId} is already winner`);
+          }
 
           if (!submission.engineerProfile.upiId) {
             throw new Error(
@@ -740,6 +1145,7 @@ export class TaskService {
 
           return {
             engineerUpiId: submission.engineerProfile.upiId,
+            engineerProfileId: submission.engineerProfile.id,
             amount: payoutAmount,
             rank: winner.rank,
             submissionId: winner.submissionId,
@@ -759,6 +1165,7 @@ export class TaskService {
         async (
           payout: {
             engineerUpiId: string;
+            engineerProfileId: string;
             amount: number;
             rank: number;
             submissionId: string;
@@ -791,6 +1198,10 @@ export class TaskService {
       },
     });
 
+    await this.invalidateDashboardCaches(
+      task.companyProfileId,
+      payouts.map((p) => p.engineerProfileId),
+    );
     return { success: true, payouts: payoutResults };
   }
 
@@ -979,24 +1390,42 @@ export class TaskService {
       return [];
     }
 
-    const submissions = await this.prisma.taskSubmission.findMany({
-      where: { engineerProfileId: profile.id },
-      orderBy: { submittedAt: "desc" },
-      include: {
-        task: {
-          select: {
-            id: true,
-            title: true,
-            rewardAmount: true,
-            status: true,
-            type: true,
-            companyProfile: { select: { companyName: true } },
+    const [submissions, participations] = await Promise.all([
+      this.prisma.taskSubmission.findMany({
+        where: { engineerProfileId: profile.id },
+        orderBy: { submittedAt: "desc" },
+        include: {
+          task: {
+            select: {
+              id: true,
+              title: true,
+              rewardAmount: true,
+              status: true,
+              type: true,
+              companyProfile: { select: { companyName: true } },
+            },
           },
         },
-      },
-    });
+      }),
+      this.prisma.taskParticipation.findMany({
+        where: { engineerProfileId: profile.id },
+        orderBy: { createdAt: "desc" },
+        include: {
+          task: {
+            select: {
+              id: true,
+              title: true,
+              rewardAmount: true,
+              status: true,
+              type: true,
+              companyProfile: { select: { companyName: true } },
+            },
+          },
+        },
+      }),
+    ]);
 
-    return submissions.map((s) => ({
+    const submissionItems = submissions.map((s) => ({
       id: s.id,
       taskId: s.taskId,
       taskTitle: s.task.title,
@@ -1015,5 +1444,26 @@ export class TaskService {
       payoutAmount: s.payoutAmount ? Number(s.payoutAmount) : null,
       score: s.score,
     }));
+
+    const submittedTaskIds = new Set(submissionItems.map((item) => item.taskId));
+    const participationItems = participations
+      .filter((p) => !submittedTaskIds.has(p.taskId))
+      .map((p) => ({
+        id: p.id,
+        taskId: p.taskId,
+        taskTitle: p.task.title,
+        companyName: p.task.companyProfile.companyName,
+        reward: Number(p.task.rewardAmount),
+        taskStatus: p.task.status,
+        taskType: p.task.type,
+        status: "participating",
+        submittedAt: p.createdAt,
+        payoutAmount: null,
+        score: null,
+      }));
+
+    return [...submissionItems, ...participationItems].sort(
+      (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime(),
+    );
   }
 }

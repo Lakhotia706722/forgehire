@@ -5,8 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
-import { useContractDetail } from '@/lib/api-hooks';
+import {
+  useApproveContractMilestone,
+  useContractDetail,
+  useRaiseContractDispute,
+  useSubmitContractMilestone,
+} from '@/lib/api-hooks';
 import { avatarToneClass, initialsFromName } from '@/lib/avatar-tone';
+import { toast } from 'sonner';
 
 const STATUS_BADGE: Record<string, { variant: 'cyan' | 'green' | 'amber' | 'red' | 'gray'; label: string }> = {
   draft:             { variant: 'gray',  label: 'Draft' },
@@ -76,9 +82,19 @@ function formatCountdown72h(submittedAt: string): string {
 }
 
 export default function ContractTrackerPage({ params }: { params: { id: string } }) {
-  const { data: contract, isLoading, error } = useContractDetail(params.id);
+  const { data: contract, isLoading, error, refetch } = useContractDetail(params.id);
+  const submitMilestone = useSubmitContractMilestone(params.id);
+  const approveMilestone = useApproveContractMilestone(params.id);
+  const raiseDispute = useRaiseContractDispute(params.id);
   const [showDispute, setShowDispute] = React.useState(false);
   const [countdown, setCountdown] = React.useState<Record<string, string>>({});
+  const [activeMilestoneId, setActiveMilestoneId] = React.useState<string | null>(null);
+  const [deliverableUrl, setDeliverableUrl] = React.useState('');
+  const [milestoneNotes, setMilestoneNotes] = React.useState('');
+  const [disputeReason, setDisputeReason] = React.useState(
+    'Deliverables not meeting requirements',
+  );
+  const [disputeDescription, setDisputeDescription] = React.useState('');
 
   // Live countdown for submitted milestones — stable dependency to avoid infinite loop
   const submittedMilestoneIds = contract?.milestones
@@ -116,11 +132,68 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
   if (error || !contract) {
     return (
       <div className="min-h-screen bg-bg-base flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center space-y-3">
           <p className="text-text-muted">Failed to load contract</p>
+          <Button size="sm" onClick={() => refetch()}>
+            Retry
+          </Button>
         </div>
       </div>
     );
+  }
+
+  async function handleApproveMilestone(milestoneId: string) {
+    try {
+      await approveMilestone.mutateAsync(milestoneId);
+      toast.success('Milestone approved.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to approve milestone.';
+      toast.error(message);
+    }
+  }
+
+  async function handleSubmitMilestone() {
+    if (!activeMilestoneId) return;
+    const trimmedUrl = deliverableUrl.trim();
+    const trimmedNotes = milestoneNotes.trim();
+    if (!trimmedUrl && !trimmedNotes) {
+      toast.error('Add at least one deliverable URL or note before submitting.');
+      return;
+    }
+    try {
+      await submitMilestone.mutateAsync({
+        milestoneId: activeMilestoneId,
+        deliverables: trimmedUrl ? [trimmedUrl] : [],
+        notes: trimmedNotes || null,
+      });
+      toast.success('Milestone submitted.');
+      setActiveMilestoneId(null);
+      setDeliverableUrl('');
+      setMilestoneNotes('');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to submit milestone.';
+      toast.error(message);
+    }
+  }
+
+  async function handleSubmitDispute() {
+    const description = disputeDescription.trim();
+    if (!description) {
+      toast.error('Please provide dispute details.');
+      return;
+    }
+    try {
+      await raiseDispute.mutateAsync({
+        reason: `${disputeReason}: ${description}`,
+        evidence: null,
+      });
+      toast.success('Dispute submitted.');
+      setShowDispute(false);
+      setDisputeDescription('');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to submit dispute.';
+      toast.error(message);
+    }
   }
 
   const totalEscrowed = contract.totalAmount || 0;
@@ -249,7 +322,13 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
                             Auto-approves in <span className="font-mono text-accent-amber ml-1" data-testid={`countdown-${m.id}`}>{countdown[m.id] ?? '...'}</span>
                           </div>
                           <div className="flex gap-2">
-                            <Button size="sm" className="flex-1 h-8 text-xs" data-testid={`approve-btn-${m.id}`}>
+                            <Button
+                              size="sm"
+                              className="flex-1 h-8 text-xs"
+                              loading={approveMilestone.isPending}
+                              onClick={() => handleApproveMilestone(m.id)}
+                              data-testid={`approve-btn-${m.id}`}
+                            >
                               Approve &amp; Release ₹{m.amount.toLocaleString('en-IN')}
                             </Button>
                             <Button variant="danger" size="sm" className="h-8 text-xs" onClick={() => setShowDispute(true)} data-testid={`dispute-btn-${m.id}`}>
@@ -260,7 +339,12 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
                       )}
 
                       {m.status === 'in_progress' && (
-                        <Button size="sm" className="mt-3 h-8 text-xs" data-testid={`submit-btn-${m.id}`}>
+                        <Button
+                          size="sm"
+                          className="mt-3 h-8 text-xs"
+                          onClick={() => setActiveMilestoneId(m.id)}
+                          data-testid={`submit-btn-${m.id}`}
+                        >
                           Submit Deliverables
                         </Button>
                       )}
@@ -275,6 +359,52 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {activeMilestoneId && (
+          <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-5 space-y-4">
+            <h2 className="font-display font-semibold text-text-primary">Submit Milestone</h2>
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5">Deliverable URL</label>
+              <input
+                value={deliverableUrl}
+                onChange={(e) => setDeliverableUrl(e.target.value)}
+                placeholder="https://github.com/... or https://demo..."
+                className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5">Notes</label>
+              <textarea
+                value={milestoneNotes}
+                onChange={(e) => setMilestoneNotes(e.target.value)}
+                rows={3}
+                placeholder="Describe what was delivered..."
+                className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)] resize-none"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                size="md"
+                className="flex-1"
+                loading={submitMilestone.isPending}
+                onClick={handleSubmitMilestone}
+              >
+                Submit
+              </Button>
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={() => {
+                  setActiveMilestoneId(null);
+                  setDeliverableUrl('');
+                  setMilestoneNotes('');
+                }}
+              >
+                Cancel
+              </Button>
             </div>
           </div>
         )}
@@ -307,7 +437,12 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
             <h2 className="font-display font-semibold text-accent-red">Raise Dispute</h2>
             <div>
               <label className="block text-xs text-text-muted mb-1.5">Reason</label>
-              <select className="w-full bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[rgba(0,212,255,0.3)] [color-scheme:dark]" aria-label="Dispute reason">
+              <select
+                value={disputeReason}
+                onChange={(e) => setDisputeReason(e.target.value)}
+                className="w-full bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[rgba(0,212,255,0.3)] [color-scheme:dark]"
+                aria-label="Dispute reason"
+              >
                 <option>Deliverables not meeting requirements</option>
                 <option>Incomplete work submitted</option>
                 <option>Quality below agreed standard</option>
@@ -316,10 +451,24 @@ export default function ContractTrackerPage({ params }: { params: { id: string }
             </div>
             <div>
               <label className="block text-xs text-text-muted mb-1.5">Description</label>
-              <textarea rows={3} placeholder="Describe the issue in detail..." className="w-full bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)] resize-none" />
+              <textarea
+                value={disputeDescription}
+                onChange={(e) => setDisputeDescription(e.target.value)}
+                rows={3}
+                placeholder="Describe the issue in detail..."
+                className="w-full bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)] resize-none"
+              />
             </div>
             <div className="flex gap-3">
-              <Button variant="danger" size="md" className="flex-1">Submit Dispute</Button>
+              <Button
+                variant="danger"
+                size="md"
+                className="flex-1"
+                loading={raiseDispute.isPending}
+                onClick={handleSubmitDispute}
+              >
+                Submit Dispute
+              </Button>
               <Button variant="ghost" size="md" onClick={() => setShowDispute(false)}>Cancel</Button>
             </div>
           </div>

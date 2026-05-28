@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { getPrismaClient } from "../config/database";
 import { getRedisClient } from "../config/redis";
 import { authenticate, AuthenticatedRequest } from "../middleware/auth";
+import { successResponse } from "@neuronhire/shared";
 
 export async function dashboardRoutes(fastify: FastifyInstance) {
   const prisma = getPrismaClient();
@@ -12,7 +13,8 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
       preHandler: [authenticate],
     },
     async (request, reply) => {
-      const userId = (request as AuthenticatedRequest).user!.id;
+      const authUser = (request as AuthenticatedRequest).user!;
+      const userId = authUser.userId ?? authUser.id;
 
       // Get engineer profile
       const profile = await prisma.engineerProfile.findUnique({
@@ -24,10 +26,10 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ error: "Engineer profile not found" });
       }
 
-      const cacheKey = `dashboard:engineer:${profile.id}`;
+      const cacheKey = `dashboard:engineer:v2:${profile.id}`;
       const cached = await getRedisClient().get(cacheKey);
       if (cached) {
-        return reply.send(JSON.parse(cached));
+        return reply.send(successResponse(JSON.parse(cached)));
       }
 
       const now = new Date();
@@ -43,13 +45,32 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
       );
 
       const [
+        profileData,
         activeContracts,
         pendingProposals,
+        totalProposals,
+        acceptedProposals,
+        bountiesWon,
+        recentBounties,
         marketplaceRevenueThisMonth,
         marketplaceRevenueLastMonth,
         unreadMessages,
         wallet,
+        pendingPayouts,
+        payoutsPendingSum,
+        recentParticipations,
+        recentPayments,
+        scoreHistory,
       ] = await Promise.all([
+        prisma.engineerProfile.findUnique({
+          where: { id: profile.id },
+          select: {
+            fullName: true,
+            neuronScore: true,
+            neuronTier: true,
+            completenessScore: true,
+          },
+        }),
         prisma.contract.count({
           where: { engineerProfileId: profile.id, status: "active" },
         }),
@@ -58,6 +79,36 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
             engineerProfileId: profile.id,
             approved: false,
             rejected: false,
+          },
+        }),
+        prisma.taskParticipation.count({
+          where: { engineerProfileId: profile.id },
+        }),
+        prisma.taskParticipation.count({
+          where: { engineerProfileId: profile.id, approved: true },
+        }),
+        prisma.taskSubmission.count({
+          where: { engineerProfileId: profile.id, isWinner: true },
+        }),
+        prisma.task.findMany({
+          where: {
+            status: "open",
+            minNeuronScore: {
+              lte:
+                (
+                  await prisma.engineerProfile.findUnique({
+                    where: { id: profile.id },
+                    select: { neuronScore: true },
+                  })
+                )?.neuronScore ?? 0,
+            },
+          },
+          orderBy: { rewardAmount: "desc" },
+          take: 5,
+          include: {
+            companyProfile: {
+              select: { companyName: true, logoUrl: true },
+            },
           },
         }),
         prisma.purchase
@@ -93,6 +144,37 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
           where: { userId },
           select: { balance: true },
         }),
+        prisma.payout.count({
+          where: {
+            userId,
+            status: { in: ["pending", "processing"] },
+          },
+        }),
+        prisma.payout
+          .aggregate({
+            where: {
+              userId,
+              status: { in: ["pending", "processing"] },
+            },
+            _sum: { amount: true },
+          })
+          .then((r) => Number(r._sum.amount || 0)),
+        prisma.taskParticipation.findMany({
+          where: { engineerProfileId: profile.id },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          include: { task: { select: { title: true } } },
+        }),
+        prisma.walletTransaction.findMany({
+          where: { wallet: { userId }, type: "credit" },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        }),
+        prisma.neuronScoreHistory.findMany({
+          where: { engineerProfileId: profile.id },
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        }),
       ]);
 
       const revenueTrend =
@@ -102,7 +184,89 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
             100
           : 0;
 
-      const stats = {
+      const activities: Array<{ id: string; type: string; message: string; timestamp: string }> = [];
+
+      recentParticipations.forEach((p) => {
+        const status = p.approved ? "accepted" : p.rejected ? "rejected" : "pending";
+        activities.push({
+          id: `proposal-${p.id}`,
+          type: `proposal_${status}`,
+          message: `Proposal ${status}: ${p.task.title}`,
+          timestamp: p.createdAt.toISOString(),
+        });
+      });
+      recentPayments.forEach((p) => {
+        activities.push({
+          id: `payment-${p.id}`,
+          type: "payment_received",
+          message: `Received ₹${Number(p.amount).toLocaleString("en-IN")}`,
+          timestamp: p.createdAt.toISOString(),
+        });
+      });
+      scoreHistory.forEach((s) => {
+        activities.push({
+          id: `score-${s.id}`,
+          type: "score_updated",
+          message: `NeuronScore ${s.scoreDelta > 0 ? "+" : ""}${s.scoreDelta}: ${s.reason}`,
+          timestamp: s.createdAt.toISOString(),
+        });
+      });
+      activities.sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      );
+
+      const payload = {
+        profile: {
+          name: profileData?.fullName ?? "",
+          photo: null,
+          neuronScore: profileData?.neuronScore ?? 0,
+          tier: profileData?.neuronTier ?? "conditional",
+          completeness: profileData?.completenessScore ?? 0,
+        },
+        stats: {
+          profileViews30d: 0,
+          proposalsSent: totalProposals,
+          acceptanceRate:
+            totalProposals > 0
+              ? Math.round((acceptedProposals / totalProposals) * 100)
+              : 0,
+          bountiesWon,
+          totalEarnings:
+            Number(wallet?.balance ?? 0) + Number(payoutsPendingSum || 0),
+        },
+        recommendedBounties: recentBounties.map((t) => ({
+          id: t.id,
+          title: t.title,
+          rewardAmount: Number(t.rewardAmount),
+          deadline: t.deadline,
+          difficulty: t.difficulty,
+          company: {
+            name: t.companyProfile.companyName,
+            logoUrl: t.companyProfile.logoUrl,
+          },
+          minNeuronScore: t.minNeuronScore,
+          participantCount: t.participantCount,
+          techRequirements: t.techRequirements,
+        })),
+        recentActivity: activities.slice(0, 10),
+        walletBalance: Number(wallet?.balance ?? 0),
+        pendingPayments: Number(payoutsPendingSum || 0),
+        activeContractsCount: activeContracts,
+        notifications: [
+          {
+            id: "unread-messages",
+            type: "message",
+            title: "Unread messages",
+            count: unreadMessages,
+          },
+          {
+            id: "pending-payouts",
+            type: "payout",
+            title: "Pending payouts",
+            count: pendingPayouts,
+          },
+        ],
+        // backward compatibility keys used by existing web hooks/components
         activeContracts: { count: activeContracts, trend: 0 },
         pendingProposals: { count: pendingProposals, trend: 0 },
         marketplaceRevenue: {
@@ -110,11 +274,10 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
           trend: Math.round(revenueTrend),
         },
         unreadMessages: { count: unreadMessages },
-        walletBalance: Number(wallet?.balance || 0),
       };
 
-      await getRedisClient().setex(cacheKey, 60, JSON.stringify(stats));
-      return reply.send(stats);
+      await getRedisClient().setex(cacheKey, 60, JSON.stringify(payload));
+      return reply.send(successResponse(payload));
     },
   );
 
@@ -307,17 +470,17 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
 
       const profile = await prisma.companyProfile.findUnique({
         where: { userId },
-        select: { id: true },
+        select: { id: true, companyName: true, logoUrl: true, trustScore: true },
       });
 
       if (!profile) {
         return reply.code(404).send({ error: "Company profile not found" });
       }
 
-      const cacheKey = `dashboard:company:${profile.id}`;
+      const cacheKey = `dashboard:company:v2:${profile.id}`;
       const cached = await getRedisClient().get(cacheKey);
       if (cached) {
-        return reply.send(JSON.parse(cached));
+        return reply.send(successResponse(JSON.parse(cached)));
       }
 
       const now = new Date();
@@ -328,6 +491,11 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
         totalEngineersHired,
         totalSpendThisMonth,
         openDisputes,
+        pendingSubmissions,
+        activeContracts,
+        wallet,
+        recommendedEngineers,
+        recentTasks,
       ] = await Promise.all([
         prisma.task.count({
           where: {
@@ -354,16 +522,98 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
             status: { not: "resolved" },
           },
         }),
+        prisma.taskSubmission.count({
+          where: { task: { companyProfileId: profile.id }, status: "pending" },
+        }),
+        prisma.contract.findMany({
+          where: { companyProfileId: profile.id, status: { in: ["active", "draft"] } },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            totalAmount: true,
+            createdAt: true,
+          },
+        }),
+        prisma.wallet.findUnique({
+          where: { userId },
+          select: { balance: true },
+        }),
+        prisma.engineerProfile.findMany({
+          where: { neuronScore: { gte: 400 } },
+          orderBy: { neuronScore: "desc" },
+          take: 5,
+          select: {
+            id: true,
+            fullName: true,
+            headline: true,
+            neuronScore: true,
+            neuronTier: true,
+            hourlyRate: true,
+            availabilityStatus: true,
+          },
+        }),
+        prisma.task.findMany({
+          where: { companyProfileId: profile.id },
+          orderBy: { updatedAt: "desc" },
+          take: 10,
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            updatedAt: true,
+          },
+        }),
       ]);
 
-      const stats = {
+      const payload = {
+        profile: {
+          name: profile.companyName,
+          logo: profile.logoUrl,
+          trustScore: profile.trustScore,
+          verificationStatus: profile.trustScore >= 60 ? "verified" : "basic",
+        },
+        stats: {
+          activeTasksCount: activeTasksPosted,
+          totalSpend: totalSpendThisMonth,
+          engineersHired: totalEngineersHired,
+          avgRating: 0,
+          pendingSubmissions,
+        },
+        pendingSubmissions: [],
+        recommendedEngineers: recommendedEngineers.map((e) => ({
+          id: e.id,
+          fullName: e.fullName,
+          headline: e.headline,
+          neuronScore: e.neuronScore,
+          neuronTier: e.neuronTier,
+          hourlyRate: Number(e.hourlyRate ?? 0),
+          availabilityStatus: e.availabilityStatus,
+        })),
+        recentActivity: recentTasks.map((t) => ({
+          id: t.id,
+          type: "task_update",
+          message: `${t.title} is ${t.status}`,
+          timestamp: t.updatedAt.toISOString(),
+        })),
+        activeContracts: activeContracts.map((c) => ({
+          id: c.id,
+          title: c.title,
+          status: c.status,
+          totalAmount: Number(c.totalAmount ?? 0),
+          createdAt: c.createdAt.toISOString(),
+        })),
+        walletBalance: Number(wallet?.balance ?? 0),
+        // backward compatibility for existing web UI
         activeTasksPosted,
         totalEngineersHired,
         totalSpendThisMonth,
         openDisputes,
       };
-      await getRedisClient().setex(cacheKey, 60, JSON.stringify(stats));
-      return reply.send(stats);
+      await getRedisClient().setex(cacheKey, 60, JSON.stringify(payload));
+      return reply.send(successResponse(payload));
     },
   );
 
@@ -397,7 +647,8 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
       });
 
       return reply.send(
-        submissions.map((s) => ({
+        successResponse(
+          submissions.map((s) => ({
           id: s.id,
           taskId: s.taskId,
           taskTitle: s.task.title,
@@ -406,7 +657,8 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
           submittedAt: s.submittedAt,
           demoUrl: s.demoUrl,
           githubUrl: s.githubUrl,
-        })),
+          })),
+        ),
       );
     },
   );

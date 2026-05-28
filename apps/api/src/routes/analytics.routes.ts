@@ -44,7 +44,7 @@ export async function analyticsRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/analytics/engineer/:id",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const { id } = request.params as any;
       const { startDate, endDate } = request.query as any;
 
@@ -98,7 +98,7 @@ export async function analyticsRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/analytics/company/:id",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const { id } = request.params as any;
       const { startDate, endDate } = request.query as any;
 
@@ -120,7 +120,7 @@ export async function analyticsRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/analytics/platform",
     { preHandler: [authenticate, requireAdmin] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (_request: FastifyRequest, _reply: FastifyReply) => {
       const [
         totalEngineers,
         totalCompanies,
@@ -148,7 +148,7 @@ export async function analyticsRoutes(fastify: FastifyInstance): Promise<void> {
   // Market rates
   fastify.get(
     "/analytics/market-rates",
-    async (_request: FastifyRequest, reply: FastifyReply) => {
+    async (_request: FastifyRequest, _reply: FastifyReply) => {
       const rateByTier = await prisma.engineerProfile.groupBy({
         by: ["neuronTier"],
         _avg: { hourlyRate: true },

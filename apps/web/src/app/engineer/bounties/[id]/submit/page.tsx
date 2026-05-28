@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/modal';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/api-fetch';
+import { apiFetch, ApiRequestError } from '@/lib/api-fetch';
 import { mapApiTaskToBountyDetail } from '@/lib/map-task-to-bounty';
 import { useSubmitTask } from '@/lib/api-hooks';
 import { toast } from 'sonner';
@@ -24,6 +24,12 @@ export default function SubmitPage({ params }: { params: { id: string } }) {
     enabled: !!params.id,
   });
   const bounty = taskRaw ? mapApiTaskToBountyDetail(taskRaw) : null;
+  const hasParticipated = Boolean(taskRaw && (taskRaw as Record<string, unknown>).hasParticipated);
+  const alreadySubmitted = Boolean(
+    taskRaw &&
+      Array.isArray((taskRaw as Record<string, unknown>).submissions) &&
+      ((taskRaw as Record<string, unknown>).submissions as unknown[]).length > 0,
+  );
   const submitTask = useSubmitTask(params.id);
   const [description, setDescription] = React.useState('');
   const [demoUrl, setDemoUrl] = React.useState('');
@@ -38,6 +44,12 @@ export default function SubmitPage({ params }: { params: { id: string } }) {
   const [dragOver, setDragOver] = React.useState(false);
   const [githubStats, setGithubStats] = React.useState<{ stars: number; lastCommit: string } | null>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
+
+  function getSubmitError(err: unknown): string {
+    if (err instanceof ApiRequestError && err.status === 409) return err.message;
+    if (err instanceof Error && err.message) return err.message;
+    return 'Failed to submit solution';
+  }
 
   // Auto-fetch GitHub stats (simulated)
   React.useEffect(() => {
@@ -116,7 +128,7 @@ export default function SubmitPage({ params }: { params: { id: string } }) {
       setShowConfirm(false);
       setSubmitted(true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to submit solution');
+      toast.error(getSubmitError(err));
     }
   }
 
@@ -153,6 +165,43 @@ export default function SubmitPage({ params }: { params: { id: string } }) {
           </div>
           <h1 className="font-display text-2xl font-bold text-text-primary">Solution Submitted!</h1>
           <p className="text-text-secondary text-sm">The company will review your submission and respond within 72 hours.</p>
+          <Link href={`/engineer/bounties/${params.id}`}>
+            <Button variant="secondary" size="md">Back to Bounty</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (alreadySubmitted) {
+    return (
+      <div className="min-h-screen bg-bg-base flex items-center justify-center">
+        <div className="text-center space-y-4 max-w-md px-6">
+          <div className="w-16 h-16 rounded-full bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.3)] flex items-center justify-center mx-auto">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#00D4FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M20 6L9 17l-5-5"/>
+            </svg>
+          </div>
+          <h1 className="font-display text-2xl font-bold text-text-primary">Already Submitted</h1>
+          <p className="text-text-secondary text-sm">
+            You have already submitted a solution for this bounty. The company is reviewing it.
+          </p>
+          <Link href={`/engineer/bounties/${params.id}`}>
+            <Button variant="secondary" size="md">Back to Bounty</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasParticipated) {
+    return (
+      <div className="min-h-screen bg-bg-base flex items-center justify-center">
+        <div className="text-center space-y-4 max-w-md px-6">
+          <h1 className="font-display text-2xl font-bold text-text-primary">Participation Required</h1>
+          <p className="text-text-secondary text-sm">
+            You need to participate in this bounty before submitting a solution.
+          </p>
           <Link href={`/engineer/bounties/${params.id}`}>
             <Button variant="secondary" size="md">Back to Bounty</Button>
           </Link>

@@ -31,6 +31,7 @@ import { featuredRoutes } from "./routes/featured.routes";
 import { dashboardRoutes } from "./routes/dashboard.routes";
 import { settingsRoutes } from "./routes/settings.routes";
 import { notificationsRoutes } from "./routes/notifications.routes";
+import { engineerHiringRoutes } from "./routes/engineer-hiring.routes";
 
 async function start() {
   // Validate environment variables
@@ -125,6 +126,7 @@ async function start() {
   await fastify.register(dashboardRoutes, { prefix: "/api/dashboard" });
   await fastify.register(settingsRoutes, { prefix: "/api" });
   await fastify.register(notificationsRoutes, { prefix: "/api" });
+  await fastify.register(engineerHiringRoutes, { prefix: "/api" });
 
   // Connect to services
   try {

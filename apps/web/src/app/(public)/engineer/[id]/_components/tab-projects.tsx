@@ -15,6 +15,14 @@ interface TabProjectsProps {
 }
 
 export function TabProjects({ projects }: TabProjectsProps) {
+  if (!projects.length) {
+    return (
+      <div className="text-center py-16 text-text-muted">
+        <p className="text-sm">No projects published yet.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="masonry-grid" data-testid="projects-masonry">
       {projects.map((project) => (

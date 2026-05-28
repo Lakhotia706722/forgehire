@@ -25,7 +25,9 @@ function colorFromName(name: string): string {
 
 export default function EngineerContractsPage() {
   const [filter, setFilter] = React.useState<'all' | 'active' | 'completed' | 'pending_signature'>('all');
-  const { data: contracts, isLoading } = useMyContracts(filter === 'all' ? undefined : filter);
+  const { data: contracts, isLoading, isError, refetch } = useMyContracts(
+    filter === 'all' ? undefined : filter,
+  );
 
   const filtered = contracts ?? [];
 
@@ -75,6 +77,17 @@ export default function EngineerContractsPage() {
                 </div>
               </div>
             ))}
+          </div>
+        ) : isError ? (
+          <div className="text-center py-20">
+            <p className="text-text-muted text-sm mb-3">Failed to load contracts.</p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="text-sm text-accent-cyan hover:underline"
+            >
+              Retry
+            </button>
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-20">

@@ -9,8 +9,6 @@ import { Skeleton, CardSkeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
   useEngineerDashboard,
-  useRecommendedBounties,
-  useEngineerActivity,
   type RecommendedBounty,
   type ActivityItem,
 } from '@/lib/api-hooks';
@@ -39,11 +37,50 @@ export default function EngineerDashboardPage() {
   const { user } = useUser();
   const firstName = user?.firstName || 'there';
 
-  const { data: stats, isLoading: statsLoading, isError: statsError } = useEngineerDashboard();
-  const { data: bounties, isLoading: bountiesLoading } = useRecommendedBounties(3);
-  const { data: activity, isLoading: activityLoading } = useEngineerActivity(5);
+  const { data: dashboard, isLoading: statsLoading, isError: statsError } = useEngineerDashboard();
+  const stats = dashboard;
+  const bountiesLoading = statsLoading;
+  const activityLoading = statsLoading;
 
   const [tipDismissed, setTipDismissed] = React.useState(false);
+
+  const displayName = dashboard?.profile?.name || firstName;
+
+  const bounties: RecommendedBounty[] = React.useMemo(() => {
+    const items = dashboard?.recommendedBounties ?? [];
+    return items.slice(0, 3).map((b) => {
+      const deadline = b.deadline ? new Date(b.deadline) : null;
+      const daysLeft = deadline
+        ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+        : null;
+      return {
+        id: b.id,
+        title: b.title,
+        type: 'bounty',
+        category: [],
+        rewardAmount: b.rewardAmount,
+        difficulty: b.difficulty,
+        minNeuronScore: b.minNeuronScore,
+        participantCount: b.participantCount,
+        daysLeft,
+        matchPercentage: 0,
+        matchingSkills: b.techRequirements ?? [],
+        company: {
+          name: b.company?.name ?? 'Company',
+          logoUrl: b.company?.logoUrl ?? null,
+          trustScore: 0,
+        },
+      };
+    });
+  }, [dashboard?.recommendedBounties]);
+
+  const activity: ActivityItem[] = React.useMemo(() => {
+    const items = dashboard?.recentActivity ?? [];
+    return items.slice(0, 5).map((item) => ({
+      ...item,
+      timestamp: toRelativeIfNeeded(item.timestamp),
+    }));
+  }, [dashboard?.recentActivity]);
 
   // Build stat cards from real data
   const statCards = stats ? [
@@ -87,7 +124,7 @@ export default function EngineerDashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl md:text-3xl font-bold text-text-primary">
-              Welcome back, {firstName}. 👋
+              Welcome back, {displayName}. 👋
             </h1>
             <p className="text-text-secondary text-sm mt-1">
               Here&apos;s what&apos;s happening with your profile today.
@@ -189,6 +226,20 @@ export default function EngineerDashboardPage() {
       </div>
     </div>
   );
+}
+
+function toRelativeIfNeeded(timestamp: string): string {
+  if (!timestamp) return '';
+  if (timestamp.includes('ago') || timestamp === 'just now') return timestamp;
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return timestamp;
+  const diffMs = Date.now() - parsed.getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins} min ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${Math.floor(diffHours / 24)}d ago`;
 }
 
 // ─── Stat Card ────────────────────────────────────────────────

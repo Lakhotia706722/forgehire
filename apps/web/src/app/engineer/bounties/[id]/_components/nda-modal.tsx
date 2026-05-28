@@ -9,7 +9,7 @@ import { AriaCheckbox } from '@/components/ui/aria-tab-button';
 interface NDAModalProps {
   open: boolean;
   onClose: () => void;
-  onSigned: () => void;
+  onSigned: (signature: string) => Promise<void> | void;
   taskTitle: string;
 }
 
@@ -19,6 +19,8 @@ export function NDAModal({ open, onClose, onSigned, taskTitle }: NDAModalProps) 
   const [signMode, setSignMode] = React.useState<'draw' | 'type'>('type');
   const [typedSig, setTypedSig] = React.useState('');
   const [confirmed, setConfirmed] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const drawing = React.useRef(false);
 
@@ -63,14 +65,31 @@ export function NDAModal({ open, onClose, onSigned, taskTitle }: NDAModalProps) 
     setSigned(false);
   }
 
-  function handleSign() {
+  async function handleSign() {
     const hasSignature = signMode === 'draw' ? signed : typedSig.trim().length > 0;
     if (!hasSignature || !agreed) return;
-    setConfirmed(true);
-    setTimeout(() => {
-      onSigned();
-      onClose();
-    }, 1500);
+
+    const signature = signMode === 'draw'
+      ? canvasRef.current?.toDataURL('image/png') ?? ''
+      : typedSig.trim();
+    if (!signature) return;
+
+    setSubmitError(null);
+    setIsSubmitting(true);
+    try {
+      const result = onSigned(signature);
+      if (result && typeof (result as Promise<void>).then === 'function') {
+        await result;
+      }
+      setConfirmed(true);
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to sign NDA');
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   const canSign = agreed && (signMode === 'draw' ? signed : typedSig.trim().length > 0);
@@ -190,15 +209,18 @@ export function NDAModal({ open, onClose, onSigned, taskTitle }: NDAModalProps) 
           </div>
 
           {/* Actions */}
+          {submitError && (
+            <div className="text-xs text-accent-red">{submitError}</div>
+          )}
           <div className="flex gap-3 pt-2">
             <Button
               size="md"
               className="flex-1"
-              disabled={!canSign}
-              onClick={handleSign}
+              disabled={!canSign || isSubmitting}
+              onClick={() => { void handleSign(); }}
               data-testid="nda-sign-btn"
             >
-              Sign & Continue
+              {isSubmitting ? 'Signing…' : 'Sign & Continue'}
             </Button>
             <Button variant="ghost" size="md" onClick={onClose}>
               Cancel

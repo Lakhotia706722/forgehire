@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { avatarToneClass } from '@/lib/avatar-tone';
 import type { SearchEngineer } from '@/lib/hiring-data';
+import { mapApiSearchEngineer } from '@/lib/map-search-engineer';
+import { apiFetch } from '@/lib/api-fetch';
 
 interface SmartMatchingPanelProps {
   jobId?: string;
@@ -24,10 +26,30 @@ export function SmartMatchingPanel({ jobId, matchedEngineers, onInvite }: SmartM
   async function handleTeamBuilder() {
     if (!problemInput.trim()) return;
     setLoading(true);
-    // Simulate AI team building
-    await new Promise((r) => setTimeout(r, 1500));
-    setTeamSuggestions(matchedEngineers.slice(0, 3));
-    setLoading(false);
+    try {
+      const matched = await apiFetch<Record<string, unknown>[]>('/api/engineers/smart-match', {
+        method: 'POST',
+        body: JSON.stringify({ problemStatement: problemInput.trim(), limit: 5 }),
+      });
+      setTeamSuggestions(
+        matched.map((m) =>
+          mapApiSearchEngineer({
+            ...m,
+            id: m.id,
+            fullName: m.fullName,
+            hourlyRate: m.hourlyRate,
+            availabilityStatus: m.availabilityStatus,
+            neuronTier: m.neuronTier,
+            skills: m.skills,
+            matchScore: m.matchScore,
+          }),
+        ),
+      );
+    } catch {
+      setTeamSuggestions(matchedEngineers.slice(0, 3));
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (!jobId) {

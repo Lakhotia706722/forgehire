@@ -12,10 +12,14 @@ import { apiFetchList } from '@/lib/api-fetch';
 import { mapApiProductToListing } from '@/lib/map-api-product';
 import { AriaNavButton } from '@/components/ui/aria-tab-button';
 
-const RECOMMENDED_REASONS: Record<string, string> = {
-  'prod-1': 'Matches your tech stack (LangChain, FastAPI)',
-  'prod-2': 'Popular with companies in your industry',
-  'prod-6': 'Highly rated by fintech companies like yours',
+type SortOption = 'trending' | 'newest' | 'highest_rated' | 'most_purchased';
+const CATEGORY_TO_API: Record<ProductCategory, string> = {
+  'AI Agents': 'ai_agents',
+  'Fine-Tuned Models': 'fine_tuned_models',
+  'SaaS Tools': 'saas_tools',
+  Automation: 'automation_workflows',
+  'Datasets & Prompts': 'datasets_prompts',
+  APIs: 'apis_microservices',
 };
 
 export default function MarketplacePage() {
@@ -24,12 +28,34 @@ export default function MarketplacePage() {
   const [applied, setApplied] = React.useState<MarketplaceFilterState>(DEFAULT_MARKET_FILTERS);
   const [search, setSearch] = React.useState('');
   const [comparing, setComparing] = React.useState<string[]>([]);
+  const [sortBy, setSortBy] = React.useState<SortOption>('trending');
 
-  const { data: productsData, isLoading: loading } = useQuery({
-    queryKey: ['products', 'marketplace', applied, activeCategory, search],
+  const { data: productsData, isLoading: loading, isError, refetch } = useQuery({
+    queryKey: ['products', 'marketplace', applied, activeCategory, search, sortBy],
     queryFn: async () => {
+      const sortMap: Record<SortOption, { sortBy: string; sortOrder: string }> = {
+        trending: { sortBy: 'viewCount', sortOrder: 'desc' },
+        newest: { sortBy: 'publishedAt', sortOrder: 'desc' },
+        highest_rated: { sortBy: 'rating', sortOrder: 'desc' },
+        most_purchased: { sortBy: 'purchaseCount', sortOrder: 'desc' },
+      };
+      const params = new URLSearchParams({
+        status: 'published',
+        limit: '50',
+        minPrice: String(applied.priceRange[0]),
+        maxPrice: String(applied.priceRange[1]),
+        minRating: String(applied.minRating),
+        hasDemo: String(applied.tryBeforeBuy),
+        query: search,
+        ...sortMap[sortBy],
+      });
+      if (activeCategory !== 'All') {
+        params.set('category', CATEGORY_TO_API[activeCategory]);
+      }
+      if (applied.aiModels.length > 0) params.set('aiModel', applied.aiModels[0]);
+      if (applied.pricingModels.length > 0) params.set('pricingModel', applied.pricingModels[0]);
       const items = await apiFetchList<Record<string, unknown>>(
-        `/api/products?status=published&limit=50`,
+        `/api/products?${params.toString()}`,
       );
       return items.map((item, i) => mapApiProductToListing(item, i));
     },
@@ -41,7 +67,7 @@ export default function MarketplacePage() {
     [productsData],
   );
 
-  // Filter products
+  // Client-side refinement for multi-select filters.
   const filtered = React.useMemo(() => {
     return products.filter((p) => {
       if (activeCategory !== 'All' && p.category !== activeCategory) return false;
@@ -163,28 +189,6 @@ export default function MarketplacePage() {
 
       {/* Main content */}
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
-        {/* AI Recommendations (company users) */}
-        <div className="mb-8 bg-[rgba(123,94,167,0.06)] border border-[rgba(123,94,167,0.2)] rounded-2xl p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="#7B5EA7" aria-hidden="true">
-              <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd"/>
-            </svg>
-            <span className="text-sm font-medium text-accent-violet">Recommended for Sarvam AI</span>
-          </div>
-          <div className="grid sm:grid-cols-3 gap-4">
-            {products.filter((p) => RECOMMENDED_REASONS[p.id]).map((p) => (
-              <ProductCard
-                key={p.id}
-                product={p}
-                onCompareToggle={toggleCompare}
-                isComparing={comparing.includes(p.id)}
-                compareDisabled={comparing.length >= 4 && !comparing.includes(p.id)}
-                recommendedReason={RECOMMENDED_REASONS[p.id]}
-              />
-            ))}
-          </div>
-        </div>
-
         <div className="flex gap-8">
           {/* Filters sidebar */}
           <div className="hidden md:block w-64 shrink-0">
@@ -204,9 +208,27 @@ export default function MarketplacePage() {
               <p className="text-sm text-text-secondary">
                 {loading ? '...' : `${filtered.length} products`}
               </p>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                className="bg-bg-elevated border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-1.5 text-xs text-text-secondary focus:outline-none"
+                aria-label="Sort products"
+              >
+                <option value="trending">Trending</option>
+                <option value="newest">Newest</option>
+                <option value="highest_rated">Highest rated</option>
+                <option value="most_purchased">Most purchased</option>
+              </select>
             </div>
 
-            {loading ? (
+            {isError ? (
+              <div className="text-center py-20">
+                <p className="text-red-400 text-sm">Could not load marketplace products.</p>
+                <button onClick={() => refetch()} className="mt-3 text-sm text-accent-cyan hover:underline">
+                  Retry
+                </button>
+              </div>
+            ) : loading ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl overflow-hidden">

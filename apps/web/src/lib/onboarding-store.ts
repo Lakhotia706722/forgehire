@@ -128,35 +128,19 @@ export function clearOnboardingState(): void {
 /** Calculate completion percentage from state */
 export function calcCompletion(state: OnboardingState): number {
   let score = 0;
-  const max = 100;
 
-  // Step 1 — 20 pts
-  if (state.fullName.trim())    score += 5;
-  if (state.headline.trim())    score += 5;
-  if (state.location.trim())    score += 5;
-  if (state.workMode)           score += 5;
+  const basicInfoComplete = Boolean(
+    state.fullName.trim() &&
+      state.headline.trim() &&
+      state.location.trim() &&
+      state.workMode,
+  );
+  if (basicInfoComplete) score += 15;
+  if (state.skills.some((s) => s.isPrimary)) score += 15;
+  if (state.experiences.length >= 1) score += 15;
+  if (state.projects.length >= 1) score += 30;
+  if (state.hourlyRate.trim()) score += 15;
+  if (state.upiId.trim()) score += 10;
 
-  // Step 2 — 15 pts
-  if (state.skills.length >= 3) score += 15;
-  else if (state.skills.length > 0) score += 5;
-
-  // Step 3 — 15 pts
-  if (state.experiences.length > 0) score += 15;
-
-  // Step 4 — 25 pts (most critical)
-  if (state.projects.length > 0) {
-    const complete = state.projects.filter(
-      (p) => p.title && p.description && p.techStack.length > 0
-    ).length;
-    score += Math.min(25, complete * 12);
-  }
-
-  // Step 5 — 15 pts
-  if (state.hourlyRate) score += 10;
-  if (state.availability) score += 5;
-
-  // Step 6 — 10 pts
-  if (state.upiId) score += 10;
-
-  return Math.min(max, score);
+  return score;
 }

@@ -1,9 +1,9 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { ContractService } from "../services/contract.service";
+import { MilestonePaymentService } from "../services/milestone-payment.service";
 import {
   authenticate,
   requireCompany,
-  requireEngineerOrCompany,
 } from "../middleware/auth";
 import { successResponse } from "@neuronhire/shared";
 import { z } from "zod";
@@ -44,6 +44,7 @@ const amendmentSchema = z.object({
 
 export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
   const contractService = new ContractService();
+  const milestonePaymentService = new MilestonePaymentService();
 
   // Create contract
   fastify.post(
@@ -80,7 +81,7 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/contracts",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const { hiringMode, status, role } = request.query as any;
 
@@ -98,7 +99,7 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/contracts/:id",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const { id } = request.params as any;
 
@@ -111,7 +112,7 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post(
     "/contracts/:id/sign",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const { id } = request.params as any;
       const body = signContractSchema.parse(request.body);
@@ -131,19 +132,13 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post(
     "/contracts/:id/milestone/:mid/submit",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
+      const user = (request as any).user;
       const { mid } = request.params as any;
       const { deliverables, notes } = request.body as any;
-      const prisma = (contractService as any).prisma;
-
-      const milestone = await prisma.milestonePayment.update({
-        where: { id: mid },
-        data: {
-          status: "submitted",
-          submittedAt: new Date(),
-          deliverables: deliverables || undefined,
-          notes,
-        },
+      const milestone = await milestonePaymentService.submitMilestone(mid, user.id, {
+        submissionNotes: notes ?? "",
+        deliverables,
       });
 
       return successResponse(milestone);
@@ -154,17 +149,15 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post(
     "/contracts/:id/milestone/:mid/approve",
     { preHandler: [authenticate, requireCompany] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
+      const user = (request as any).user;
       const { mid } = request.params as any;
-      const prisma = (contractService as any).prisma;
-
-      const milestone = await prisma.milestonePayment.update({
-        where: { id: mid },
-        data: {
-          status: "approved",
-          approvedAt: new Date(),
-        },
-      });
+      const body = request.body as { approvalNotes?: string } | undefined;
+      const milestone = await milestonePaymentService.approveMilestone(
+        mid,
+        user.id,
+        body?.approvalNotes,
+      );
 
       return successResponse(milestone);
     },
@@ -192,7 +185,7 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/contracts/:id/document",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const { id } = request.params as any;
 
@@ -215,7 +208,7 @@ export async function contractRoutes(fastify: FastifyInstance): Promise<void> {
       const { reason, evidence } = request.body as any;
       const prisma = (contractService as any).prisma;
 
-      const contract = await contractService.getContract(id, user.id);
+      await contractService.getContract(id, user.id);
 
       const dispute = await prisma.contractDispute.create({
         data: {

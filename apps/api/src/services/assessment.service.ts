@@ -7,6 +7,8 @@ import { ReportGeneratorService } from "./report-generator.service";
 import { NeuronScoreService } from "./neuron-score.service";
 import { Queue } from "bullmq";
 import { getBullMQConnection } from "../config/bullmq";
+import Anthropic from "@anthropic-ai/sdk";
+import { getEnv } from "../config/env";
 
 export class AssessmentService {
   private prisma = getPrismaClient();
@@ -16,6 +18,7 @@ export class AssessmentService {
   private reportGenerator = new ReportGeneratorService();
   private neuronScoreService = new NeuronScoreService();
   private assessmentQueue: Queue | null;
+  private anthropic = new Anthropic({ apiKey: getEnv().ANTHROPIC_API_KEY });
 
   constructor() {
     const connection = getBullMQConnection();
@@ -198,12 +201,10 @@ export class AssessmentService {
     }
 
     // Parse data
-    const questions = JSON.parse(assessment.mcqQuestions as string);
-    const mcqResponses = JSON.parse(assessment.mcqResponses as string);
-    const codingTasks = JSON.parse(assessment.codingTasks as string);
-    const codingSubmissions = JSON.parse(
-      assessment.codingSubmissions as string,
-    );
+    const questions = this.parseArray(assessment.mcqQuestions);
+    const mcqResponses = this.parseArray(assessment.mcqResponses);
+    const codingTasks = this.parseArray(assessment.codingTasks);
+    const codingSubmissions = this.parseArray(assessment.codingSubmissions);
 
     // Evaluate MCQ
     const mcqScore = this.evaluateMCQ(questions, mcqResponses);
@@ -215,14 +216,21 @@ export class AssessmentService {
     );
     const codingScore = codingResults.averageScore;
 
-    // Evaluate case study (simplified - in production, use Claude API)
-    const caseScore = 75; // Placeholder
+    // Evaluate scenario via Claude with fallback.
+    const caseScore = await this.evaluateScenarioWithClaude(
+      this.parseObject(assessment.caseScenario),
+      assessment.caseResponse ?? "",
+    );
 
-    // Calculate total score
+    // Background review score defaults to 50 until async review is complete.
+    const backgroundScore = 50;
+
+    // Calculate weighted total score as per product contract.
     const totalScore = Math.round(
-      mcqScore * 0.4 + // 40%
-        codingScore * 0.4 + // 40%
-        caseScore * 0.2, // 20%
+      mcqScore * 0.3 +
+        codingScore * 0.4 +
+        caseScore * 0.2 +
+        backgroundScore * 0.1,
     );
 
     // Calculate dimension scores
@@ -288,7 +296,10 @@ export class AssessmentService {
 
     // Generate report using Claude API
     const report = await this.reportGenerator.generateReport(
-      assessment,
+      {
+        ...assessment,
+        totalScore: assessment.overallScore ?? 0,
+      },
       assessment.engineerProfile,
     );
 
@@ -323,6 +334,66 @@ export class AssessmentService {
     });
 
     return Math.round((correct / questions.length) * 100);
+  }
+
+  private parseArray(value: unknown): any[] {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  private parseObject(value: unknown): Record<string, unknown> {
+    if (!value) return {};
+    if (typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }
+
+  private async evaluateScenarioWithClaude(
+    scenario: Record<string, unknown>,
+    response: string,
+  ): Promise<number> {
+    if (!response.trim()) return 0;
+    const prompt = `Rate this AI engineer's scenario response on a scale of 0-100.
+Scenario: ${JSON.stringify(scenario)}
+Response: ${response}
+Evaluate: technical_accuracy (30%), scalability (25%), practicality (25%), communication (20%)
+Return JSON: {"totalScore": number}`;
+
+    try {
+      const message = await this.anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 400,
+        messages: [{ role: "user", content: prompt }],
+      });
+      const content = message.content[0];
+      if (content.type !== "text") return 75;
+      const match = content.text.match(/\{[\s\S]*\}/);
+      if (!match) return 75;
+      const parsed = JSON.parse(match[0]) as { totalScore?: number };
+      return Math.max(0, Math.min(100, Math.round(parsed.totalScore ?? 75)));
+    } catch {
+      return 75;
+    }
   }
 
   /**

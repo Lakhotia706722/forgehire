@@ -11,10 +11,13 @@ import { NDAModal } from './_components/nda-modal';
 import { MiniGateModal } from './_components/mini-gate-modal';
 import { formatReward } from '@/lib/bounty-data';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/api-fetch';
+import { apiFetch, ApiRequestError } from '@/lib/api-fetch';
 import { mapApiTaskToBountyDetail } from '@/lib/map-task-to-bounty';
 import { useNeuronScore } from '@/lib/api-hooks';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
+import { Modal } from '@/components/ui/modal';
+import { Button } from '@/components/ui/button';
 
 const ENGINEER_SCORE_FALLBACK = 0;
 
@@ -28,18 +31,30 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
   const { data: scoreData } = useNeuronScore();
   const engineerScore = scoreData?.score ?? ENGINEER_SCORE_FALLBACK;
 
-  const { data: taskRaw, isLoading } = useQuery({
+  const { data: taskRaw, isLoading, refetch } = useQuery({
     queryKey: ['task', params.id],
     queryFn: () => apiFetch<Record<string, unknown>>(`/api/tasks/${params.id}`),
     enabled: !!params.id,
   });
 
   const bounty = taskRaw ? mapApiTaskToBountyDetail(taskRaw) : null;
+  const hasParticipated = Boolean(taskRaw && (taskRaw as Record<string, unknown>).hasParticipated);
 
   const [showNDA, setShowNDA] = React.useState(false);
   const [showMiniGate, setShowMiniGate] = React.useState(false);
-  const [participated, setParticipated] = React.useState(false);
+  const [miniGatePassed, setMiniGatePassed] = React.useState(false);
+  const [showParticipationForm, setShowParticipationForm] = React.useState(false);
+  const [participated, setParticipated] = React.useState(hasParticipated);
+  const [participating, setParticipating] = React.useState(false);
   const [qaInput, setQaInput] = React.useState('');
+  const [askingQuestion, setAskingQuestion] = React.useState(false);
+  const [approach, setApproach] = React.useState('');
+  const [estimatedTime, setEstimatedTime] = React.useState<string>('');
+  const [proposedRate, setProposedRate] = React.useState<string>('');
+
+  React.useEffect(() => {
+    setParticipated(hasParticipated);
+  }, [hasParticipated]);
 
   if (isLoading || !bounty) {
     return (
@@ -52,11 +67,75 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
 
   const isEligible = engineerScore >= bounty.minNeuronScore;
 
+  function getEngineerActionError(err: unknown, fallback: string): string {
+    if (err instanceof ApiRequestError && err.status === 409) return err.message;
+    if (err instanceof Error && err.message) return err.message;
+    return fallback;
+  }
+
+  async function joinTask() {
+    if (!bounty || participating) return;
+    if (approach.trim().length < 50) {
+      toast.error('Please provide at least 50 characters in your approach');
+      return;
+    }
+    setParticipating(true);
+    try {
+      await apiFetch(`/api/tasks/${params.id}/participate`, {
+        method: 'POST',
+        body: JSON.stringify({
+          approach: approach.trim(),
+          estimatedTime: estimatedTime ? Number(estimatedTime) : null,
+          proposedRate: proposedRate ? Number(proposedRate) : null,
+        }),
+      });
+      await refetch();
+      setParticipated(true);
+      setShowParticipationForm(false);
+      toast.success('You are now participating in this bounty');
+    } catch (err) {
+      toast.error(getEngineerActionError(err, 'Failed to participate'));
+      throw err;
+    } finally {
+      setParticipating(false);
+    }
+  }
+
   function handleParticipate() {
     if (!bounty) return;
-    if (!isEligible) { setShowMiniGate(true); return; }
+    if (!isEligible && !miniGatePassed) { setShowMiniGate(true); return; }
     if (bounty.ndaRequired) { setShowNDA(true); return; }
-    setParticipated(true);
+    setShowParticipationForm(true);
+  }
+
+  async function handleSignNda(signature: string) {
+    await apiFetch(`/api/tasks/${params.id}/nda/generate`, { method: 'POST' });
+    await apiFetch(`/api/tasks/${params.id}/nda/sign`, {
+      method: 'POST',
+      body: JSON.stringify({ signature, ipAddress: '127.0.0.1' }),
+    });
+    await refetch();
+    toast.success('NDA signed');
+    setShowParticipationForm(true);
+  }
+
+  async function handleAskQuestion() {
+    const question = qaInput.trim();
+    if (!question || askingQuestion) return;
+    setAskingQuestion(true);
+    try {
+      await apiFetch(`/api/tasks/${params.id}/questions`, {
+        method: 'POST',
+        body: JSON.stringify({ question, isPublic: true }),
+      });
+      setQaInput('');
+      await refetch();
+      toast.success('Question posted');
+    } catch (err) {
+      toast.error(getEngineerActionError(err, 'Failed to post question'));
+    } finally {
+      setAskingQuestion(false);
+    }
   }
 
   return (
@@ -245,10 +324,11 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
                   className="flex-1 bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)] transition-all"
                 />
                 <button
-                  disabled={!qaInput.trim()}
+                  disabled={!qaInput.trim() || askingQuestion}
+                  onClick={() => { void handleAskQuestion(); }}
                   className="px-4 py-2.5 rounded-lg bg-accent-cyan text-bg-base text-sm font-semibold disabled:opacity-40 hover:brightness-110 transition-all"
                 >
-                  Ask
+                  {askingQuestion ? 'Posting…' : 'Ask'}
                 </button>
               </div>
             </Section>
@@ -259,7 +339,7 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
             <div className="lg:sticky lg:top-8">
               <ActionPanel
                 bounty={bounty}
-                engineerScore={engineerScore}
+                engineerScore={miniGatePassed ? Math.max(engineerScore, bounty.minNeuronScore) : engineerScore}
                 onParticipate={handleParticipate}
                 participated={participated}
               />
@@ -272,15 +352,76 @@ export default function BountyDetailPage({ params }: { params: { id: string } })
       <NDAModal
         open={showNDA}
         onClose={() => setShowNDA(false)}
-        onSigned={() => { setShowNDA(false); setParticipated(true); }}
+        onSigned={handleSignNda}
         taskTitle={bounty.title}
       />
       <MiniGateModal
         open={showMiniGate}
         onClose={() => setShowMiniGate(false)}
-        onPass={() => { setShowMiniGate(false); handleParticipate(); }}
+        onPass={() => {
+          setMiniGatePassed(true);
+          setShowMiniGate(false);
+          handleParticipate();
+        }}
         requiredScore={bounty.minNeuronScore}
+        taskId={params.id}
       />
+      <Modal
+        open={showParticipationForm}
+        onClose={() => setShowParticipationForm(false)}
+        title="Participate In Bounty"
+        size="md"
+      >
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="text-sm text-text-secondary block mb-1">Your approach</label>
+            <textarea
+              value={approach}
+              onChange={(e) => setApproach(e.target.value)}
+              rows={5}
+              placeholder="Describe your implementation approach..."
+              className="w-full bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2 text-sm text-text-primary"
+            />
+            <p className="text-xs text-text-muted mt-1">Minimum 50 characters</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm text-text-secondary block mb-1">Estimated days</label>
+              <input
+                type="number"
+                min={1}
+                max={365}
+                value={estimatedTime}
+                onChange={(e) => setEstimatedTime(e.target.value)}
+                className="w-full bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2 text-sm text-text-primary"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-text-secondary block mb-1">Proposed rate (INR)</label>
+              <input
+                type="number"
+                min={0}
+                value={proposedRate}
+                onChange={(e) => setProposedRate(e.target.value)}
+                className="w-full bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2 text-sm text-text-primary"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button
+              size="md"
+              className="flex-1"
+              onClick={() => { void joinTask(); }}
+              disabled={participating}
+            >
+              {participating ? 'Joining…' : 'Confirm Participation'}
+            </Button>
+            <Button variant="ghost" size="md" onClick={() => setShowParticipationForm(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

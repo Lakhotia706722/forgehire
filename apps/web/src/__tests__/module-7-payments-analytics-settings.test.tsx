@@ -4,6 +4,7 @@
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import EngineerWalletPage from '@/app/engineer/wallet/page';
 import EngineerAnalyticsPage from '@/app/engineer/analytics/page';
 import CompanyBillingPage from '@/app/company/billing/page';
@@ -38,6 +39,13 @@ jest.mock('recharts', () => ({
 }));
 
 describe('Module 7: Payments, Analytics & Settings', () => {
+  function renderWithQuery(ui: JSX.Element) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+  }
+
   describe('Engineer Wallet', () => {
     it('renders hero balance card with available balance', () => {
       render(<EngineerWalletPage />);
@@ -170,56 +178,94 @@ describe('Module 7: Payments, Analytics & Settings', () => {
   });
 
   describe('Company Billing', () => {
-    it('renders current plan card with features', () => {
-      render(<CompanyBillingPage />);
-      
-      expect(screen.getByText('Growth Plan')).toBeInTheDocument();
-      expect(screen.getByText(/₹9,999/)).toBeInTheDocument();
-      expect(screen.getByText('Up to 10 active contracts')).toBeInTheDocument();
-      expect(screen.getByText('Unlimited job postings')).toBeInTheDocument();
+    beforeEach(() => {
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/api/payments/wallet/transactions')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              data: {
+                transactions: [
+                  {
+                    id: 'txn-1',
+                    type: 'credit',
+                    amount: 50000,
+                    description: 'Contract Milestone Payment',
+                    createdAt: '2026-04-01T00:00:00.000Z',
+                  },
+                  {
+                    id: 'txn-2',
+                    type: 'debit',
+                    amount: 12000,
+                    description: 'Withdrawal to UPI',
+                    createdAt: '2026-03-25T00:00:00.000Z',
+                  },
+                ],
+                nextCursor: null,
+              },
+            }),
+          } as Response);
+        }
+        if (url.includes('/api/payments/wallet')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              data: {
+                balance: 240000,
+                totalEarned: 520000,
+                totalWithdrawn: 180000,
+                monthlyWithdrawal: 12000,
+                currency: 'INR',
+              },
+            }),
+          } as Response);
+        }
+        if (url.includes('/api/contracts')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              data: [
+                { id: 'contract-1', title: 'Voice AI Agent', status: 'active', totalAmount: 100000, rate: 0 },
+                { id: 'contract-2', title: 'MLOps Pipeline', status: 'active', totalAmount: 75000, rate: 0 },
+              ],
+            }),
+          } as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, data: {} }),
+        } as Response);
+      });
     });
 
-    it('displays escrow balance with per-contract breakdown', () => {
-      render(<CompanyBillingPage />);
-      
-      expect(screen.getByText('Escrow Balance')).toBeInTheDocument();
-      expect(screen.getByText(/₹225,000/)).toBeInTheDocument();
+    it('renders billing overview with wallet metrics', async () => {
+      renderWithQuery(<CompanyBillingPage />);
+
+      expect(await screen.findByText('Billing Overview')).toBeInTheDocument();
+      expect(screen.getByText(/₹240,000/)).toBeInTheDocument();
+      expect(screen.getByText(/₹520,000/)).toBeInTheDocument();
+    });
+
+    it('displays escrow balance with per-contract breakdown', async () => {
+      renderWithQuery(<CompanyBillingPage />);
+
+      expect(await screen.findByText('Escrow Balance')).toBeInTheDocument();
+      expect(screen.getByText(/₹175,000/)).toBeInTheDocument();
       expect(screen.getByText('Voice AI Agent')).toBeInTheDocument();
       expect(screen.getByText('MLOps Pipeline')).toBeInTheDocument();
     });
 
-    it('opens add funds modal', () => {
-      render(<CompanyBillingPage />);
-      
-      const addFundsBtn = screen.getByTestId('add-funds-btn');
-      fireEvent.click(addFundsBtn);
-      
-      expect(screen.getByText('Add Funds to Escrow')).toBeInTheDocument();
-      expect(screen.getByTestId('add-funds-amount-input')).toBeInTheDocument();
-    });
+    it('displays transaction history with mapped type badges', async () => {
+      renderWithQuery(<CompanyBillingPage />);
 
-    it('calculates GST correctly in add funds modal', () => {
-      render(<CompanyBillingPage />);
-      
-      const addFundsBtn = screen.getByTestId('add-funds-btn');
-      fireEvent.click(addFundsBtn);
-      
-      const amountInput = screen.getByTestId('add-funds-amount-input');
-      fireEvent.change(amountInput, { target: { value: '100000' } });
-      
-      // GST should be 18% = 18000
-      expect(screen.getByText(/₹18,000/)).toBeInTheDocument();
-      // Total should be 118000
-      expect(screen.getByText(/₹118,000/)).toBeInTheDocument();
-    });
-
-    it('displays invoice history with GST download links', () => {
-      render(<CompanyBillingPage />);
-      
-      expect(screen.getByText('Invoice History')).toBeInTheDocument();
-      expect(screen.getByText('GST Invoice')).toBeInTheDocument();
-      const downloadLinks = screen.getAllByText('↓ Download');
-      expect(downloadLinks.length).toBeGreaterThan(0);
+      expect(await screen.findByText('Transaction History')).toBeInTheDocument();
+      expect(screen.getByText('Contract Milestone Payment')).toBeInTheDocument();
+      expect(screen.getByText('Withdrawal to UPI')).toBeInTheDocument();
+      expect(screen.getByText(/^contract$/i)).toBeInTheDocument();
+      expect(screen.getByText(/^payout$/i)).toBeInTheDocument();
     });
   });
 

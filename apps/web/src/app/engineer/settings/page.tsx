@@ -15,6 +15,7 @@ import {
   useMyEngineerProfile,
   useUpdateEngineerProfile,
 } from '@/lib/api-hooks';
+import { apiFetch } from '@/lib/api-fetch';
 import { useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
 import {
@@ -89,15 +90,20 @@ function ProfileTab() {
   const [saved, setSaved] = React.useState({ fullName: '', headline: '', bio: '' });
 
   React.useEffect(() => {
-    if (!profile) return;
-    const mapped = {
-      fullName: profile.fullName || '',
-      headline: profile.headline || '',
-      bio: profile.bio || '',
-    };
-    setForm(mapped);
-    setSaved(mapped);
-  }, [profile]);
+    const fullName = profile?.fullName || '';
+    const headline = profile?.headline || '';
+    const bio = profile?.bio || '';
+    setForm((prev) =>
+      prev.fullName === fullName && prev.headline === headline && prev.bio === bio
+        ? prev
+        : { fullName, headline, bio }
+    );
+    setSaved((prev) =>
+      prev.fullName === fullName && prev.headline === headline && prev.bio === bio
+        ? prev
+        : { fullName, headline, bio }
+    );
+  }, [profile?.fullName, profile?.headline, profile?.bio]);
 
   const isDirty =
     form.fullName !== saved.fullName ||
@@ -413,8 +419,14 @@ function PrivacyTab() {
 
   async function handleDataExport() {
     setShowDataExport(true);
-    await new Promise((r) => setTimeout(r, 2000));
-    setShowDataExport(false);
+    try {
+      await apiFetch('/api/engineer/settings/data-export', { method: 'POST' });
+      toast.success('Data export request submitted. We will notify you shortly.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to request data export');
+    } finally {
+      setShowDataExport(false);
+    }
   }
 
   if (isLoading || !privacySettings) {
@@ -586,9 +598,17 @@ function DeleteAccountModal({ open, onClose }: DeleteAccountModalProps) {
 
   async function handleDelete() {
     setDeleting(true);
-    await new Promise((r) => setTimeout(r, 2000));
-    // In real app: logout, redirect to landing with toast
-    window.location.href = '/?deleted=true';
+    try {
+      await apiFetch('/api/engineer/settings/account-deletion', {
+        method: 'POST',
+        body: JSON.stringify({ reason: 'user_requested' }),
+      });
+      toast.success('Account deletion requested. Your account is scheduled for deletion in 30 days.');
+      window.location.href = '/?deleted=true';
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to request account deletion');
+      setDeleting(false);
+    }
   }
 
   function handleClose() {

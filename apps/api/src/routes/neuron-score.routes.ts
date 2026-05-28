@@ -20,9 +20,10 @@ export async function neuronScoreRoutes(
     { preHandler: [authenticate, requireEngineer] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as any).user;
+      const userId = user.userId ?? user.id;
 
       const profile = await prisma.engineerProfile.findUnique({
-        where: { userId: user.id },
+        where: { userId },
       });
 
       if (!profile) {
@@ -73,10 +74,11 @@ export async function neuronScoreRoutes(
     { preHandler: [authenticate, requireEngineer] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as any).user;
+      const userId = user.userId ?? user.id;
       const { limit } = request.query as any;
 
       const profile = await prisma.engineerProfile.findUnique({
-        where: { userId: user.id },
+        where: { userId },
       });
 
       if (!profile) {
@@ -115,6 +117,50 @@ export async function neuronScoreRoutes(
       );
 
       return successResponse({ newScore });
+    },
+  );
+
+  // Apply daily inactivity decay for all engineers (admin)
+  fastify.post(
+    "/neuron-score/decay/run",
+    { preHandler: [authenticate, requireAdmin] },
+    async (_request: FastifyRequest, _reply: FastifyReply) => {
+      const engineers = await prisma.engineerProfile.findMany({
+        select: { id: true },
+      });
+      let affected = 0;
+      for (const engineer of engineers) {
+        const before = await prisma.engineerProfile.findUnique({
+          where: { id: engineer.id },
+          select: { neuronScore: true },
+        });
+        if (!before) continue;
+        const after = await neuronScoreService.applyScoreDecay(engineer.id);
+        if (after !== before.neuronScore) affected += 1;
+      }
+      return successResponse({ processed: engineers.length, affected });
+    },
+  );
+
+  // Add score boost event (internal/admin trigger)
+  fastify.post(
+    "/neuron-score/boost",
+    { preHandler: [authenticate, requireAdmin] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { engineerProfileId, eventType } = request.body as {
+        engineerProfileId?: string;
+        eventType?: string;
+      };
+      if (!engineerProfileId || !eventType) {
+        return reply
+          .code(400)
+          .send({ success: false, error: "engineerProfileId and eventType are required" });
+      }
+      const newScore = await neuronScoreService.addScoreBoostEvent(
+        engineerProfileId,
+        eventType,
+      );
+      return successResponse({ newScore, eventType });
     },
   );
 }

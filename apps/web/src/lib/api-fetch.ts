@@ -19,6 +19,16 @@ type ApiErrorBody = {
   };
 };
 
+export class ApiRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+  }
+}
+
 /** Turn Fastify `{ success, error: { code, message } }` bodies into a display string. */
 export function extractApiErrorMessage(
   body: unknown,
@@ -59,11 +69,12 @@ export async function apiFetchList<T>(path: string, options?: RequestInit): Prom
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const token =
     typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  const isFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData;
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
@@ -72,7 +83,10 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(extractApiErrorMessage(err, `API error ${res.status}`));
+    throw new ApiRequestError(
+      extractApiErrorMessage(err, `API error ${res.status}`),
+      res.status,
+    );
   }
 
   const json = await res.json();

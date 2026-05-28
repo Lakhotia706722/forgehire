@@ -14,7 +14,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'bounties', label: 'Open Bounties' },
   { id: 'projects', label: 'Past Projects' },
   { id: 'reviews',  label: 'Reviews' },
-  { id: 'team',     label: 'Team' },
+  { id: 'team',     label: 'Team & Culture' },
 ];
 
 interface CompanyContentProps {
@@ -88,6 +88,9 @@ export function CompanyContent({ company: co }: CompanyContentProps) {
 }
 
 function OpenJobsTab({ jobs }: { jobs: CompanyProfile['openJobs'] }) {
+  if (!jobs.length) {
+    return <EmptyTabState message="No open jobs right now." />;
+  }
   return (
     <div className="space-y-4">
       {jobs.map((job) => (
@@ -114,6 +117,9 @@ function OpenJobsTab({ jobs }: { jobs: CompanyProfile['openJobs'] }) {
 }
 
 function OpenBountiesTab({ bounties }: { bounties: CompanyProfile['openBounties'] }) {
+  if (!bounties.length) {
+    return <EmptyTabState message="No open bounties right now." />;
+  }
   return (
     <div className="space-y-4">
       {bounties.map((b) => (
@@ -135,6 +141,9 @@ function OpenBountiesTab({ bounties }: { bounties: CompanyProfile['openBounties'
 }
 
 function PastProjectsTab({ projects }: { projects: CompanyProfile['pastProjects'] }) {
+  if (!projects.length) {
+    return <EmptyTabState message="No completed projects published yet." />;
+  }
   return (
     <div className="space-y-4">
       {projects.map((p) => (
@@ -158,6 +167,9 @@ function PastProjectsTab({ projects }: { projects: CompanyProfile['pastProjects'
 }
 
 function CompanyReviewsTab({ reviews }: { reviews: CompanyProfile['reviews'] }) {
+  if (!reviews.length) {
+    return <EmptyTabState message="No public reviews yet." />;
+  }
   return (
     <div className="space-y-4">
       {reviews.map((r) => (
@@ -189,8 +201,14 @@ function CompanyReviewsTab({ reviews }: { reviews: CompanyProfile['reviews'] }) 
 
 function TeamTab() {
   return (
+    <EmptyTabState message="Team and culture details are not publicly available." />
+  );
+}
+
+function EmptyTabState({ message }: { message: string }) {
+  return (
     <div className="text-center py-16 text-text-muted">
-      <p className="text-sm">Team information is not publicly available.</p>
+      <p className="text-sm">{message}</p>
     </div>
   );
 }

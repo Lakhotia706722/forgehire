@@ -2,37 +2,55 @@ import { getPrismaClient } from "../config/database";
 import { v4 as uuidv4 } from "uuid";
 
 export interface ScoreDimensions {
-  assessment: number; // 0-250 (25%)
-  clientRatings: number; // 0-250 (25%)
-  portfolioDepth: number; // 0-200 (20%)
-  workDelivery: number; // 0-150 (15%)
-  marketplace: number; // 0-100 (10%)
-  community: number; // 0-50 (5%)
+  assessment: number; // 0-100
+  clientRatings: number; // 0-100
+  portfolioDepth: number; // 0-100
+  workDelivery: number; // 0-100
+  marketplace: number; // 0-100
+  community: number; // 0-100
 }
+
+type ScoreBoostEventType =
+  | "bounty_completed"
+  | "five_star_review"
+  | "verified_demo_added"
+  | "platform_article_published"
+  | "build_in_public_post"
+  | "reference_verified"
+  | "contract_completed"
+  | "marketplace_product_live";
 
 export class NeuronScoreService {
   private prisma = getPrismaClient();
+  private readonly BOOST_POINTS: Record<string, number> = {
+    bounty_completed: 50,
+    five_star_review: 15,
+    verified_demo_added: 20,
+    platform_article_published: 10,
+    build_in_public_post: 5,
+    reference_verified: 50,
+    contract_completed: 25,
+    marketplace_product_live: 15,
+  };
 
   /**
    * Calculate NeuronScore from all dimensions (0-1000)
    */
   calculateScore(dimensions: ScoreDimensions): number {
-    const total =
-      dimensions.assessment +
-      dimensions.clientRatings +
-      dimensions.portfolioDepth +
-      dimensions.workDelivery +
-      dimensions.marketplace +
-      dimensions.community;
-
-    return Math.min(1000, Math.max(0, Math.round(total)));
+    const weighted =
+      dimensions.assessment * 0.25 +
+      dimensions.clientRatings * 0.25 +
+      dimensions.portfolioDepth * 0.2 +
+      dimensions.workDelivery * 0.15 +
+      dimensions.marketplace * 0.1 +
+      dimensions.community * 0.05;
+    return Math.min(1000, Math.max(0, Math.round(weighted * 10)));
   }
 
   /**
    * Determine tier from score
    */
   determineTier(score: number): string {
-    if (score >= 850) return "elite";
     if (score >= 700) return "elite";
     if (score >= 550) return "professional";
     if (score >= 400) return "verified";
@@ -76,6 +94,9 @@ export class NeuronScoreService {
         },
         projects: true,
         skills: true,
+        contracts: true,
+        products: true,
+        activities: true,
       },
     });
 
@@ -86,11 +107,11 @@ export class NeuronScoreService {
     // Calculate each dimension
     const dimensions: ScoreDimensions = {
       assessment: this.calculateAssessmentScore(profile.assessments),
-      clientRatings: this.calculateClientRatingsScore(profile),
-      portfolioDepth: this.calculatePortfolioScore(profile),
-      workDelivery: this.calculateWorkDeliveryScore(profile),
-      marketplace: this.calculateMarketplaceScore(profile),
-      community: this.calculateCommunityScore(profile),
+      clientRatings: await this.calculateClientRatingsScore(engineerProfileId),
+      portfolioDepth: this.calculatePortfolioScore(profile.projects),
+      workDelivery: this.calculateWorkDeliveryScore(profile.contracts),
+      marketplace: this.calculateMarketplaceScore(profile.products),
+      community: this.calculateCommunityScore(profile.activities),
     };
 
     // Calculate total score
@@ -137,78 +158,97 @@ export class NeuronScoreService {
   /**
    * Calculate assessment dimension score (0-250)
    */
-  private calculateAssessmentScore(assessments: any[]): number {
+  private calculateAssessmentScore(
+    assessments: Array<{ overallScore: number | null }>,
+  ): number {
     if (assessments.length === 0) return 0;
-
-    const latestAssessment = assessments[0];
-
-    if (!latestAssessment.totalScore) return 0;
-
-    // Convert assessment score (0-100) to dimension score (0-250)
-    return Math.round((latestAssessment.totalScore / 100) * 250);
+    return Math.max(0, Math.min(100, Math.round(assessments[0].overallScore ?? 0)));
   }
 
   /**
    * Calculate client ratings dimension score (0-250)
    */
-  private calculateClientRatingsScore(_profile: any): number {
-    // TODO: Implement when client ratings are available
-    // For now, return 0
-    return 0;
+  private async calculateClientRatingsScore(
+    engineerProfileId: string,
+  ): Promise<number> {
+    const reviewed = await this.prisma.taskSubmission.findMany({
+      where: {
+        engineerProfileId,
+        status: { in: ["accepted", "winner"] },
+        score: { not: null },
+      },
+      select: { score: true },
+      take: 50,
+    });
+    if (reviewed.length < 3) return 50;
+    const avg = reviewed.reduce((sum, item) => sum + (item.score ?? 0), 0) / reviewed.length;
+    return Math.max(0, Math.min(100, Math.round(avg)));
   }
 
   /**
    * Calculate portfolio depth dimension score (0-200)
    */
-  private calculatePortfolioScore(profile: any): number {
-    const { projects, skills } = profile;
-
-    let score = 0;
-
-    // Projects (0-120)
-    const projectCount = projects.length;
-    score += Math.min(120, projectCount * 20); // 20 points per project, max 6 projects
-
-    // Featured projects bonus
-    const featuredCount = projects.filter((p: any) => p.featured).length;
-    score += featuredCount * 10; // 10 bonus points per featured project
-
-    // Skills (0-80)
-    const skillCount = skills.length;
-    score += Math.min(80, skillCount * 5); // 5 points per skill, max 16 skills
-
-    // Verified skills bonus
-    const verifiedCount = skills.filter((s: any) => s.verified).length;
-    score += verifiedCount * 5; // 5 bonus points per verified skill
-
-    return Math.min(200, score);
+  private calculatePortfolioScore(
+    projects: Array<{
+      demoUrl: string | null;
+      videoUrl?: string | null;
+      performanceMetrics: unknown;
+      githubUrl: string | null;
+    }>,
+  ): number {
+    if (projects.length === 0) return 0;
+    let complexity = 0;
+    for (const p of projects) {
+      if (p.demoUrl) complexity += 3;
+      if (p.videoUrl) complexity += 2;
+      if (p.performanceMetrics) complexity += 2;
+      if (p.githubUrl) complexity += 1;
+    }
+    const maxPossible = projects.length * 8;
+    return Math.max(0, Math.min(100, Math.round((complexity / Math.max(1, maxPossible)) * 100)));
   }
 
   /**
    * Calculate work delivery dimension score (0-150)
    */
-  private calculateWorkDeliveryScore(_profile: any): number {
-    // TODO: Implement when work history is available
-    // Factors: on-time delivery, quality ratings, completion rate
-    return 0;
+  private calculateWorkDeliveryScore(
+    contracts: Array<{ status: string; createdAt: Date; updatedAt: Date }>,
+  ): number {
+    if (contracts.length === 0) return 50;
+    const completed = contracts.filter((c) => c.status === "completed").length;
+    const disputed = contracts.filter((c) => c.status === "disputed").length;
+    const completionRate = completed / contracts.length;
+    const disputeRate = disputed / contracts.length;
+    const onTimeRate = Math.max(0, 1 - disputeRate);
+    const score = (onTimeRate * 0.5 + (1 - disputeRate) * 0.3 + completionRate * 0.2) * 100;
+    return Math.max(0, Math.min(100, Math.round(score)));
   }
 
   /**
    * Calculate marketplace dimension score (0-100)
    */
-  private calculateMarketplaceScore(_profile: any): number {
-    // TODO: Implement when marketplace activity is available
-    // Factors: jobs completed, earnings, response rate
-    return 0;
+  private calculateMarketplaceScore(
+    products: Array<{ purchaseCount: number; rating: unknown }>,
+  ): number {
+    if (products.length === 0) return 0;
+    const productCount = products.length;
+    const sales = products.reduce((sum, p) => sum + p.purchaseCount, 0);
+    const avgRating =
+      products.reduce((sum, p) => sum + Number(p.rating ?? 0), 0) /
+      Math.max(1, products.length);
+    const raw = productCount * Math.max(1, avgRating) * Math.log(sales + 1);
+    return Math.max(0, Math.min(100, Math.round(raw * 8)));
   }
 
   /**
    * Calculate community dimension score (0-50)
    */
-  private calculateCommunityScore(_profile: any): number {
-    // TODO: Implement when community features are available
-    // Factors: forum posts, helpful answers, mentoring
-    return 0;
+  private calculateCommunityScore(
+    activities: Array<{ id: string }>,
+  ): number {
+    const buildInPublicPosts = activities.length;
+    const score = Math.min(100, buildInPublicPosts * 5);
+    return score;
   }
 
   /**
@@ -240,21 +280,55 @@ export class NeuronScoreService {
     // Calculate decay percentage (2% per period, max 15%)
     const decayPercentage = Math.min(15, decayPeriods * 2);
 
-    // Apply decay
-    const decayAmount = Math.round(
-      profile.neuronScore * (decayPercentage / 100),
-    );
-    const newScore = profile.neuronScore - decayAmount;
+    const decayAmount = Math.round(profile.neuronScore * (decayPercentage / 100));
+    const newScore = Math.max(0, profile.neuronScore - decayAmount);
+    if (decayAmount <= 0) return profile.neuronScore;
 
-    if (decayAmount > 0) {
-      await this.recalculateScore(
+    await this.prisma.engineerProfile.update({
+      where: { id: engineerProfileId },
+      data: { neuronScore: newScore },
+    });
+    await this.prisma.neuronScoreHistory.create({
+      data: {
+        id: uuidv4(),
         engineerProfileId,
-        `Inactivity decay: ${decayPercentage}% (${daysSinceActivity} days inactive)`,
-        "inactivity_decay",
-        "system",
-      );
-    }
+        previousScore: profile.neuronScore,
+        newScore,
+        scoreDelta: newScore - profile.neuronScore,
+        reason: `Inactivity decay: ${decayPercentage}% (${daysSinceActivity} days inactive)`,
+        dimension: "inactivity_decay",
+        triggeredBy: "system",
+      },
+    });
+    return newScore;
+  }
 
+  async addScoreBoostEvent(
+    engineerProfileId: string,
+    eventType: ScoreBoostEventType | string,
+  ): Promise<number> {
+    const profile = await this.prisma.engineerProfile.findUnique({
+      where: { id: engineerProfileId },
+    });
+    if (!profile) throw new Error("Engineer profile not found");
+    const boost = this.BOOST_POINTS[eventType] ?? 0;
+    const newScore = Math.min(1000, profile.neuronScore + boost);
+    await this.prisma.engineerProfile.update({
+      where: { id: engineerProfileId },
+      data: { neuronScore: newScore, neuronTier: this.determineTier(newScore) },
+    });
+    await this.prisma.neuronScoreHistory.create({
+      data: {
+        id: uuidv4(),
+        engineerProfileId,
+        previousScore: profile.neuronScore,
+        newScore,
+        scoreDelta: newScore - profile.neuronScore,
+        reason: `Score boost event: ${eventType}`,
+        dimension: "boost",
+        triggeredBy: "system",
+      },
+    });
     return newScore;
   }
 
@@ -291,6 +365,9 @@ export class NeuronScoreService {
         },
         projects: true,
         skills: true,
+        contracts: true,
+        products: true,
+        activities: true,
       },
     });
 
@@ -300,11 +377,11 @@ export class NeuronScoreService {
 
     const dimensions: ScoreDimensions = {
       assessment: this.calculateAssessmentScore(profile.assessments),
-      clientRatings: this.calculateClientRatingsScore(profile),
-      portfolioDepth: this.calculatePortfolioScore(profile),
-      workDelivery: this.calculateWorkDeliveryScore(profile),
-      marketplace: this.calculateMarketplaceScore(profile),
-      community: this.calculateCommunityScore(profile),
+      clientRatings: await this.calculateClientRatingsScore(engineerProfileId),
+      portfolioDepth: this.calculatePortfolioScore(profile.projects),
+      workDelivery: this.calculateWorkDeliveryScore(profile.contracts),
+      marketplace: this.calculateMarketplaceScore(profile.products),
+      community: this.calculateCommunityScore(profile.activities),
     };
 
     const history = await this.getScoreHistory(engineerProfileId, 10);

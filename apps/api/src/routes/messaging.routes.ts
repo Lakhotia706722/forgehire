@@ -20,7 +20,7 @@ export async function messagingRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/messages/conversations",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const conversations = await messagingService.getUserConversations(
         user.id,
@@ -33,7 +33,7 @@ export async function messagingRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/messages/conversations/:id",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const { id } = request.params as any;
       const { limit, cursor } = request.query as any;
@@ -46,6 +46,24 @@ export async function messagingRoutes(fastify: FastifyInstance): Promise<void> {
       );
 
       return successResponse(result);
+    },
+  );
+
+  // Alias used by web hooks: only return items array
+  fastify.get(
+    "/messages/conversations/:id/messages",
+    { preHandler: [authenticate] },
+    async (request: FastifyRequest, _reply: FastifyReply) => {
+      const user = (request as any).user;
+      const { id } = request.params as any;
+      const { limit, cursor } = request.query as any;
+      const result = await messagingService.getConversationMessages(
+        id,
+        user.id,
+        limit ? parseInt(limit) : 50,
+        cursor,
+      );
+      return successResponse(result.items);
     },
   );
 
@@ -68,6 +86,12 @@ export async function messagingRoutes(fastify: FastifyInstance): Promise<void> {
         return reply
           .code(404)
           .send({ success: false, error: "Conversation not found" });
+      }
+      const isParticipant =
+        conversation.participant1Id === user.id ||
+        conversation.participant2Id === user.id;
+      if (!isParticipant) {
+        return reply.code(403).send({ success: false, error: "Forbidden" });
       }
 
       const recipientId =
@@ -106,7 +130,7 @@ export async function messagingRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.put(
     "/messages/request/:id/accept",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const { id } = request.params as any;
 
@@ -123,7 +147,7 @@ export async function messagingRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.put(
     "/messages/request/:id/decline",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const { id } = request.params as any;
 
@@ -160,11 +184,32 @@ export async function messagingRoutes(fastify: FastifyInstance): Promise<void> {
     },
   );
 
+  // Canonical upload alias
+  fastify.post(
+    "/messages/upload",
+    { preHandler: [authenticate] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const data = await request.file();
+      if (!data) {
+        return reply
+          .code(400)
+          .send({ success: false, error: "No file uploaded" });
+      }
+      const buffer = await data.toBuffer();
+      const result = await messagingService.uploadMessageFile(
+        buffer,
+        data.filename,
+        data.mimetype,
+      );
+      return successResponse(result);
+    },
+  );
+
   // Get pending message requests
   fastify.get(
     "/messages/requests/pending",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const requests = await messagingService.getPendingMessageRequests(
         user.id,

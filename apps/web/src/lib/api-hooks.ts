@@ -12,6 +12,13 @@ import { apiFetch, apiFetchList } from './api-fetch';
 import { mapApiProductToListing } from './map-api-product';
 import { EMPTY_PLATFORM_STATS } from './api-safe';
 
+/** Wait for Clerk sign-in + Forge JWT sync before protected API queries. */
+function useProtectedQueryEnabled(extra = true): boolean {
+  const { isLoaded, isSignedIn } = useAuth();
+  const { status: apiAuthStatus } = useApiAuth();
+  return isLoaded && isSignedIn && apiAuthStatus === 'ready' && extra;
+}
+
 // ── Query Keys ────────────────────────────────────────────────
 export const QUERY_KEYS = {
   platformStats:          ['stats', 'platform'],
@@ -156,6 +163,40 @@ export function useFeaturedBounties() {
 
 // ── Engineer Dashboard ────────────────────────────────────────
 export interface EngineerDashboardStats {
+  profile?: {
+    name: string;
+    photo: string | null;
+    neuronScore: number;
+    tier: string;
+    completeness: number;
+  };
+  stats?: {
+    profileViews30d: number;
+    proposalsSent: number;
+    acceptanceRate: number;
+    bountiesWon: number;
+    totalEarnings: number;
+  };
+  recommendedBounties?: Array<{
+    id: string;
+    title: string;
+    rewardAmount: number;
+    deadline: string | null;
+    difficulty: string;
+    company: { name: string; logoUrl: string | null };
+    minNeuronScore: number;
+    participantCount: number;
+    techRequirements: string[];
+  }>;
+  recentActivity?: ActivityItem[];
+  pendingPayments?: number;
+  activeContractsCount?: number;
+  notifications?: Array<{
+    id: string;
+    type: string;
+    title: string;
+    count: number;
+  }>;
   activeContracts: { count: number; trend: number };
   pendingProposals: { count: number; trend: number };
   marketplaceRevenue: { amount: number; trend: number };
@@ -164,10 +205,12 @@ export interface EngineerDashboardStats {
 }
 
 export function useEngineerDashboard() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<EngineerDashboardStats>({
     queryKey: QUERY_KEYS.engineerDashboard,
     queryFn: () => apiFetch('/api/dashboard/engineer'),
     staleTime: 60_000, // 1 minute
+    enabled: authReady,
   });
 }
 
@@ -188,10 +231,12 @@ export interface RecommendedBounty {
 }
 
 export function useRecommendedBounties(limit = 10) {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<RecommendedBounty[]>({
     queryKey: QUERY_KEYS.recommendedBounties,
     queryFn: () => apiFetch(`/api/dashboard/engineer/recommended-bounties?limit=${limit}`),
     staleTime: 2 * 60_000,
+    enabled: authReady,
   });
 }
 
@@ -204,11 +249,13 @@ export interface ActivityItem {
 }
 
 export function useEngineerActivity(limit = 10) {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<ActivityItem[]>({
     queryKey: QUERY_KEYS.engineerActivity,
     queryFn: () => apiFetch(`/api/dashboard/engineer/activity?limit=${limit}`),
     staleTime: 30_000, // 30 seconds
-    refetchInterval: 60_000, // Poll every minute
+    refetchInterval: authReady ? 60_000 : false,
+    enabled: authReady,
   });
 }
 
@@ -218,13 +265,51 @@ export interface CompanyDashboardStats {
   totalEngineersHired: number;
   totalSpendThisMonth: number;
   openDisputes: number;
+  profile?: {
+    name: string;
+    logo: string | null;
+    trustScore: number;
+    verificationStatus: string;
+  };
+  stats?: {
+    activeTasksCount: number;
+    totalSpend: number;
+    engineersHired: number;
+    avgRating: number;
+    pendingSubmissions: number;
+  };
+  recommendedEngineers?: Array<{
+    id: string;
+    fullName: string;
+    headline: string | null;
+    neuronScore: number;
+    neuronTier: string;
+    hourlyRate: number;
+    availabilityStatus: string;
+  }>;
+  recentActivity?: Array<{
+    id: string;
+    type: string;
+    message: string;
+    timestamp: string;
+  }>;
+  activeContracts?: Array<{
+    id: string;
+    title: string;
+    status: string;
+    totalAmount: number;
+    createdAt: string;
+  }> | { count: number; trend: number };
+  walletBalance?: number;
 }
 
 export function useCompanyDashboard() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<CompanyDashboardStats>({
     queryKey: QUERY_KEYS.companyDashboard,
     queryFn: () => apiFetch('/api/dashboard/company'),
     staleTime: 60_000,
+    enabled: authReady,
   });
 }
 
@@ -241,10 +326,12 @@ export interface PendingSubmission {
 }
 
 export function usePendingSubmissions(limit = 10) {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<PendingSubmission[]>({
     queryKey: QUERY_KEYS.pendingSubmissions,
     queryFn: () => apiFetch(`/api/dashboard/company/pending-submissions?limit=${limit}`),
     staleTime: 60_000,
+    enabled: authReady,
   });
 }
 
@@ -266,11 +353,13 @@ export interface AdminStats {
 }
 
 export function useAdminStats() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<AdminStats>({
     queryKey: QUERY_KEYS.adminStats,
     queryFn: () => apiFetch('/api/stats/admin'),
     staleTime: 60_000,
-    refetchInterval: 60_000,
+    refetchInterval: authReady ? 60_000 : false,
+    enabled: authReady,
   });
 }
 
@@ -284,20 +373,24 @@ export interface RevenueDataPoint {
 }
 
 export function useAdminRevenue(months = 6) {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<RevenueDataPoint[]>({
     queryKey: QUERY_KEYS.adminRevenue(months),
     queryFn: () => apiFetch(`/api/stats/admin/revenue?months=${months}`),
     staleTime: 60 * 60_000, // 1 hour
+    enabled: authReady,
   });
 }
 
 // ── Admin Activity Feed ───────────────────────────────────────
 export function useAdminActivity(limit = 20) {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<ActivityItem[]>({
     queryKey: QUERY_KEYS.adminActivity,
     queryFn: () => apiFetch(`/api/stats/admin/activity?limit=${limit}`),
     staleTime: 30_000,
-    refetchInterval: 30_000, // Poll every 30 seconds
+    refetchInterval: authReady ? 30_000 : false,
+    enabled: authReady,
   });
 }
 
@@ -309,13 +402,20 @@ export interface WalletData {
   currency: string;
   totalEarned: number;
   totalWithdrawn: number;
+  kycStatus?: string;
+  panVerified?: boolean;
+  requiresKycForWithdrawal?: boolean;
+  kycThreshold?: number;
+  minimumPayout?: number;
 }
 
 export function useWallet() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<WalletData>({
     queryKey: QUERY_KEYS.wallet,
     queryFn: () => apiFetch('/api/payments/wallet'),
     staleTime: 30_000,
+    enabled: authReady,
   });
 }
 
@@ -331,10 +431,12 @@ export interface WalletTransaction {
 }
 
 export function useWalletTransactions(cursor?: string, limit = 20) {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<{ transactions: WalletTransaction[]; nextCursor: string | null }>({
     queryKey: QUERY_KEYS.walletTransactions(cursor),
     queryFn: () => apiFetch(`/api/payments/wallet/transactions?limit=${limit}${cursor ? `&cursor=${cursor}` : ''}`),
     staleTime: 30_000,
+    enabled: authReady,
   });
 }
 
@@ -348,10 +450,12 @@ export interface EarningsDataPoint {
 }
 
 export function useEarningsChart(period: '30days' | '6months' | 'year' = '6months') {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<EarningsDataPoint[]>({
     queryKey: QUERY_KEYS.earningsChart(period),
     queryFn: () => apiFetch(`/api/payments/wallet/earnings?period=${period}`),
     staleTime: 5 * 60_000,
+    enabled: authReady,
   });
 }
 
@@ -369,11 +473,12 @@ export interface TaskSubmission {
 }
 
 export function useTaskSubmissions(taskId: string) {
+  const authReady = useProtectedQueryEnabled(!!taskId);
   return useQuery<TaskSubmission[]>({
     queryKey: QUERY_KEYS.taskSubmissions(taskId),
     queryFn: () => apiFetch(`/api/tasks/${taskId}/submissions`),
     staleTime: 30_000,
-    enabled: !!taskId,
+    enabled: authReady,
   });
 }
 
@@ -390,16 +495,21 @@ export interface SubmissionDetail {
   description: string;
   demoUrl: string | null;
   githubUrl: string | null;
+  videoUrl?: string | null;
+  architectureDiagram?: string | null;
   performanceMetrics: { metric: string; value: string }[] | null;
   screenshots: string[];
+  feedback?: string | null;
+  criteriaScores?: Record<string, number> | null;
 }
 
 export function useSubmissionDetail(taskId: string, submissionId: string) {
+  const authReady = useProtectedQueryEnabled(!!taskId && !!submissionId);
   return useQuery<SubmissionDetail>({
     queryKey: QUERY_KEYS.taskSubmission(taskId, submissionId),
     queryFn: () => apiFetch(`/api/tasks/${taskId}/submissions/${submissionId}`),
     staleTime: 30_000,
-    enabled: !!taskId && !!submissionId,
+    enabled: authReady,
   });
 }
 
@@ -426,11 +536,12 @@ export interface AdminEngineerDetail {
 }
 
 export function useAdminEngineerDetail(id: string) {
+  const authReady = useProtectedQueryEnabled(!!id);
   return useQuery<AdminEngineerDetail>({
     queryKey: QUERY_KEYS.adminEngineer(id),
     queryFn: () => apiFetch(`/api/admin/engineers/${id}`),
     staleTime: 60_000,
-    enabled: !!id,
+    enabled: authReady,
   });
 }
 
@@ -462,11 +573,12 @@ export interface AdminAssessmentDetail {
 }
 
 export function useAdminAssessmentDetail(id: string) {
+  const authReady = useProtectedQueryEnabled(!!id);
   return useQuery<AdminAssessmentDetail>({
     queryKey: QUERY_KEYS.adminAssessment(id),
     queryFn: () => apiFetch(`/api/admin/assessments/${id}`),
     staleTime: 60_000,
-    enabled: !!id,
+    enabled: authReady,
   });
 }
 
@@ -488,11 +600,12 @@ export interface AdminProductDetail {
 }
 
 export function useAdminProductDetail(id: string) {
+  const authReady = useProtectedQueryEnabled(!!id);
   return useQuery<AdminProductDetail>({
     queryKey: QUERY_KEYS.adminProduct(id),
     queryFn: () => apiFetch(`/api/admin/products/${id}`),
     staleTime: 60_000,
-    enabled: !!id,
+    enabled: authReady,
   });
 }
 
@@ -516,14 +629,12 @@ export interface EngineerSettings {
 }
 
 export function useEngineerSettings() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const { status: apiAuthStatus } = useApiAuth();
-
+  const authReady = useProtectedQueryEnabled();
   return useQuery<EngineerSettings>({
     queryKey: QUERY_KEYS.settings,
     queryFn: () => apiFetch('/api/engineer/settings'),
     staleTime: 5 * 60_000,
-    enabled: isLoaded && isSignedIn && apiAuthStatus === 'ready',
+    enabled: authReady,
   });
 }
 
@@ -538,10 +649,12 @@ export interface ActiveSession {
 }
 
 export function useActiveSessions() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<ActiveSession[]>({
     queryKey: QUERY_KEYS.sessions,
     queryFn: () => apiFetch('/api/auth/sessions'),
     staleTime: 60_000,
+    enabled: authReady,
   });
 }
 
@@ -554,10 +667,12 @@ export interface ScoreHistoryPoint {
 }
 
 export function useNeuronScoreHistory() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<ScoreHistoryPoint[]>({
     queryKey: QUERY_KEYS.neuronScoreHistory,
     queryFn: () => apiFetch('/api/neuron-score/history'),
     staleTime: 5 * 60_000,
+    enabled: authReady,
   });
 }
 
@@ -568,8 +683,11 @@ export function useApproveSubmission(taskId: string) {
   return useMutation({
     mutationFn: (submissionId: string) =>
       apiFetch(`/api/tasks/${taskId}/submissions/${submissionId}/approve`, { method: 'POST' }),
-    onSuccess: () => {
+    onSuccess: (_data, submissionId) => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.taskSubmissions(taskId) });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.taskSubmission(taskId, submissionId) });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.task(taskId) });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
 }
@@ -582,8 +700,38 @@ export function useRejectSubmission(taskId: string) {
         method: 'POST',
         body: JSON.stringify({ feedback }),
       }),
-    onSuccess: () => {
+    onSuccess: (_data, { submissionId }) => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.taskSubmissions(taskId) });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.taskSubmission(taskId, submissionId) });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.task(taskId) });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+}
+
+export function useEvaluateSubmission(taskId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      submissionId,
+      score,
+      feedback,
+      criteriaScores,
+    }: {
+      submissionId: string;
+      score: number;
+      feedback: string;
+      criteriaScores?: Record<string, number>;
+    }) =>
+      apiFetch(`/api/tasks/${taskId}/submissions/${submissionId}/evaluate`, {
+        method: 'POST',
+        body: JSON.stringify({ submissionId, score, feedback, criteriaScores }),
+      }),
+    onSuccess: (_data, { submissionId }) => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.taskSubmissions(taskId) });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.taskSubmission(taskId, submissionId) });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.task(taskId) });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
 }
@@ -644,10 +792,17 @@ export function useAdminProductDecision() {
 export function useWithdraw() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ amount, method, upiId }: { amount: number; method: string; upiId: string }) =>
-      apiFetch('/api/payments/withdraw', {
+    mutationFn: (payload: {
+      amount: number;
+      method: 'upi' | 'neft' | 'imps';
+      upiId?: string;
+      accountNumber?: string;
+      ifscCode?: string;
+      accountHolderName?: string;
+    }) =>
+      apiFetch('/api/payments/payout', {
         method: 'POST',
-        body: JSON.stringify({ amount, method, upiId }),
+        body: JSON.stringify(payload),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.wallet });
@@ -709,14 +864,12 @@ export interface EngineerProfileData {
 }
 
 export function useMyEngineerProfile() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const { status: apiAuthStatus } = useApiAuth();
-
+  const authReady = useProtectedQueryEnabled();
   return useQuery<EngineerProfileData | null>({
     queryKey: ['engineer', 'me'],
     queryFn: () => apiFetch<EngineerProfileData | null>('/api/engineer/profile'),
     staleTime: 5 * 60_000,
-    enabled: isLoaded && isSignedIn && apiAuthStatus === 'ready',
+    enabled: authReady,
     retry: (failureCount, err) => {
       const msg = err instanceof Error ? err.message : '';
       if (msg.includes('401') && failureCount < 3) return true;
@@ -756,11 +909,13 @@ export interface ContractSummary {
 }
 
 export function useMyContracts(filter?: string) {
+  const authReady = useProtectedQueryEnabled();
   const params = filter && filter !== 'all' ? `?status=${filter}` : '';
   return useQuery<ContractSummary[]>({
     queryKey: ['contracts', 'me', filter],
     queryFn: () => apiFetch(`/api/contracts${params}`),
     staleTime: 60_000,
+    enabled: authReady,
   });
 }
 
@@ -783,20 +938,23 @@ export interface CompanyTaskItem {
 }
 
 export function useCompanyTasks(status?: string) {
+  const authReady = useProtectedQueryEnabled();
   const params = status && status !== 'all' ? `?status=${status}` : '';
   return useQuery<CompanyTaskItem[]>({
     queryKey: QUERY_KEYS.tasks({ mine: true, status }),
     queryFn: () => apiFetchList<CompanyTaskItem>(`/api/tasks/mine${params}`),
     staleTime: 60_000,
+    enabled: authReady,
   });
 }
 
 export function useTaskDetail(taskId: string) {
+  const authReady = useProtectedQueryEnabled(!!taskId);
   return useQuery<CompanyTaskItem>({
     queryKey: QUERY_KEYS.task(taskId),
     queryFn: () => apiFetch(`/api/tasks/${taskId}`),
     staleTime: 30_000,
-    enabled: !!taskId,
+    enabled: authReady,
   });
 }
 
@@ -834,10 +992,12 @@ export interface CompanyAnalyticsData {
 }
 
 export function useCompanyAnalytics() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<CompanyAnalyticsData>({
     queryKey: QUERY_KEYS.companyAnalytics,
     queryFn: () => apiFetch('/api/analytics/company/me'),
     staleTime: 5 * 60_000,
+    enabled: authReady,
   });
 }
 
@@ -901,11 +1061,63 @@ export interface ContractDetail {
 }
 
 export function useContractDetail(id: string) {
+  const authReady = useProtectedQueryEnabled(!!id);
   return useQuery<ContractDetail>({
     queryKey: ['contract', id],
     queryFn: () => apiFetch(`/api/contracts/${id}`),
     staleTime: 30_000,
-    enabled: !!id,
+    enabled: authReady,
+  });
+}
+
+export function useSubmitContractMilestone(contractId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      milestoneId: string;
+      deliverables?: string[] | null;
+      notes?: string | null;
+    }) =>
+      apiFetch(`/api/contracts/${contractId}/milestone/${payload.milestoneId}/submit`, {
+        method: 'POST',
+        body: JSON.stringify({
+          deliverables: payload.deliverables ?? [],
+          notes: payload.notes ?? '',
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contract', contractId] });
+      qc.invalidateQueries({ queryKey: ['contracts', 'me'] });
+    },
+  });
+}
+
+export function useApproveContractMilestone(contractId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (milestoneId: string) =>
+      apiFetch(`/api/contracts/${contractId}/milestone/${milestoneId}/approve`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contract', contractId] });
+      qc.invalidateQueries({ queryKey: ['contracts', 'me'] });
+    },
+  });
+}
+
+export function useRaiseContractDispute(contractId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { reason: string; evidence?: Record<string, unknown> | null }) =>
+      apiFetch(`/api/contracts/${contractId}/dispute`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contract', contractId] });
+      qc.invalidateQueries({ queryKey: ['contracts', 'me'] });
+    },
   });
 }
 
@@ -921,11 +1133,13 @@ export interface ConversationSummary {
 }
 
 export function useConversations() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<ConversationSummary[]>({
     queryKey: ['conversations'],
     queryFn: () => apiFetch('/api/messages/conversations'),
     staleTime: 30_000,
-    refetchInterval: 30_000,
+    refetchInterval: authReady ? 30_000 : false,
+    enabled: authReady,
   });
 }
 
@@ -940,12 +1154,13 @@ export interface MessageItem {
 }
 
 export function useMessages(conversationId: string) {
+  const authReady = useProtectedQueryEnabled(!!conversationId);
   return useQuery<MessageItem[]>({
     queryKey: ['messages', conversationId],
     queryFn: () => apiFetch(`/api/messages/conversations/${conversationId}/messages`),
     staleTime: 10_000,
-    refetchInterval: 15_000,
-    enabled: !!conversationId,
+    refetchInterval: authReady ? 15_000 : false,
+    enabled: authReady,
   });
 }
 
@@ -961,11 +1176,13 @@ export interface NotificationItem {
 }
 
 export function useNotifications() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<NotificationItem[]>({
     queryKey: ['notifications'],
     queryFn: () => apiFetch('/api/notifications'),
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchInterval: authReady ? 60_000 : false,
+    enabled: authReady,
   });
 }
 
@@ -985,10 +1202,12 @@ export interface NeuronScoreData {
 }
 
 export function useNeuronScore() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<NeuronScoreData>({
     queryKey: ['neuron-score', 'me'],
     queryFn: () => apiFetch('/api/neuron-score/me'),
     staleTime: 5 * 60_000,
+    enabled: authReady,
   });
 }
 
@@ -1009,14 +1228,12 @@ export interface MyProduct {
 }
 
 export function useMyProducts() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const { status: apiAuthStatus } = useApiAuth();
-
+  const authReady = useProtectedQueryEnabled();
   return useQuery<MyProduct[]>({
     queryKey: ['products', 'me'],
     queryFn: () => apiFetchList<MyProduct>('/api/products/me'),
     staleTime: 60_000,
-    enabled: isLoaded && isSignedIn && apiAuthStatus === 'ready',
+    enabled: authReady,
   });
 }
 
@@ -1065,14 +1282,12 @@ export interface MyPurchase {
 }
 
 export function useMyPurchases() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const { status: apiAuthStatus } = useApiAuth();
-
+  const authReady = useProtectedQueryEnabled();
   return useQuery<MyPurchase[]>({
     queryKey: ['purchases', 'me'],
     queryFn: () => apiFetchList<MyPurchase>('/api/products/purchases/me'),
     staleTime: 60_000,
-    enabled: isLoaded && isSignedIn && apiAuthStatus === 'ready',
+    enabled: authReady,
   });
 }
 
@@ -1087,11 +1302,12 @@ export interface ProductAnalyticsData {
 }
 
 export function useProductAnalytics(productId: string) {
+  const authReady = useProtectedQueryEnabled(!!productId);
   return useQuery<ProductAnalyticsData>({
     queryKey: ['product', productId, 'analytics'],
     queryFn: () => apiFetch(`/api/products/${productId}/analytics`),
     staleTime: 5 * 60_000,
-    enabled: !!productId,
+    enabled: authReady,
   });
 }
 
@@ -1109,6 +1325,7 @@ export interface AdminEngineerListItem {
 }
 
 export function useAdminEngineers(filters?: { search?: string; tier?: string; status?: string }) {
+  const authReady = useProtectedQueryEnabled();
   const params = new URLSearchParams();
   if (filters?.search) params.set('search', filters.search);
   if (filters?.tier) params.set('tier', filters.tier);
@@ -1117,6 +1334,7 @@ export function useAdminEngineers(filters?: { search?: string; tier?: string; st
     queryKey: ['admin', 'engineers', filters],
     queryFn: () => apiFetch(`/api/admin/engineers${query ? `?${query}` : ''}`),
     staleTime: 60_000,
+    enabled: authReady,
   });
 }
 
@@ -1135,10 +1353,12 @@ export interface AdminAssessmentListItem {
 }
 
 export function useAdminAssessments(filter?: string) {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<{ assessments: AdminAssessmentListItem[]; total: number }>({
     queryKey: ['admin', 'assessments', filter],
     queryFn: () => apiFetch(`/api/admin/assessments/flagged${filter && filter !== 'all' ? `?status=${filter}` : ''}`),
     staleTime: 60_000,
+    enabled: authReady,
   });
 }
 
@@ -1155,10 +1375,12 @@ export interface AdminDisputeListItem {
 }
 
 export function useAdminDisputes(status?: string) {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<{ disputes: AdminDisputeListItem[]; total: number }>({
     queryKey: ['admin', 'disputes', status],
     queryFn: () => apiFetch(`/api/admin/disputes${status && status !== 'all' ? `?status=${status}` : ''}`),
     staleTime: 60_000,
+    enabled: authReady,
   });
 }
 
@@ -1172,6 +1394,7 @@ export function useEngineerSearch(params: {
   minHourlyRate?: number;
   maxHourlyRate?: number;
 }) {
+  const authReady = useProtectedQueryEnabled();
   const q = new URLSearchParams();
   if (params.query) q.set('query', params.query);
   if (params.skills?.length) q.set('skills', params.skills.join(','));
@@ -1187,6 +1410,56 @@ export function useEngineerSearch(params: {
   return useQuery<unknown[]>({
     queryKey: ['search', 'engineers', params],
     queryFn: () => apiFetchList(`/api/search/engineers?${q.toString()}`),
+    staleTime: 60_000,
+    enabled: authReady,
+  });
+}
+
+export interface SmartMatchedEngineer {
+  id: string;
+  fullName: string;
+  headline: string | null;
+  neuronScore: number;
+  neuronTier: string;
+  hourlyRate: number;
+  availabilityStatus: string;
+  skills: string[];
+  matchScore: number;
+  recommendationReason: string;
+}
+
+export function useSmartMatchedEngineers(problemStatement: string, limit = 5) {
+  const authReady = useProtectedQueryEnabled(problemStatement.trim().length >= 20);
+  return useQuery<SmartMatchedEngineer[]>({
+    queryKey: ['engineers', 'smart-match', problemStatement, limit],
+    queryFn: () =>
+      apiFetch('/api/engineers/smart-match', {
+        method: 'POST',
+        body: JSON.stringify({ problemStatement, limit }),
+      }),
+    enabled: authReady,
+    staleTime: 60_000,
+  });
+}
+
+export interface HiringMatchResult {
+  skillMatchScore: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  budgetFit: 'within_range' | 'above_budget' | 'below_market';
+  availabilityConfidence: 'high' | 'medium' | 'low';
+  recommendationReason: string;
+}
+
+export function useHiringMatch(engineerId: string, jobRequirements: string) {
+  const authReady = useProtectedQueryEnabled(
+    !!engineerId && jobRequirements.trim().length >= 10,
+  );
+  const q = new URLSearchParams({ jobRequirements });
+  return useQuery<HiringMatchResult>({
+    queryKey: ['engineers', engineerId, 'hiring-match', jobRequirements],
+    queryFn: () => apiFetch(`/api/engineers/${engineerId}/hiring-match?${q.toString()}`),
+    enabled: authReady,
     staleTime: 60_000,
   });
 }
@@ -1210,10 +1483,12 @@ export interface EngineerAnalyticsApi {
 }
 
 export function useEngineerAnalytics() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<EngineerAnalyticsApi>({
     queryKey: QUERY_KEYS.engineerAnalytics,
     queryFn: () => apiFetch('/api/analytics/engineer/me'),
     staleTime: 5 * 60_000,
+    enabled: authReady,
   });
 }
 
@@ -1233,10 +1508,12 @@ export interface MyBountySubmission {
 }
 
 export function useMyBountySubmissions() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<MyBountySubmission[]>({
     queryKey: ['tasks', 'my-submissions'],
     queryFn: () => apiFetchList('/api/tasks/my-submissions'),
     staleTime: 60_000,
+    enabled: authReady,
   });
 }
 
@@ -1259,10 +1536,12 @@ export interface CompanyProfileData {
 }
 
 export function useCompanyProfile() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<CompanyProfileData | null>({
     queryKey: ['company', 'profile'],
     queryFn: () => apiFetch('/api/company/profile'),
     staleTime: 5 * 60_000,
+    enabled: authReady,
   });
 }
 
@@ -1293,10 +1572,12 @@ export interface ModerationQueueProduct {
 }
 
 export function useAdminModerationQueue() {
+  const authReady = useProtectedQueryEnabled();
   return useQuery<{ products: ModerationQueueProduct[]; total: number }>({
     queryKey: QUERY_KEYS.adminModeration,
     queryFn: () => apiFetch('/api/admin/moderation/queue'),
     staleTime: 30_000,
+    enabled: authReady,
   });
 }
 
@@ -1314,10 +1595,11 @@ export interface AdminDisputeDetail {
 }
 
 export function useAdminDisputeDetail(id: string) {
+  const authReady = useProtectedQueryEnabled(!!id);
   return useQuery<AdminDisputeDetail>({
     queryKey: ['admin', 'dispute', id],
     queryFn: () => apiFetch(`/api/admin/disputes/${id}`),
-    enabled: !!id,
+    enabled: authReady,
     staleTime: 60_000,
   });
 }
@@ -1338,10 +1620,11 @@ export interface AdminCompanyDetail {
 }
 
 export function useAdminCompanyDetail(id: string) {
+  const authReady = useProtectedQueryEnabled(!!id);
   return useQuery<AdminCompanyDetail>({
     queryKey: ['admin', 'company', id],
     queryFn: () => apiFetch(`/api/admin/companies/${id}`),
-    enabled: !!id,
+    enabled: authReady,
     staleTime: 60_000,
   });
 }

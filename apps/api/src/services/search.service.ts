@@ -4,13 +4,6 @@ import { getPrismaClient } from "../config/database";
 import { EngineerSearchInput, CompanySearchInput } from "@neuronhire/shared";
 import { Prisma } from "@prisma/client";
 
-const emptySearchResult = {
-  results: [] as unknown[],
-  total: 0,
-  page: 1,
-  nextCursor: null as string | null,
-};
-
 export class SearchService {
   private prisma = getPrismaClient();
 

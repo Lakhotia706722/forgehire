@@ -119,6 +119,7 @@ jest.mock('@/lib/api-hooks', () => ({
   useWallet: () => ({
     data: { balance: 245000, pendingRelease: 85000, thisMonthEarnings: 180000, currency: 'INR' },
     isLoading: false,
+    isError: false,
     error: null,
   }),
   useWalletTransactions: () => ({
@@ -178,6 +179,7 @@ jest.mock('@/lib/api-hooks', () => ({
   useRevokeSession: () => ({ mutate: jest.fn(), isPending: false }),
   useApproveSubmission: () => ({ mutateAsync: jest.fn().mockResolvedValue({}), isPending: false }),
   useRejectSubmission: () => ({ mutateAsync: jest.fn().mockResolvedValue({}), isPending: false }),
+  useEvaluateSubmission: () => ({ mutateAsync: jest.fn().mockResolvedValue({}), isPending: false }),
   useAdminScoreOverride: () => ({ mutateAsync: jest.fn().mockResolvedValue({}), isPending: false }),
   useAdminSuspendEngineer: () => ({ mutateAsync: jest.fn().mockResolvedValue({}), isPending: false }),
   useAdminAssessmentDecision: () => ({ mutateAsync: jest.fn().mockResolvedValue({}), isPending: false }),
@@ -229,6 +231,18 @@ jest.mock('@/lib/api-hooks', () => ({
     isLoading: false, error: null,
   }),
   useMyContracts: () => ({ data: [], isLoading: false, error: null }),
+  useSubmitContractMilestone: () => ({
+    mutateAsync: jest.fn().mockResolvedValue({}),
+    isPending: false,
+  }),
+  useApproveContractMilestone: () => ({
+    mutateAsync: jest.fn().mockResolvedValue({}),
+    isPending: false,
+  }),
+  useRaiseContractDispute: () => ({
+    mutateAsync: jest.fn().mockResolvedValue({}),
+    isPending: false,
+  }),
   useContractDetail: (id: string) => ({
     data: {
       id: id || 'contract-1',
@@ -319,6 +333,7 @@ jest.mock('@/lib/api-hooks', () => ({
       aiRequirements: ['nlp'],
     },
     isLoading: false,
+    isError: false,
     error: null,
   }),
   useUpdateCompanyProfile: () => ({ mutateAsync: jest.fn().mockResolvedValue({}), isPending: false }),

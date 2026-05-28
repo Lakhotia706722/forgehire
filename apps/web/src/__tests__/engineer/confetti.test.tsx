@@ -133,7 +133,7 @@ describe('Step8Confirmation — confetti fires once', () => {
     );
 
     await act(async () => {
-      render(<Step8Confirmation onSaveLater={jest.fn()} />);
+      render(<Step8Confirmation onSaveLater={jest.fn()} submitted={true} />);
       await new Promise((r) => setTimeout(r, 600));
     });
 
@@ -148,7 +148,7 @@ describe('Step8Confirmation — confetti fires once', () => {
     );
     const onSaveLater = jest.fn();
 
-    const { rerender } = render(<Step8Confirmation onSaveLater={onSaveLater} />);
+    const { rerender } = render(<Step8Confirmation onSaveLater={onSaveLater} submitted={true} />);
 
     // Wait for all confetti bursts to complete
     await act(async () => {
@@ -159,7 +159,7 @@ describe('Step8Confirmation — confetti fires once', () => {
     expect(countAfterMount).toBeGreaterThan(0);
 
     // Re-render same instance — firedRef.current = true → no new confetti
-    rerender(<Step8Confirmation onSaveLater={onSaveLater} />);
+    rerender(<Step8Confirmation onSaveLater={onSaveLater} submitted={true} />);
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 600));

@@ -136,14 +136,11 @@ function ProductDetailView({
       : []),
   ];
 
-  // Rating distribution (mock)
-  const ratingDist = [
-    { stars: 5, pct: 72 },
-    { stars: 4, pct: 18 },
-    { stars: 3, pct: 6 },
-    { stars: 2, pct: 2 },
-    { stars: 1, pct: 2 },
-  ];
+  const ratingDist = [5, 4, 3, 2, 1].map((stars) => {
+    const count = displayReviews.filter((review) => Math.round(review.rating) === stars).length;
+    const pct = displayReviews.length > 0 ? Math.round((count / displayReviews.length) * 100) : 0;
+    return { stars, pct };
+  });
 
   return (
     <div className="min-h-screen bg-bg-base">

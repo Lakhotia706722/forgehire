@@ -39,7 +39,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/admin/stats",
     { preHandler: [authenticate, requireAdmin] },
-    async (_request: FastifyRequest, reply: FastifyReply) => {
+    async (_request: FastifyRequest, _reply: FastifyReply) => {
       const [
         totalEngineers,
         totalCompanies,
@@ -79,7 +79,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/admin/engineers",
     { preHandler: [authenticate, requireAdmin] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const {
         page = "1",
         limit = "20",
@@ -97,6 +97,10 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         ];
       }
       if (tier) where.neuronTier = tier;
+      if (status) {
+        where.availabilityStatus =
+          status === "suspended" ? "not_available" : "available_now";
+      }
 
       const [engineers, total] = await Promise.all([
         prisma.engineerProfile.findMany({
@@ -159,6 +163,17 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 
       const tier = neuronScoreService.determineTier(body.score);
 
+      const current = await prisma.engineerProfile.findUnique({
+        where: { id },
+        select: { neuronScore: true },
+      });
+      if (!current) {
+        return reply
+          .code(404)
+          .send({ success: false, error: "Engineer not found" });
+      }
+      const previousScore = Number(current.neuronScore ?? 0);
+
       const updated = await prisma.engineerProfile.update({
         where: { id },
         data: { neuronScore: body.score, neuronTier: tier },
@@ -168,9 +183,9 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       await prisma.neuronScoreHistory.create({
         data: {
           engineerProfileId: id,
-          previousScore: updated.neuronScore,
+          previousScore,
           newScore: body.score,
-          scoreDelta: body.score - updated.neuronScore,
+          scoreDelta: body.score - previousScore,
           reason: body.reason,
           triggeredBy: "admin",
         },
@@ -184,7 +199,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/admin/assessments/flagged",
     { preHandler: [authenticate, requireAdmin] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const { page = "1", limit = "20" } = request.query as any;
       const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -211,7 +226,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.put(
     "/admin/assessments/:id/decision",
     { preHandler: [authenticate, requireAdmin] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const { id } = request.params as any;
       const body = assessmentDecisionSchema.parse(request.body);
 
@@ -231,7 +246,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/admin/disputes",
     { preHandler: [authenticate, requireAdmin] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const { page = "1", limit = "20", status } = request.query as any;
       const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -358,7 +373,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.put(
     "/admin/disputes/:id/resolve",
     { preHandler: [authenticate, requireAdmin] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const { id } = request.params as any;
       const body = disputeResolveSchema.parse(request.body);
@@ -437,7 +452,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post(
     "/admin/engineers/:id/suspend",
     { preHandler: [authenticate, requireAdmin] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const { id } = request.params as any;
       const updated = await prisma.engineerProfile.update({
         where: { id },
@@ -532,7 +547,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post(
     "/admin/products/:id/decision",
     { preHandler: [authenticate, requireAdmin] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const { id } = request.params as any;
       const body = moderationDecisionSchema.parse(request.body);
 
@@ -560,7 +575,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/admin/moderation/queue",
     { preHandler: [authenticate, requireAdmin] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const { page = "1", limit = "20" } = request.query as any;
       const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -585,7 +600,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.put(
     "/admin/moderation/:id/decision",
     { preHandler: [authenticate, requireAdmin] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const { id } = request.params as any;
       const body = moderationDecisionSchema.parse(request.body);
 

@@ -3,34 +3,90 @@
 import * as React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { useSubmissionDetail, useApproveSubmission, useRejectSubmission } from '@/lib/api-hooks';
+import {
+  useSubmissionDetail,
+  useApproveSubmission,
+  useRejectSubmission,
+  useEvaluateSubmission,
+} from '@/lib/api-hooks';
+import { ApiRequestError } from '@/lib/api-fetch';
 
 export default function SubmissionDetailPage({ params }: { params: { id: string; sid: string } }) {
+  const router = useRouter();
   const { data: submission, isLoading, error } = useSubmissionDetail(params.id, params.sid);
   const approve = useApproveSubmission(params.id);
   const reject = useRejectSubmission(params.id);
+  const evaluate = useEvaluateSubmission(params.id);
   const [feedback, setFeedback] = React.useState('');
+  const [reviewScore, setReviewScore] = React.useState(75);
+  const [criteriaScores, setCriteriaScores] = React.useState({
+    accuracy: 75,
+    performance: 75,
+    innovation: 75,
+    codeQuality: 75,
+    ux: 75,
+  });
+  const isDecisionPending = approve.isPending || reject.isPending || evaluate.isPending;
+
+  function getDecisionError(err: unknown, fallback: string): string {
+    if (err instanceof ApiRequestError && err.status === 409) return err.message;
+    if (err instanceof Error && err.message) return err.message;
+    return fallback;
+  }
+
+  React.useEffect(() => {
+    if (submission?.score != null) {
+      setReviewScore(submission.score);
+    }
+    if (submission?.criteriaScores) {
+      setCriteriaScores((prev) => ({ ...prev, ...submission.criteriaScores }));
+    }
+  }, [submission?.score, submission?.criteriaScores]);
 
   async function handleApprove() {
+    if (isDecisionPending) return;
     try {
       await approve.mutateAsync(params.sid);
       toast.success('Submission approved! Payout initiated.');
+      router.push(`/company/tasks/${params.id}/submissions`);
     } catch (e: any) {
-      toast.error(e.message || 'Failed to approve submission');
+      toast.error(getDecisionError(e, 'Failed to approve submission'));
     }
   }
 
   async function handleReject() {
+    if (isDecisionPending) return;
     if (!feedback.trim()) { toast.error('Please provide feedback before rejecting'); return; }
     try {
       await reject.mutateAsync({ submissionId: params.sid, feedback });
       toast.success('Submission rejected with feedback sent to engineer.');
+      router.push(`/company/tasks/${params.id}/submissions`);
     } catch (e: any) {
-      toast.error(e.message || 'Failed to reject submission');
+      toast.error(getDecisionError(e, 'Failed to reject submission'));
+    }
+  }
+
+  async function handleRequestChanges() {
+    if (isDecisionPending) return;
+    if (feedback.trim().length < 10) {
+      toast.error('Please provide at least 10 characters of feedback');
+      return;
+    }
+    try {
+      await evaluate.mutateAsync({
+        submissionId: params.sid,
+        score: Math.max(0, Math.min(100, Number(reviewScore))),
+        feedback: feedback.trim(),
+      });
+      toast.success('Review saved. Submission marked under review.');
+      router.push(`/company/tasks/${params.id}/submissions`);
+    } catch (e: any) {
+      toast.error(getDecisionError(e, 'Failed to save review'));
     }
   }
 
@@ -69,7 +125,36 @@ export default function SubmissionDetailPage({ params }: { params: { id: string;
   }
 
   const initials = submission.engineerName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  const metrics = submission.performanceMetrics as { metric: string; value: string }[] | null;
+  const rawMetrics = submission.performanceMetrics as
+    | { metric: string; value: string }[]
+    | Record<string, unknown>
+    | null;
+  const metrics: { metric: string; value: string }[] = Array.isArray(rawMetrics)
+    ? rawMetrics
+        .filter((m) => m && typeof m.metric === 'string')
+        .map((m) => ({ metric: m.metric, value: String(m.value ?? '') }))
+    : rawMetrics && typeof rawMetrics === 'object'
+      ? Object.entries(rawMetrics).map(([metric, value]) => ({
+          metric,
+          value: String(value ?? ''),
+        }))
+      : [];
+  const status = (submission.status ?? 'pending').toLowerCase();
+  const isFinalized = ['accepted', 'rejected', 'winner'].includes(status);
+  const statusVariant =
+    status === 'accepted' || status === 'winner'
+      ? 'green'
+      : status === 'rejected'
+        ? 'red'
+        : 'amber';
+  const statusLabel =
+    status === 'accepted'
+      ? 'Approved'
+      : status === 'winner'
+        ? 'Winner'
+        : status === 'rejected'
+          ? 'Rejected'
+          : 'Under Review';
 
   return (
     <div className="min-h-screen bg-bg-base">
@@ -109,7 +194,7 @@ export default function SubmissionDetailPage({ params }: { params: { id: string;
                   {submission.score}<span className="text-sm text-text-muted">/100</span>
                 </span>
               )}
-              <Badge variant="amber">Under Review</Badge>
+              <Badge variant={statusVariant as any}>{statusLabel}</Badge>
             </div>
           </div>
         </div>
@@ -130,11 +215,28 @@ export default function SubmissionDetailPage({ params }: { params: { id: string;
                 <Button variant="ghost" size="sm">GitHub →</Button>
               </a>
             )}
+            {submission.videoUrl && (
+              <a href={submission.videoUrl} target="_blank" rel="noopener noreferrer">
+                <Button variant="ghost" size="sm">Video ↗</Button>
+              </a>
+            )}
+            {submission.architectureDiagram && (
+              <a href={submission.architectureDiagram} target="_blank" rel="noopener noreferrer">
+                <Button variant="ghost" size="sm">Architecture ↗</Button>
+              </a>
+            )}
           </div>
+
+          {submission.status === 'rejected' && submission.feedback && (
+            <div className="mt-2 rounded-xl border border-[rgba(239,68,68,0.25)] bg-[rgba(239,68,68,0.08)] p-4">
+              <p className="text-xs uppercase tracking-wide text-red-300 mb-1">Rejection Feedback</p>
+              <p className="text-sm text-red-200 leading-relaxed">{submission.feedback}</p>
+            </div>
+          )}
         </div>
 
         {/* Performance metrics */}
-        {metrics && metrics.length > 0 && (
+        {metrics.length > 0 && (
           <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
             <h2 className="font-display font-semibold text-text-primary text-lg mb-4">Performance Metrics</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -169,29 +271,77 @@ export default function SubmissionDetailPage({ params }: { params: { id: string;
         )}
 
         {/* Review actions */}
-        <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6 space-y-4">
-          <h2 className="font-display font-semibold text-text-primary text-lg">Review Decision</h2>
+        {!isFinalized && (
+          <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6 space-y-4">
+            <h2 className="font-display font-semibold text-text-primary text-lg">Review Decision</h2>
 
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">Feedback (required for rejection)</label>
-            <textarea
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-              rows={3}
-              placeholder="Provide constructive feedback to the engineer..."
-              className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)] resize-none transition-all"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-2">Feedback (required for rejection)</label>
+              <textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                rows={3}
+                placeholder="Provide constructive feedback to the engineer..."
+                disabled={isDecisionPending}
+                className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)] resize-none transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-2">Review Score (0-100)</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={reviewScore}
+                onChange={(e) => setReviewScore(Number(e.target.value))}
+                disabled={isDecisionPending}
+                className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[rgba(0,212,255,0.3)]"
+              />
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {[
+                ['accuracy', 'Accuracy'],
+                ['performance', 'Performance'],
+                ['innovation', 'Innovation'],
+                ['codeQuality', 'Code Quality'],
+                ['ux', 'UI/UX'],
+              ].map(([key, label]) => (
+                <div key={key}>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">{label} (0-100)</label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={criteriaScores[key as keyof typeof criteriaScores]}
+                    onChange={(e) =>
+                      setCriteriaScores((prev) => ({
+                        ...prev,
+                        [key]: Number(e.target.value),
+                      }))
+                    }
+                    disabled={isDecisionPending}
+                    className="w-full accent-accent-cyan"
+                  />
+                  <p className="text-xs text-text-muted mt-1">
+                    {criteriaScores[key as keyof typeof criteriaScores]}
+                  </p>
+                </div>
+              ))}
+            </div>
 
-          <div className="flex gap-3">
-            <Button className="flex-1" size="lg" loading={approve.isPending} onClick={handleApprove}>
-              ✓ Approve &amp; Release Payment
-            </Button>
-            <Button variant="danger" size="lg" loading={reject.isPending} onClick={handleReject}>
-              Reject
-            </Button>
+            <div className="flex gap-3">
+              <Button className="flex-1" size="lg" loading={approve.isPending} disabled={isDecisionPending} onClick={handleApprove}>
+                ✓ Approve &amp; Release Payment
+              </Button>
+              <Button variant="secondary" size="lg" loading={evaluate.isPending} disabled={isDecisionPending} onClick={handleRequestChanges}>
+                Need Changes
+              </Button>
+              <Button variant="danger" size="lg" loading={reject.isPending} disabled={isDecisionPending} onClick={handleReject}>
+                Reject
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -70,6 +70,19 @@ export async function authenticate(
   }
 }
 
+/** Best-effort auth: attaches request.user when token is valid, otherwise continues unauthenticated. */
+export async function tryAuthenticate(
+  request: AuthenticatedRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  try {
+    await authenticate(request, reply);
+  } catch {
+    // Intentionally ignore auth errors for public endpoints.
+    request.user = undefined;
+  }
+}
+
 export function requireRole(...allowedRoles: UserRole[]) {
   return async (
     request: AuthenticatedRequest,

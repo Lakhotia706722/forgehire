@@ -154,60 +154,18 @@ export class MarketplacePurchaseService {
       throw new Error("Payment verification failed");
     }
 
-    // Calculate platform commission
-    const amount =
-      purchase.currency === "INR" ? purchase.priceINR : purchase.priceUSD;
-    const commission = this.calculateCommission(
-      Number(amount),
-      purchase.product.pricingModel,
-    );
-    const engineerPayout = Number(amount) - commission;
+    return this.finalizePurchase(purchaseId, data.paymentId, data.signature);
+  }
 
-    // Calculate referral commission if applicable
-    let referralCommission = 0;
-    if (purchase.referralCode) {
-      referralCommission = Number(amount) * 0.05; // 5% referral commission
-    }
-
-    // Grant access
-    const accessDetails = await this.grantAccess(purchase.product);
-
-    // Update purchase
-    const completed = await this.prisma.purchase.update({
-      where: { id: purchaseId },
-      data: {
-        status: PurchaseStatus.completed,
-        razorpayPaymentId: data.paymentId,
-        razorpaySignature: data.signature,
-        accessGranted: true,
-        accessDetails,
-        platformCommission: commission,
-        engineerPayout,
-        referralCommission: referralCommission > 0 ? referralCommission : null,
-        purchasedAt: new Date(),
+  async completePurchaseByOrderId(orderId: string, paymentId: string) {
+    const purchase = await this.prisma.purchase.findFirst({
+      where: {
+        razorpayOrderId: orderId,
+        status: PurchaseStatus.pending,
       },
     });
-
-    // Update product stats
-    await this.prisma.product.update({
-      where: { id: purchase.productId },
-      data: {
-        purchaseCount: { increment: 1 },
-      },
-    });
-
-    // Track analytics
-    await this.trackPurchase(purchase.productId, Number(amount));
-
-    // Update referral stats if applicable
-    if (purchase.referralCode) {
-      await this.updateReferralStats(purchase.referralCode, referralCommission);
-    }
-
-    // Initiate payout to engineer (48 hours delay)
-    await this.schedulePayout(purchaseId);
-
-    return completed;
+    if (!purchase) return null;
+    return this.finalizePurchase(purchase.id, paymentId, undefined);
   }
 
   /**
@@ -286,8 +244,12 @@ export class MarketplacePurchaseService {
    * Schedule payout to engineer (48 hours delay)
    */
   private async schedulePayout(purchaseId: string) {
-    // TODO: Implement BullMQ job to process payout after 48 hours
-    console.log(`Payout scheduled for purchase ${purchaseId} in 48 hours`);
+    await this.prisma.purchase.update({
+      where: { id: purchaseId },
+      data: {
+        payoutStatus: "scheduled",
+      },
+    });
   }
 
   /**
@@ -417,5 +379,69 @@ export class MarketplacePurchaseService {
     }
 
     return purchase;
+  }
+
+  private async finalizePurchase(
+    purchaseId: string,
+    paymentId: string,
+    signature?: string,
+  ) {
+    const purchase = await this.prisma.purchase.findUnique({
+      where: { id: purchaseId },
+      include: {
+        product: {
+          include: { engineerProfile: true },
+        },
+      },
+    });
+
+    if (!purchase) {
+      throw new Error("Purchase not found");
+    }
+    if (purchase.status !== PurchaseStatus.pending) {
+      return purchase;
+    }
+
+    const amount =
+      purchase.currency === "INR" ? purchase.priceINR : purchase.priceUSD;
+    const numericAmount = Number(amount);
+    const commission = this.calculateCommission(
+      numericAmount,
+      purchase.product.pricingModel,
+    );
+    const engineerPayout = numericAmount - commission;
+    const referralCommission = purchase.referralCode ? numericAmount * 0.05 : 0;
+    const accessDetails = await this.grantAccess(purchase.product);
+
+    const completed = await this.prisma.purchase.update({
+      where: { id: purchaseId },
+      data: {
+        status: PurchaseStatus.completed,
+        razorpayPaymentId: paymentId,
+        razorpaySignature: signature,
+        accessGranted: true,
+        accessDetails,
+        platformCommission: commission,
+        engineerPayout,
+        referralCommission: referralCommission > 0 ? referralCommission : null,
+        purchasedAt: new Date(),
+      },
+    });
+
+    await this.prisma.product.update({
+      where: { id: purchase.productId },
+      data: {
+        purchaseCount: { increment: 1 },
+      },
+    });
+
+    await this.trackPurchase(purchase.productId, numericAmount);
+
+    if (purchase.referralCode) {
+      await this.updateReferralStats(purchase.referralCode, referralCommission);
+    }
+
+    await this.schedulePayout(purchaseId);
+    return completed;
   }
 }

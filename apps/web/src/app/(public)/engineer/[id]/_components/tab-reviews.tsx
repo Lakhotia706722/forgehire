@@ -33,6 +33,14 @@ function StarRating({ rating, size = 14 }: { rating: number; size?: number }) {
 export function TabReviews({ reviews }: TabReviewsProps) {
   const [sort, setSort] = React.useState<SortOrder>('recent');
 
+  if (!reviews.length) {
+    return (
+      <div className="text-center py-16 text-text-muted">
+        <p className="text-sm">No client reviews yet.</p>
+      </div>
+    );
+  }
+
   const sorted = [...reviews].sort((a, b) => {
     if (sort === 'highest') return b.rating - a.rating;
     if (sort === 'lowest') return a.rating - b.rating;

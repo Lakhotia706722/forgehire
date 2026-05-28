@@ -7,14 +7,19 @@ import { NeuronScoreRing } from '@/components/ui/neuron-score-ring';
 
 interface Step8Props {
   onSaveLater: () => void;
+  onConfirm?: () => void;
+  submitting?: boolean;
+  submitError?: string | null;
+  submitted?: boolean;
 }
 
-export function Step8Confirmation({ onSaveLater }: Step8Props) {
+export function Step8Confirmation({ onSaveLater, onConfirm = () => {}, submitting = false, submitError = null, submitted = false }: Step8Props) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const firedRef = React.useRef(false);
 
-  // Fire confetti once on mount
+  // Fire confetti once profile is saved
   React.useEffect(() => {
+    if (!submitted) return;
     if (firedRef.current) return;
     firedRef.current = true;
 
@@ -25,7 +30,6 @@ export function Step8Confirmation({ onSaveLater }: Step8Props) {
         origin: { y: 0.5 },
         colors: ['#00D4FF', '#7B5EA7', '#F59E0B', '#10B981', '#F0F4FF'],
       });
-      // Second burst
       setTimeout(() => {
         confetti({
           particleCount: 60,
@@ -43,7 +47,7 @@ export function Step8Confirmation({ onSaveLater }: Step8Props) {
         });
       }, 300);
     });
-  }, []);
+  }, [submitted]);
 
   return (
     <div className="text-center space-y-8 py-8">
@@ -55,7 +59,7 @@ export function Step8Confirmation({ onSaveLater }: Step8Props) {
         <div className="relative">
           <NeuronScoreRing score={0} size={120} strokeWidth={6} animate={false} />
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-4xl" aria-hidden="true">🎉</span>
+            <span className="text-4xl" aria-hidden="true">{submitted ? '🎉' : '📋'}</span>
           </div>
         </div>
       </div>
@@ -63,42 +67,64 @@ export function Step8Confirmation({ onSaveLater }: Step8Props) {
       {/* Headline */}
       <div>
         <h2 className="font-display text-3xl font-bold text-text-primary mb-3">
-          Your profile is ready!
+          {submitted ? 'Your profile is ready!' : 'Review & Submit'}
         </h2>
         <p className="text-text-secondary text-base max-w-sm mx-auto leading-relaxed">
-          Now take the NeuronScore Assessment to get verified and unlock your tier badge.
-          It takes 90 minutes and you can only take it once.
+          {submitted
+            ? 'Now take the NeuronScore Assessment to get verified and unlock your tier badge. It takes 90 minutes and you can only take it once.'
+            : 'Click Submit Profile to save your information and begin the verification process.'}
         </p>
       </div>
 
-      {/* Assessment info */}
-      <div className="bg-bg-surface border border-[rgba(0,212,255,0.15)] rounded-xl p-5 text-left space-y-3">
-        <h3 className="font-display font-semibold text-text-primary text-sm">What to expect:</h3>
-        {[
-          { icon: '⏱', text: '90 minutes total — MCQ, Coding, and Scenario sections' },
-          { icon: '🔒', text: 'Proctored — tab switches and copy-paste are monitored' },
-          { icon: '🏆', text: 'Earn your tier: Elite / Professional / Verified / Conditional' },
-          { icon: '📊', text: 'Get a detailed report with strengths and improvement areas' },
-        ].map((item) => (
-          <div key={item.text} className="flex items-start gap-3">
-            <span className="text-base shrink-0" aria-hidden="true">{item.icon}</span>
-            <p className="text-sm text-text-secondary">{item.text}</p>
-          </div>
-        ))}
-      </div>
+      {/* Error banner */}
+      {submitError && (
+        <div className="bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.3)] rounded-xl p-4 text-sm text-red-400 text-left">
+          {submitError}
+        </div>
+      )}
+
+      {/* Assessment info (shown after submit) */}
+      {submitted && (
+        <div className="bg-bg-surface border border-[rgba(0,212,255,0.15)] rounded-xl p-5 text-left space-y-3">
+          <h3 className="font-display font-semibold text-text-primary text-sm">What to expect:</h3>
+          {[
+            { icon: '⏱', text: '90 minutes total — MCQ, Coding, and Scenario sections' },
+            { icon: '🔒', text: 'Proctored — tab switches and copy-paste are monitored' },
+            { icon: '🏆', text: 'Earn your tier: Elite / Professional / Verified / Conditional' },
+            { icon: '📊', text: 'Get a detailed report with strengths and improvement areas' },
+          ].map((item) => (
+            <div key={item.text} className="flex items-start gap-3">
+              <span className="text-base shrink-0" aria-hidden="true">{item.icon}</span>
+              <p className="text-sm text-text-secondary">{item.text}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* CTAs */}
       <div className="space-y-3">
-        <Link href="/engineer/assessment" className="block">
-          <Button size="lg" className="w-full">
-            Take Assessment Now →
+        {submitted ? (
+          <Link href="/engineer/assessment" className="block">
+            <Button size="lg" className="w-full">
+              Take Assessment Now →
+            </Button>
+          </Link>
+        ) : (
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={onConfirm}
+            disabled={submitting}
+            loading={submitting}
+          >
+            {submitting ? 'Saving profile…' : 'Submit Profile'}
           </Button>
-        </Link>
+        )}
         <button
           onClick={onSaveLater}
           className="w-full text-sm text-text-muted hover:text-text-secondary transition-colors py-2"
         >
-          Save and complete assessment later
+          {submitted ? 'Complete assessment later' : 'Save and continue later'}
         </button>
       </div>
     </div>

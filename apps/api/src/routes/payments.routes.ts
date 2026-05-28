@@ -3,6 +3,8 @@ import { WalletService } from "../services/wallet.service";
 import { PayoutService } from "../services/payout.service";
 import { InvoiceService } from "../services/invoice.service";
 import { WebhookService } from "../services/webhook.service";
+import { EscrowService } from "../services/escrow.service";
+import { MilestonePaymentService } from "../services/milestone-payment.service";
 import { authenticate } from "../middleware/auth";
 import { successResponse } from "@neuronhire/shared";
 import { z } from "zod";
@@ -22,15 +24,56 @@ export async function paymentsRoutes(fastify: FastifyInstance): Promise<void> {
   const payoutService = new PayoutService();
   const invoiceService = new InvoiceService();
   const webhookService = new WebhookService();
+  const escrowService = new EscrowService();
+  const milestonePaymentService = new MilestonePaymentService();
+  const prisma = (walletService as any).prisma;
 
   // Get wallet balance + stats
   fastify.get(
     "/payments/wallet",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const stats = await walletService.getWalletStats(user.id);
-      return successResponse(stats);
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthCredits = await prisma.walletTransaction.aggregate({
+        where: {
+          wallet: { userId: user.id },
+          type: "credit",
+          createdAt: { gte: monthStart },
+        },
+        _sum: { amount: true },
+      });
+
+      const pendingMilestones = await prisma.milestonePayment.aggregate({
+        where: {
+          contract: {
+            engineerProfile: { userId: user.id },
+          },
+          status: { in: ["submitted", "approved"] },
+        },
+        _sum: { amount: true },
+      });
+
+      const kyc = await prisma.kYCVerification.findUnique({
+        where: { userId: user.id },
+      });
+      const kycThreshold = 50000;
+      const requiresKycForWithdrawal =
+        Number(stats.totalEarned) > kycThreshold &&
+        (!kyc || kyc.status !== "verified" || !kyc.panVerified);
+
+      return successResponse({
+        ...stats,
+        pendingRelease: Number(pendingMilestones._sum.amount ?? 0),
+        thisMonthEarnings: Number(monthCredits._sum.amount ?? 0),
+        kycStatus: kyc?.status ?? "not_started",
+        panVerified: Boolean(kyc?.panVerified),
+        requiresKycForWithdrawal,
+        kycThreshold,
+        minimumPayout: 500,
+      });
     },
   );
 
@@ -38,11 +81,10 @@ export async function paymentsRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/payments/wallet/earnings",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const { period = "6months" } = request.query as any;
 
-      const prisma = (walletService as any).prisma;
       const wallet = await prisma.wallet.findUnique({
         where: { userId: user.id },
       });
@@ -126,11 +168,10 @@ export async function paymentsRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/payments/wallet/transactions",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const { limit = "20", cursor } = request.query as any;
 
-      const prisma = (walletService as any).prisma;
       const wallet = await prisma.wallet.findUnique({
         where: { userId: user.id },
       });
@@ -166,15 +207,13 @@ export async function paymentsRoutes(fastify: FastifyInstance): Promise<void> {
     },
   );
 
-  // Withdraw (payout request)
-  fastify.post(
-    "/payments/withdraw",
-    { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+  const requestPayoutHandler = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) => {
       const user = (request as any).user;
-      const { amount, method, upiId } = request.body as any;
+      const body = payoutRequestSchema.parse(request.body);
 
-      const prisma = (walletService as any).prisma;
       const engineerProfile = await prisma.engineerProfile.findUnique({
         where: { userId: user.id },
       });
@@ -186,12 +225,74 @@ export async function paymentsRoutes(fastify: FastifyInstance): Promise<void> {
       const payout = await payoutService.requestPayout({
         userId: user.id,
         engineerProfileId: engineerProfile.id,
-        amount,
-        method,
-        upiId,
+        amount: body.amount,
+        method: body.method,
+        upiId: body.upiId,
+        accountNumber: body.accountNumber,
+        ifscCode: body.ifscCode,
+        accountHolderName: body.accountHolderName,
       });
 
       return reply.code(201).send(successResponse(payout));
+    };
+
+  // Withdraw (legacy alias)
+  fastify.post(
+    "/payments/withdraw",
+    { preHandler: [authenticate] },
+    requestPayoutHandler,
+  );
+
+  // Payout request (canonical route)
+  fastify.post(
+    "/payments/payout",
+    { preHandler: [authenticate] },
+    requestPayoutHandler,
+  );
+
+  // Create escrow order (canonical route)
+  fastify.post(
+    "/payments/escrow",
+    { preHandler: [authenticate] },
+    async (request: FastifyRequest, _reply: FastifyReply) => {
+      const user = (request as any).user;
+      const body = z
+        .object({
+          contractId: z.string().uuid().optional(),
+          taskId: z.string().uuid().optional(),
+          amount: z.number().positive(),
+          currency: z.string().default("INR"),
+        })
+        .parse(request.body);
+      const escrow = await escrowService.depositEscrow({
+        contractId: body.contractId,
+        taskId: body.taskId,
+        userId: user.id,
+        amount: body.amount,
+        currency: body.currency,
+      });
+      return successResponse(escrow);
+    },
+  );
+
+  // Release milestone payment (canonical route)
+  fastify.post(
+    "/payments/release/:milestoneId",
+    { preHandler: [authenticate] },
+    async (request: FastifyRequest, _reply: FastifyReply) => {
+      const user = (request as any).user;
+      const { milestoneId } = request.params as { milestoneId: string };
+      const body = z
+        .object({
+          approvalNotes: z.string().max(1000).optional(),
+        })
+        .parse((request.body as object) ?? {});
+      const milestone = await milestonePaymentService.approveMilestone(
+        milestoneId,
+        user.id,
+        body.approvalNotes,
+      );
+      return successResponse(milestone);
     },
   );
 
@@ -199,7 +300,7 @@ export async function paymentsRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get(
     "/payments/invoice/:id",
     { preHandler: [authenticate] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, _reply: FastifyReply) => {
       const user = (request as any).user;
       const { id } = request.params as any;
       const invoice = await invoiceService.getInvoice(id, user.id);

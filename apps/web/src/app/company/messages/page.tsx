@@ -14,10 +14,12 @@ import {
   type Message,
 } from '@/lib/hiring-data';
 import { useConversations } from '@/lib/api-hooks';
+import { useUser } from '@clerk/nextjs';
 
 type ConvTab = 'all' | 'project_rooms' | 'requests' | 'archived';
 
 export default function CompanyMessagesPage() {
+  const { user: clerkUser } = useUser();
   const { data: apiConversations, isLoading: convsLoading } = useConversations();
 
   const conversations: Conversation[] = (apiConversations ?? []).map(c => ({
@@ -51,7 +53,7 @@ export default function CompanyMessagesPage() {
   const [uploadProgress, setUploadProgress] = React.useState<number | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const CURRENT_USER_ID = 'company-1';
+  const CURRENT_USER_ID = clerkUser?.id ?? '';
 
   React.useEffect(() => {
     if (conversations.length > 0 && !activeId) {
@@ -90,13 +92,16 @@ export default function CompanyMessagesPage() {
     return () => { clearTimeout(t); clearTimeout(t2); };
   }, [activeId]);
 
+  const myName = [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(' ') || 'Me';
+  const myInitials = myName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
+
   function sendMessage() {
     if (!messageInput.trim()) return;
     const newMsg: Message = {
       id: crypto.randomUUID(),
       senderId: CURRENT_USER_ID,
-      senderName: 'Vikram Nair',
-      senderInitials: 'VN',
+      senderName: myName,
+      senderInitials: myInitials,
       senderColor: '#00D4FF',
       content: messageInput,
       type: 'text',
@@ -124,8 +129,8 @@ export default function CompanyMessagesPage() {
       const newMsg: Message = {
         id: crypto.randomUUID(),
         senderId: CURRENT_USER_ID,
-        senderName: 'Vikram Nair',
-        senderInitials: 'VN',
+        senderName: myName,
+        senderInitials: myInitials,
         senderColor: '#00D4FF',
         content: file.name,
         type: 'file',
@@ -212,9 +217,16 @@ export default function CompanyMessagesPage() {
         <ul className="flex-1 overflow-y-auto list-none m-0 p-0" aria-label="Conversations">
           {filteredConvs.map((conv) => (
             <li key={conv.id}>
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setActiveId(conv.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setActiveId(conv.id);
+                }
+              }}
               className={cn(
                 'w-full text-left px-4 py-3.5 border-b border-[rgba(255,255,255,0.04)] transition-colors relative',
                 activeId === conv.id ? 'bg-bg-elevated' : 'hover:bg-[rgba(255,255,255,0.02)]',
@@ -240,7 +252,7 @@ export default function CompanyMessagesPage() {
                   </span>
                 )}
               </div>
-            </button>
+            </div>
             </li>
           ))}
         </ul>

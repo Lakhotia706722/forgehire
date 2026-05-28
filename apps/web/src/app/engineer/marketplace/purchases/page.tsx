@@ -5,9 +5,13 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMyPurchases } from '@/lib/api-hooks';
+import { useSearchParams } from 'next/navigation';
+import { cn } from '@/lib/utils';
 
 export default function MyPurchasesPage() {
   const { data: purchases, isLoading } = useMyPurchases();
+  const searchParams = useSearchParams();
+  const highlightedPurchaseId = searchParams.get('highlight');
 
   return (
     <div className="min-h-screen bg-bg-base">
@@ -36,7 +40,13 @@ export default function MyPurchasesPage() {
         ) : (
           <div className="space-y-4">
             {purchases.map((purchase) => (
-              <div key={purchase.id} className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-5">
+              <div
+                key={purchase.id}
+                className={cn(
+                  'bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-xl p-5',
+                  purchase.id === highlightedPurchaseId && 'border-[rgba(0,212,255,0.5)] shadow-[0_0_0_1px_rgba(0,212,255,0.3)]',
+                )}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                   <div>
                     <p className="font-display font-semibold text-text-primary">{purchase.productName}</p>

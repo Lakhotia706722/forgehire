@@ -68,8 +68,8 @@ export function Step7Review({ state, onJumpTo }: Step7Props) {
         <ReviewSection
           step={2}
           title="Skills"
-          complete={state.skills.length >= 3}
-          warning={state.skills.length > 0 && state.skills.length < 3 ? 'Add at least 3 skills' : undefined}
+          complete={state.skills.some((s) => s.isPrimary)}
+          warning={state.skills.length === 0 ? 'Add at least 1 primary skill' : undefined}
           onEdit={() => onJumpTo(2)}
         >
           <div className="flex flex-wrap gap-1.5">

@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { LISTING_CATEGORIES, type ProductCategory, type PricingModel } from '@/lib/marketplace-data';
+import { apiFetch } from '@/lib/api-fetch';
+import { toast } from 'sonner';
 
 interface ListingState {
   category: ProductCategory | null;
@@ -61,6 +63,15 @@ const PRICING_MODELS: { value: PricingModel; label: string; desc: string; icon: 
   { value: 'per_call',     label: 'Per-call',     desc: 'Pay per API call or usage',        icon: '⚡' },
 ];
 
+const CATEGORY_TO_API: Record<ProductCategory, 'ai_agents' | 'fine_tuned_models' | 'saas_tools' | 'automation_workflows' | 'datasets_prompts' | 'apis_microservices'> = {
+  'AI Agents': 'ai_agents',
+  'Fine-Tuned Models': 'fine_tuned_models',
+  'SaaS Tools': 'saas_tools',
+  Automation: 'automation_workflows',
+  'Datasets & Prompts': 'datasets_prompts',
+  APIs: 'apis_microservices',
+};
+
 export default function ListProductPage() {
   const router = useRouter();
   const [step, setStep] = React.useState(1);
@@ -69,7 +80,9 @@ export default function ListProductPage() {
   const [direction, setDirection] = React.useState<'forward' | 'back'>('forward');
   const [tagInput, setTagInput] = React.useState('');
   const [techInput, setTechInput] = React.useState('');
+  const [screenshotInput, setScreenshotInput] = React.useState('');
   const [published, setPublished] = React.useState(false);
+  const [publishing, setPublishing] = React.useState(false);
 
   function patch(update: Partial<ListingState>) {
     setState((prev) => ({ ...prev, ...update }));
@@ -99,6 +112,66 @@ export default function ListProductPage() {
     if (step === 2) return !!(state.description);
     if (step === 5) return !!(state.pricingModel);
     return true;
+  }
+
+  async function handlePublish() {
+    if (publishing || !state.category || !state.pricingModel) return;
+    if (!state.thumbnailUrl || state.screenshots.length < 3) {
+      toast.error('Add a thumbnail URL and at least 3 screenshot URLs.');
+      return;
+    }
+    if (!state.videoUrl) {
+      toast.error('Demo URL is required before publishing.');
+      return;
+    }
+
+    const description = state.description.trim();
+    if (description.length < 100) {
+      toast.error('Description must be at least 100 characters.');
+      return;
+    }
+
+    setPublishing(true);
+    try {
+      const created = await apiFetch<{ id: string }>('/api/products', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: state.name.trim(),
+          tagline: state.tagline.trim(),
+          category: CATEGORY_TO_API[state.category],
+          tags: state.tags,
+          thumbnailUrl: state.thumbnailUrl,
+          description,
+          demoUrl: state.videoUrl,
+          screenshots: state.screenshots,
+          techStack: state.techStack,
+          aiModelUsed: state.aiModel || null,
+          architectureType: state.architectureType || null,
+          pricingModel: state.pricingModel,
+          priceINR: state.pricingModel === 'freemium' ? 100 : Number(state.priceINR || 100),
+          priceUSD: null,
+          features: state.useCases.filter(Boolean).map((uc, i) => ({
+            title: `Use case ${i + 1}`,
+            description: uc,
+            included: true,
+          })),
+          performanceMetrics: null,
+          deliveryType: state.deliveryType.join(', ') || 'digital_download',
+          customizationAvailable: state.customizationAvailable,
+          supportType: state.supportType || null,
+          supportDuration: state.supportDuration || null,
+        }),
+      });
+
+      await apiFetch(`/api/products/${created.id}/publish`, { method: 'POST' });
+      setPublished(true);
+      toast.success('Product submitted for moderation review.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to publish product.';
+      toast.error(msg);
+    } finally {
+      setPublishing(false);
+    }
   }
 
   if (published) {
@@ -219,14 +292,56 @@ export default function ListProductPage() {
                   <p className="text-sm text-text-secondary">Drag & drop thumbnail or <span className="text-accent-cyan">browse</span></p>
                   <p className="text-xs text-text-muted mt-1">16:9 ratio recommended · PNG, JPG, WebP</p>
                 </div>
+                <Input
+                  label="Thumbnail URL *"
+                  value={state.thumbnailUrl}
+                  onChange={(e) => patch({ thumbnailUrl: e.target.value })}
+                  type="url"
+                />
                 <div>
                   <label className="block text-sm font-medium text-text-secondary mb-2">Screenshots <span className="text-text-muted">(min 3, max 10)</span></label>
                   <div className="border-2 border-dashed border-[rgba(255,255,255,0.1)] rounded-xl p-6 text-center cursor-pointer hover:border-[rgba(0,212,255,0.3)] transition-colors" role="button" tabIndex={0} aria-label="Upload screenshots" data-testid="screenshot-uploader">
                     <p className="text-sm text-text-secondary">Upload screenshots</p>
                     <p className="text-xs text-text-muted mt-1">Drag to reorder after upload</p>
                   </div>
+                  <div className="mt-3 flex gap-2">
+                    <input
+                      value={screenshotInput}
+                      onChange={(e) => setScreenshotInput(e.target.value)}
+                      placeholder="Paste screenshot URL and press Add"
+                      className="flex-1 bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[rgba(0,212,255,0.3)]"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        const value = screenshotInput.trim();
+                        if (!value || state.screenshots.includes(value) || state.screenshots.length >= 10) return;
+                        patch({ screenshots: [...state.screenshots, value] });
+                        setScreenshotInput('');
+                      }}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                  {state.screenshots.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {state.screenshots.map((url) => (
+                        <div key={url} className="flex items-center justify-between text-xs text-text-secondary bg-bg-surface rounded-md px-2 py-1">
+                          <span className="truncate pr-2">{url}</span>
+                          <button
+                            type="button"
+                            onClick={() => patch({ screenshots: state.screenshots.filter((u) => u !== url) })}
+                            className="text-text-muted hover:text-accent-red"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <Input label="Video URL (YouTube / Loom)" value={state.videoUrl} onChange={(e) => patch({ videoUrl: e.target.value })} type="url" />
+                <Input label="Demo URL (required) *" value={state.videoUrl} onChange={(e) => patch({ videoUrl: e.target.value })} type="url" />
               </div>
             )}
 
@@ -325,9 +440,9 @@ export default function ListProductPage() {
                     </div>
                   </div>
                 </div>
-                <Button size="lg" className="w-full" onClick={() => setPublished(true)} data-testid="publish-product-btn"
-                  disabled={!state.category || !state.name || !state.pricingModel}>
-                  Publish to Marketplace
+                <Button size="lg" className="w-full" onClick={handlePublish} data-testid="publish-product-btn"
+                  disabled={!state.category || !state.name || !state.pricingModel || publishing}>
+                  {publishing ? 'Publishing...' : 'Publish to Marketplace'}
                 </Button>
                 <p className="text-xs text-text-muted text-center">Your product will be reviewed by our moderation team before going live (usually within 24 hours).</p>
               </div>

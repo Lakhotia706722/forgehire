@@ -9,8 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "clean": "rm -rf .next",
-    "test": "jest --passWithNoTests",
-    "test:watch": "jest --watch",
+    "test": "jest --passWithNoTests --runInBand",
+    "test:watch": "jest --watch --runInBand",
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {

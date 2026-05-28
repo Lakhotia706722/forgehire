@@ -3,6 +3,8 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import type { OnboardingState, WorkMode } from '@/lib/onboarding-store';
+import { apiFetch } from '@/lib/api-fetch';
+import { toast } from 'sonner';
 
 const WORK_MODES: { value: WorkMode; label: string; desc: string; icon: string }[] = [
   { value: 'remote',  label: 'Remote',  desc: 'Work from anywhere', icon: '🌍' },
@@ -10,7 +12,7 @@ const WORK_MODES: { value: WorkMode; label: string; desc: string; icon: string }
   { value: 'onsite',  label: 'On-site', desc: 'Office-based only', icon: '📍' },
 ];
 
-const MAX_HEADLINE = 80;
+const MAX_HEADLINE = 100;
 
 interface Step1Props {
   state: OnboardingState;
@@ -19,13 +21,38 @@ interface Step1Props {
 
 export function Step1BasicInfo({ state, onChange }: Step1Props) {
   const [dragOver, setDragOver] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
-  function handleFile(file: File) {
-    if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (e) => onChange({ photoUrl: e.target?.result as string });
-    reader.readAsDataURL(file);
+  async function handleFile(file: File) {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Only JPG, PNG, or WebP images are allowed.');
+      return;
+    }
+
+    const maxSizeBytes = 5 * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+      toast.error('Image must be 5MB or smaller.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const result = await apiFetch<{ url: string }>('/api/engineer/profile/photo', {
+        method: 'POST',
+        body: formData,
+      });
+      onChange({ photoUrl: result.url });
+      toast.success('Profile photo uploaded.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to upload profile photo.';
+      toast.error(msg);
+    } finally {
+      setUploading(false);
+    }
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -77,15 +104,16 @@ export function Step1BasicInfo({ state, onChange }: Step1Props) {
             )}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => fileRef.current?.click()}
+            onDrop={uploading ? undefined : handleDrop}
+            onClick={() => !uploading && fileRef.current?.click()}
             role="button"
             tabIndex={0}
             aria-label="Upload profile photo"
-            onKeyDown={(e) => e.key === 'Enter' && fileRef.current?.click()}
+            aria-disabled={uploading}
+            onKeyDown={(e) => e.key === 'Enter' && !uploading && fileRef.current?.click()}
           >
             <p className="text-sm text-text-secondary">
-              Drag & drop or <span className="text-accent-cyan">browse</span>
+              {uploading ? 'Uploading...' : <>Drag & drop or <span className="text-accent-cyan">browse</span></>}
             </p>
             <p className="text-xs text-text-muted mt-1">JPG, PNG, WebP · Max 5MB</p>
           </div>

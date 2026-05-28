@@ -75,25 +75,32 @@ export class RazorpayEscrowService {
     _currency: string = "INR",
   ): Promise<{ payoutId: string; status: string }> {
     try {
-      // Note: Razorpay Payouts require RazorpayX account
-      // This is a simplified implementation
-      // In production, you would use Razorpay's Payout API
-
-      // For now, we'll create a transfer using the standard API
-      // You'll need to implement actual payout logic based on your Razorpay setup
-
-      const payoutId = `payout_${Date.now()}_${taskId}`;
-
-      // TODO: Implement actual Razorpay payout API call
-      // const payout = await this.razorpay.payouts.create({...});
-
-      console.log(
-        `Payout initiated: ${payoutId} for ₹${amount} to ${engineerUpiId}`,
-      );
+      const contact = await (this.razorpay as any).contacts.create({
+        name: `Engineer ${taskId.slice(0, 8)}`,
+        type: "employee",
+      });
+      const fundAccount = await (this.razorpay as any).fundAccount.create({
+        contact_id: contact.id,
+        account_type: "vpa",
+        vpa: {
+          address: engineerUpiId,
+        },
+      });
+      const payout = await (this.razorpay as any).payouts.create({
+        account_number: process.env.RAZORPAYX_ACCOUNT_NUMBER || "",
+        fund_account_id: fundAccount.id,
+        amount: Math.round(amount * 100),
+        currency: "INR",
+        mode: "UPI",
+        purpose: "payout",
+        queue_if_low_balance: true,
+        reference_id: `milestone_${taskId.slice(0, 16)}`,
+        narration: "NeuronHire milestone release",
+      });
 
       return {
-        payoutId,
-        status: "processing",
+        payoutId: payout.id,
+        status: payout.status ?? "processing",
       };
     } catch (error) {
       console.error("Escrow release error:", error);
@@ -146,12 +153,8 @@ export class RazorpayEscrowService {
    */
   async getPayoutStatus(payoutId: string): Promise<string> {
     try {
-      // TODO: Implement actual Razorpay payout status check
-      // const payout = await this.razorpay.payouts.fetch(payoutId);
-      // return payout.status;
-
-      console.log(`Checking payout status: ${payoutId}`);
-      return "processing";
+      const payout = await (this.razorpay as any).payouts.fetch(payoutId);
+      return payout.status ?? "unknown";
     } catch (error) {
       console.error("Get payout status error:", error);
       return "unknown";

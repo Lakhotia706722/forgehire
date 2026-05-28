@@ -1,48 +1,137 @@
 'use client';
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Modal } from '@/components/ui/modal';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
+import { useUser } from '@clerk/nextjs';
+import { apiFetch } from '@/lib/api-fetch';
 import {
   formatCurrency,
   getTransactionTypeBadgeVariant,
-  getStatusBadgeVariant,
+  type TransactionType,
 } from '@/lib/payments-analytics-data';
 
-// Static plan data — company plans are configured server-side
-const PLAN_DATA = {
-  name: 'Growth',
-  monthlyCost: 9999,
-  features: [
-    'Up to 10 active contracts',
-    'Unlimited job postings',
-    'Priority support',
-    'Advanced analytics',
-    'Custom contract templates',
-  ],
-};
+interface WalletStats {
+  balance: number;
+  totalEarned: number;
+  totalWithdrawn: number;
+  monthlyWithdrawal: number;
+  currency: string;
+}
+
+interface CompanyContractItem {
+  id: string;
+  title: string;
+  status: string;
+  totalAmount?: number | null;
+  rate: number;
+}
+
+interface WalletTransaction {
+  id: string;
+  type: 'credit' | 'debit';
+  amount: number;
+  description: string;
+  createdAt: string;
+}
+
+interface WalletTransactionsResponse {
+  transactions: WalletTransaction[];
+  nextCursor: string | null;
+}
 
 export default function CompanyBillingPage() {
-  const [showAddFundsModal, setShowAddFundsModal] = React.useState(false);
+  const { user, isLoaded } = useUser();
 
-  const plan = PLAN_DATA;
+  const walletQuery = useQuery({
+    queryKey: ['company', 'billing', 'wallet'],
+    queryFn: () => apiFetch<WalletStats>('/api/payments/wallet'),
+    enabled: isLoaded && !!user,
+    staleTime: 30_000,
+  });
+  const contractsQuery = useQuery({
+    queryKey: ['company', 'billing', 'contracts'],
+    queryFn: () =>
+      apiFetch<CompanyContractItem[]>('/api/contracts?role=company&status=active'),
+    enabled: isLoaded && !!user,
+    staleTime: 30_000,
+  });
+  const txQuery = useQuery({
+    queryKey: ['company', 'billing', 'transactions'],
+    queryFn: () =>
+      apiFetch<WalletTransactionsResponse>('/api/payments/wallet/transactions?limit=20'),
+    enabled: isLoaded && !!user,
+    staleTime: 30_000,
+  });
 
-  // Use static fallback data — escrow data comes from contracts which are loaded separately
-  const escrowBreakdown = [
-    { contractId: 'contract-1', contractTitle: 'Voice AI Agent', amount: 100000, status: 'active' },
-    { contractId: 'contract-2', contractTitle: 'MLOps Pipeline', amount: 75000, status: 'active' },
-    { contractId: 'contract-3', contractTitle: 'Data Pipeline', amount: 50000, status: 'active' },
-  ];
+  const isLoading = walletQuery.isLoading || contractsQuery.isLoading || txQuery.isLoading;
+  const hasError = walletQuery.isError || contractsQuery.isError || txQuery.isError;
+
+  const contracts = contractsQuery.data ?? [];
+  const wallet = walletQuery.data;
+  const transactions = txQuery.data?.transactions ?? [];
+
+  const escrowBreakdown = contracts.map((contract) => ({
+    contractId: contract.id,
+    contractTitle: contract.title,
+    amount: Number(contract.totalAmount ?? contract.rate ?? 0),
+    status: contract.status,
+  }));
   const totalEscrow = escrowBreakdown.reduce((sum, e) => sum + e.amount, 0);
 
-  // Static invoice history — in production this would come from the payments API
-  const transactions = [
-    { id: 'inv-1', createdAt: '2026-04-01', description: 'Contract Milestone Payment', amount: 50000, status: 'paid' },
-    { id: 'inv-2', createdAt: '2026-03-15', description: 'Escrow Deposit - MLOps', amount: 80000, status: 'paid' },
-    { id: 'inv-3', createdAt: '2026-03-01', description: 'Platform Subscription', amount: 11799, status: 'paid' },
-  ];
+  function deriveTransactionType(tx: WalletTransaction): TransactionType {
+    const d = tx.description.toLowerCase();
+    if (tx.type === 'debit') return 'payout';
+    if (d.includes('marketplace') || d.includes('product')) return 'marketplace';
+    if (d.includes('bounty') || d.includes('task')) return 'bounty';
+    if (d.includes('escrow')) return 'escrow_deposit';
+    return 'contract';
+  }
+
+  function statusBadgeVariant(status: string): 'cyan' | 'green' | 'amber' | 'gray' {
+    const s = status.toLowerCase();
+    if (s === 'active') return 'green';
+    if (s === 'completed') return 'cyan';
+    if (s === 'disputed') return 'amber';
+    return 'gray';
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-bg-base">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-8 space-y-6">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-48 rounded-2xl" />
+          <Skeleton className="h-48 rounded-2xl" />
+          <Skeleton className="h-64 rounded-2xl" />
+        </div>
+      </div>
+    );
+  }
+
+  if (hasError) {
+    return (
+      <div className="min-h-screen bg-bg-base flex items-center justify-center">
+        <div className="text-center space-y-3 max-w-sm px-6">
+          <p className="text-text-primary font-medium">Failed to load billing data</p>
+          <p className="text-text-muted text-sm">Please try again.</p>
+          <Button
+            size="sm"
+            onClick={() => {
+              void walletQuery.refetch();
+              void contractsQuery.refetch();
+              void txQuery.refetch();
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-bg-base">
@@ -53,47 +142,35 @@ export default function CompanyBillingPage() {
           <p className="text-text-secondary text-sm">Manage your subscription and escrow funds</p>
         </div>
 
-        {/* Current Plan Card */}
+        {/* Billing Overview */}
         <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
-          <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start justify-between mb-6">
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <h2 className="font-display font-bold text-xl text-text-primary">{plan.name} Plan</h2>
-                {<Badge variant="cyan">Current</Badge>}
-              </div>
-              <p className="text-text-muted text-sm">Perfect for growing teams</p>
+              <h2 className="font-display font-bold text-xl text-text-primary">Billing Overview</h2>
+              <p className="text-text-muted text-sm">Live data from wallet and contracts</p>
             </div>
-            <div className="text-right">
-              <p className="font-display text-3xl font-bold text-text-primary">
-                <span className="font-mono">{formatCurrency(plan.monthlyCost)}</span>
-              </p>
-              <p className="text-xs text-text-muted">per month</p>
-            </div>
+            <Link href="/company/post-task">
+              <Button size="sm" variant="secondary">Fund New Task</Button>
+            </Link>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-4 mb-6">
+          <div className="grid sm:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs text-text-muted uppercase tracking-wider mb-3">Features</p>
-              <ul className="space-y-2">
-                {plan.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#00D4FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5" aria-hidden="true">
-                      <path d="M3 8l3 3 7-7"/>
-                    </svg>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
+              <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Wallet Balance</p>
+              <p className="font-mono text-lg text-text-primary">{formatCurrency(wallet?.balance ?? 0)}</p>
             </div>
-            <div className="flex items-center justify-center">
-              <Button size="lg" variant="secondary">
-                Upgrade Plan
-              </Button>
+            <div>
+              <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Total Earned</p>
+              <p className="font-mono text-lg text-accent-green">{formatCurrency(wallet?.totalEarned ?? 0)}</p>
             </div>
-          </div>
-
-          <div className="pt-4 border-t border-[rgba(255,255,255,0.06)] text-xs text-text-muted">
-            Next billing date: <strong className="text-text-secondary">December 1, 2024</strong>
+            <div>
+              <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Total Withdrawn</p>
+              <p className="font-mono text-lg text-text-primary">{formatCurrency(wallet?.totalWithdrawn ?? 0)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Monthly Withdrawal</p>
+              <p className="font-mono text-lg text-accent-cyan">{formatCurrency(wallet?.monthlyWithdrawal ?? 0)}</p>
+            </div>
           </div>
         </div>
 
@@ -104,9 +181,9 @@ export default function CompanyBillingPage() {
               <h2 className="font-display font-semibold text-text-primary text-lg mb-1">Escrow Balance</h2>
               <p className="text-text-muted text-sm">Funds held for active contracts</p>
             </div>
-            <Button size="md" onClick={() => setShowAddFundsModal(true)} data-testid="add-funds-btn">
-              Add Funds
-            </Button>
+            <Link href="/company/tasks">
+              <Button size="md" data-testid="add-funds-btn">Manage Tasks</Button>
+            </Link>
           </div>
 
           <div className="mb-6">
@@ -118,174 +195,78 @@ export default function CompanyBillingPage() {
 
           <div className="space-y-3">
             <p className="text-xs text-text-muted uppercase tracking-wider">Per-Contract Breakdown</p>
-            {escrowBreakdown.map((escrow) => (
-              <div
-                key={escrow.contractId}
-                className="flex items-center justify-between p-3 bg-bg-elevated rounded-xl border border-[rgba(255,255,255,0.04)]"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-text-primary truncate">{escrow.contractTitle}</p>
-                  <p className="text-xs text-text-muted">Contract #{escrow.contractId}</p>
+            {escrowBreakdown.length === 0 ? (
+              <p className="text-sm text-text-muted">No active contracts in escrow yet.</p>
+            ) : (
+              escrowBreakdown.map((escrow) => (
+                <div
+                  key={escrow.contractId}
+                  className="flex items-center justify-between p-3 bg-bg-elevated rounded-xl border border-[rgba(255,255,255,0.04)]"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-text-primary truncate">{escrow.contractTitle}</p>
+                    <p className="text-xs text-text-muted">Contract #{escrow.contractId}</p>
+                  </div>
+                  <div className="text-right shrink-0 ml-4">
+                    <p className="font-mono font-semibold text-accent-cyan">{formatCurrency(escrow.amount)}</p>
+                    <Badge variant={statusBadgeVariant(escrow.status)} className="text-[9px] mt-1 capitalize">
+                      {escrow.status}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="text-right shrink-0 ml-4">
-                  <p className="font-mono font-semibold text-accent-cyan">{formatCurrency(escrow.amount)}</p>
-                  <Badge variant="cyan" className="text-[9px] mt-1">{escrow.status}</Badge>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
-        {/* Invoice History */}
+        {/* Transaction History */}
         <div className="bg-bg-surface border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
-          <h2 className="font-display font-semibold text-text-primary text-lg mb-4">Invoice History</h2>
+          <h2 className="font-display font-semibold text-text-primary text-lg mb-4">Transaction History</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[rgba(255,255,255,0.06)]">
                   <th className="text-left py-3 px-4 text-xs font-medium text-text-muted uppercase">Date</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-text-muted uppercase">Description</th>
+                  <th className="text-center py-3 px-4 text-xs font-medium text-text-muted uppercase">Type</th>
                   <th className="text-right py-3 px-4 text-xs font-medium text-text-muted uppercase">Amount</th>
-                  <th className="text-center py-3 px-4 text-xs font-medium text-text-muted uppercase">Status</th>
-                  <th className="text-center py-3 px-4 text-xs font-medium text-text-muted uppercase">GST Invoice</th>
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((txn) => (
-                  <tr key={txn.id} className="border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.02)]">
-                    <td className="py-3 px-4 text-text-secondary">
-                      {new Date(txn.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                    </td>
-                    <td className="py-3 px-4 text-text-primary">{txn.description}</td>
-                    <td className="py-3 px-4 text-right">
-                      <span className="font-mono font-semibold text-text-primary">
-                        {formatCurrency(Math.abs(txn.amount))}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <Badge variant={getStatusBadgeVariant(txn.status as any)} className="text-[10px]">
-                        {txn.status}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <a href={`/invoices/gst-${txn.id}.pdf`} download className="text-accent-cyan hover:underline text-xs">
-                        ↓ Download
-                      </a>
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-text-muted text-sm">
+                      No transactions yet.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  transactions.map((txn) => {
+                    const txType = deriveTransactionType(txn);
+                    return (
+                      <tr key={txn.id} className="border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.02)]">
+                        <td className="py-3 px-4 text-text-secondary">
+                          {new Date(txn.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        </td>
+                        <td className="py-3 px-4 text-text-primary">{txn.description}</td>
+                        <td className="py-3 px-4 text-center">
+                          <Badge variant={getTransactionTypeBadgeVariant(txType)} className="text-[10px]">
+                            {txType.replace('_', ' ')}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <span className="font-mono font-semibold text-text-primary">
+                            {txn.type === 'debit' ? '-' : '+'}{formatCurrency(Math.abs(txn.amount))}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
-
-      {/* Add Funds Modal */}
-      <AddFundsModal
-        open={showAddFundsModal}
-        onClose={() => setShowAddFundsModal(false)}
-      />
     </div>
-  );
-}
-
-// ─── Add Funds Modal ──────────────────────────────────────────
-interface AddFundsModalProps {
-  open: boolean;
-  onClose: () => void;
-}
-
-function AddFundsModal({ open, onClose }: AddFundsModalProps) {
-  const [amount, setAmount] = React.useState('');
-  const [processing, setProcessing] = React.useState(false);
-  const [success, setSuccess] = React.useState(false);
-
-  const amountNum = parseFloat(amount) || 0;
-  const gst = amountNum * 0.18;
-  const total = amountNum + gst;
-
-  async function handleAddFunds() {
-    if (amountNum <= 0) return;
-    setProcessing(true);
-    await new Promise((r) => setTimeout(r, 2000));
-    setProcessing(false);
-    setSuccess(true);
-  }
-
-  function handleClose() {
-    setSuccess(false);
-    setAmount('');
-    onClose();
-  }
-
-  return (
-    <Modal open={open} onClose={handleClose} title={success ? undefined : 'Add Funds to Escrow'} size="md">
-      {success ? (
-        <div className="flex flex-col items-center justify-center py-12 gap-4 px-6 text-center">
-          <div className="w-16 h-16 rounded-full bg-[rgba(16,185,129,0.1)] border border-[rgba(16,185,129,0.3)] flex items-center justify-center animate-fade-up">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M20 6L9 17l-5-5"/>
-            </svg>
-          </div>
-          <h3 className="font-display font-bold text-xl text-text-primary">Funds Added!</h3>
-          <p className="text-text-secondary text-sm">
-            <span className="font-mono text-accent-green">{formatCurrency(total)}</span> has been added to your escrow balance.
-          </p>
-          <Button size="md" onClick={handleClose}>Got it</Button>
-        </div>
-      ) : (
-        <div className="p-6 space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">Amount to Add</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-mono pointer-events-none">₹</span>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0"
-                className="w-full bg-bg-elevated border border-[rgba(255,255,255,0.06)] rounded-xl pl-10 pr-4 py-3 font-mono text-xl text-text-primary focus:outline-none focus:border-[rgba(0,212,255,0.3)]"
-                data-testid="add-funds-amount-input"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between py-2 border-b border-[rgba(255,255,255,0.04)]">
-              <span className="text-text-secondary">Amount</span>
-              <span className="font-mono text-text-primary">{formatCurrency(amountNum)}</span>
-            </div>
-            <div className="flex justify-between py-2 border-b border-[rgba(255,255,255,0.04)]">
-              <span className="text-text-secondary">GST (18%)</span>
-              <span className="font-mono text-text-primary">{formatCurrency(gst)}</span>
-            </div>
-            <div className="flex justify-between py-2 font-semibold">
-              <span className="text-text-primary">Total</span>
-              <span className="font-mono text-accent-cyan">{formatCurrency(total)}</span>
-            </div>
-          </div>
-
-          <div className="p-3 bg-[rgba(0,212,255,0.06)] border border-[rgba(0,212,255,0.2)] rounded-xl text-xs text-accent-cyan">
-            Funds will be held in escrow and released to engineers upon milestone approval.
-          </div>
-
-          <div className="flex gap-3">
-            <Button
-              size="lg"
-              className="flex-1"
-              loading={processing}
-              disabled={amountNum <= 0}
-              onClick={handleAddFunds}
-              data-testid="confirm-add-funds-btn"
-            >
-              Pay via Razorpay
-            </Button>
-            <Button variant="ghost" size="lg" onClick={handleClose}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-    </Modal>
   );
 }
